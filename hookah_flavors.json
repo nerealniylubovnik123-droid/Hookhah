@@ -1,0 +1,536 @@
+[
+  {
+    "id": "musthave-pinkman",
+    "brand": "MustHave",
+    "name": "Pinkman",
+    "description": "Грейпфрут с клубникой и малиновым сиропом, кислосладкий фреш."
+  },
+  {
+    "id": "musthave-rocketman",
+    "brand": "MustHave",
+    "name": "Rocketman",
+    "description": "Клубничная газировка с нюансами киви и цитруса."
+  },
+  {
+    "id": "musthave-honey-holls",
+    "brand": "MustHave",
+    "name": "Honey Holls",
+    "description": "Лёд с медовой теплотой, освежающе и мягко."
+  },
+  {
+    "id": "musthave-kiwi-smoothie",
+    "brand": "MustHave",
+    "name": "Kiwi Smoothie",
+    "description": "Смузи из киви: свежо, травянисто и кисло-сладко."
+  },
+  {
+    "id": "musthave-lemon-tonic",
+    "brand": "MustHave",
+    "name": "Lemon Tonic",
+    "description": "Лимонный тоник, чистый цитрус с лёгкой горчинкой."
+  },
+  {
+    "id": "musthave-ice-lemon",
+    "brand": "MustHave",
+    "name": "Ice Lemon",
+    "description": "Холодный лимон, яркая цитрусовая свежесть."
+  },
+  {
+    "id": "musthave-grapefruit",
+    "brand": "MustHave",
+    "name": "Grapefruit",
+    "description": "Сочный грейпфрут с характерной горчинкой."
+  },
+  {
+    "id": "musthave-banana-mama",
+    "brand": "MustHave",
+    "name": "Banana Mama",
+    "description": "Спелый банан, кремовая сладость."
+  },
+  {
+    "id": "musthave-guava",
+    "brand": "MustHave",
+    "name": "Guava",
+    "description": "Сладкая гуава, тропическая мягкость."
+  },
+  {
+    "id": "musthave-strawberry",
+    "brand": "MustHave",
+    "name": "Strawberry",
+    "description": "Клубника, сладкая ягода без лишней химозы."
+  },
+  {
+    "id": "musthave-sweet-peach",
+    "brand": "MustHave",
+    "name": "Sweet Peach",
+    "description": "Сладкий персик, сочный и бархатистый."
+  },
+  {
+    "id": "musthave-watermelon",
+    "brand": "MustHave",
+    "name": "Watermelon",
+    "description": "Арбуз, летний и свежий."
+  },
+  {
+    "id": "musthave-violet",
+    "brand": "MustHave",
+    "name": "Violet",
+    "description": "Нежный ягодно-сливочный десерт с фиалкой."
+  },
+  {
+    "id": "musthave-cookie",
+    "brand": "MustHave",
+    "name": "Cookie",
+    "description": "Песочное печенье, ваниль и сливочность."
+  },
+  {
+    "id": "musthave-vanilla-cream",
+    "brand": "MustHave",
+    "name": "Vanilla Cream",
+    "description": "Ванильный крем, мягкий и сладкий."
+  },
+  {
+    "id": "musthave-prosecco",
+    "brand": "MustHave",
+    "name": "Prosecco",
+    "description": "Игристые виноградные ноты, лёгкая сладость."
+  },
+  {
+    "id": "musthave-elderberry",
+    "brand": "MustHave",
+    "name": "Elderberry",
+    "description": "Бузина, тёмные ягоды с цветочной нотой."
+  },
+  {
+    "id": "musthave-lemongrass",
+    "brand": "MustHave",
+    "name": "Lemongrass",
+    "description": "Лемонграсс, травянистый цитрус."
+  },
+  {
+    "id": "musthave-red-tea",
+    "brand": "MustHave",
+    "name": "Red Tea",
+    "description": "Красный чай, терпкий и цветочный."
+  },
+  {
+    "id": "musthave-cola",
+    "brand": "MustHave",
+    "name": "Cola",
+    "description": "Классическая кола с карамельной сладостью."
+  },
+  {
+    "id": "darkside-supernova",
+    "brand": "Darkside",
+    "name": "Supernova",
+    "description": "Мощное охлаждение без привязки к вкусу, ледяной эффект."
+  },
+  {
+    "id": "darkside-bananapapa",
+    "brand": "Darkside",
+    "name": "Bananapapa",
+    "description": "Спелый банан, сладкий и густой."
+  },
+  {
+    "id": "darkside-falling-star",
+    "brand": "Darkside",
+    "name": "Falling Star",
+    "description": "Манго с маракуйей, яркий тропический микс."
+  },
+  {
+    "id": "darkside-bounty-hunter",
+    "brand": "Darkside",
+    "name": "Bounty Hunter",
+    "description": "Кокос с оттенком шоколада, десертный профиль."
+  },
+  {
+    "id": "darkside-torpedo",
+    "brand": "Darkside",
+    "name": "Torpedo",
+    "description": "Арбуз и дыня, сладко и свежо."
+  },
+  {
+    "id": "darkside-fruity-dust",
+    "brand": "Darkside",
+    "name": "Fruity Dust",
+    "description": "Питахайя (драконий фрукт), нежная сладость."
+  },
+  {
+    "id": "darkside-wild-forest",
+    "brand": "Darkside",
+    "name": "Wild Forest",
+    "description": "Смесь лесных ягод, насыщенно и ярко."
+  },
+  {
+    "id": "darkside-cola",
+    "brand": "Darkside",
+    "name": "Cola",
+    "description": "Классическая газировка с карамельной нотой."
+  },
+  {
+    "id": "darkside-red-tea",
+    "brand": "Darkside",
+    "name": "Red Tea",
+    "description": "Гибискус, ягодная кислинка и чайный акцент."
+  },
+  {
+    "id": "darkside-cyber-kiwi",
+    "brand": "Darkside",
+    "name": "Cyber Kiwi",
+    "description": "Киви, свежий тропический характер."
+  },
+  {
+    "id": "darkside-killer-milk",
+    "brand": "Darkside",
+    "name": "Killer Milk",
+    "description": "Сгущённое молоко, сливочная сладость."
+  },
+  {
+    "id": "darkside-lemonblast",
+    "brand": "Darkside",
+    "name": "Lemonblast",
+    "description": "Яркий лимон, кисло и бодро."
+  },
+  {
+    "id": "darkside-needls",
+    "brand": "Darkside",
+    "name": "Needls",
+    "description": "Хвойная свежесть, еловые иглы."
+  },
+  {
+    "id": "darkside-space-jam",
+    "brand": "Darkside",
+    "name": "Space Jam",
+    "description": "Клубничный джем, сладкий десерт."
+  },
+  {
+    "id": "darkside-cream-s-o-d-a",
+    "brand": "Darkside",
+    "name": "Cream S.O.D.A",
+    "description": "Сливочная крем-сода, ванильная газировка."
+  },
+  {
+    "id": "darkside-waffle-shuffle",
+    "brand": "Darkside",
+    "name": "Waffle Shuffle",
+    "description": "Лимонные вафли, нежный десерт."
+  },
+  {
+    "id": "black-burn-cherry-shock",
+    "brand": "Black Burn",
+    "name": "Cherry Shock",
+    "description": "Яркая кисло-сладкая вишня, сочная и насыщенная."
+  },
+  {
+    "id": "black-burn-melon-halls",
+    "brand": "Black Burn",
+    "name": "Melon Halls",
+    "description": "Освежающая дыня с прохладой."
+  },
+  {
+    "id": "black-burn-pear-lemonade",
+    "brand": "Black Burn",
+    "name": "Pear Lemonade",
+    "description": "Груша с лимонадной искристостью и кислинкой."
+  },
+  {
+    "id": "black-burn-pineapple",
+    "brand": "Black Burn",
+    "name": "Pineapple",
+    "description": "Ананас, сладкий и тропический."
+  },
+  {
+    "id": "black-burn-raspberries",
+    "brand": "Black Burn",
+    "name": "Raspberries",
+    "description": "Малина, сладко-кислая лесная ягода."
+  },
+  {
+    "id": "black-burn-blackcurrant",
+    "brand": "Black Burn",
+    "name": "Blackcurrant",
+    "description": "Чёрная смородина, плотная и кислая."
+  },
+  {
+    "id": "black-burn-blueberry",
+    "brand": "Black Burn",
+    "name": "Blueberry",
+    "description": "Черника, мягкая ягодная сладость."
+  },
+  {
+    "id": "black-burn-mango",
+    "brand": "Black Burn",
+    "name": "Mango",
+    "description": "Спелый манго, густой и сладкий."
+  },
+  {
+    "id": "black-burn-grapefruit",
+    "brand": "Black Burn",
+    "name": "Grapefruit",
+    "description": "Грейпфрут, освежающая горчинка и цитрус."
+  },
+  {
+    "id": "black-burn-orange-soda",
+    "brand": "Black Burn",
+    "name": "Orange Soda",
+    "description": "Апельсиновая газировка, сладкий цитрус."
+  },
+  {
+    "id": "starline-belgian-morning",
+    "brand": "Starline",
+    "name": "Belgian Morning",
+    "description": "Бельгийские вафли с ягодами, сладкий десерт."
+  },
+  {
+    "id": "starline-blue-crump",
+    "brand": "Starline",
+    "name": "Blue Crump",
+    "description": "Черничный маффин, мягко и сливочно."
+  },
+  {
+    "id": "starline-emerald-touch",
+    "brand": "Starline",
+    "name": "Emerald Touch",
+    "description": "Гуава, тропическая сочность и лёгкая кислинка."
+  },
+  {
+    "id": "starline-french-puff",
+    "brand": "Starline",
+    "name": "French Puff",
+    "description": "Слойка с кремом и мёдом, французский десерт."
+  },
+  {
+    "id": "starline-tanger-splash",
+    "brand": "Starline",
+    "name": "Tanger Splash",
+    "description": "Мандариновый всплеск, сладко-кислый цитрус."
+  },
+  {
+    "id": "starline-jungle-beat",
+    "brand": "Starline",
+    "name": "Jungle Beat",
+    "description": "Банан, мягкий тропический профиль."
+  },
+  {
+    "id": "starline-apple-pie",
+    "brand": "Starline",
+    "name": "Apple Pie",
+    "description": "Яблочный пирог с корицей, тёплый десерт."
+  },
+  {
+    "id": "starline-ginger-ale",
+    "brand": "Starline",
+    "name": "Ginger Ale",
+    "description": "Имбирный эль, пряно и освежающе."
+  },
+  {
+    "id": "starline-berry-mix",
+    "brand": "Starline",
+    "name": "Berry Mix",
+    "description": "Микс садовых ягод, сочный и яркий."
+  },
+  {
+    "id": "trofimov-cookies",
+    "brand": "Trofimov",
+    "name": "Cookies",
+    "description": "Песочное печенье, ванильная сладость."
+  },
+  {
+    "id": "trofimov-opuntia-pear",
+    "brand": "Trofimov",
+    "name": "Opuntia Pear",
+    "description": "Опунция/груша, сочный фрукт с кислинкой."
+  },
+  {
+    "id": "trofimov-dark-plum",
+    "brand": "Trofimov",
+    "name": "Dark Plum",
+    "description": "Спелая слива, кисло-сладкий акцент."
+  },
+  {
+    "id": "trofimov-cocos",
+    "brand": "Trofimov",
+    "name": "Cocos",
+    "description": "Кокос, кремово-древесные ноты."
+  },
+  {
+    "id": "trofimov-old-school-orange",
+    "brand": "Trofimov",
+    "name": "Old School Orange",
+    "description": "Апельсин в классическом стиле, насыщенно и ярко."
+  },
+  {
+    "id": "trofimov-blueberry-pie",
+    "brand": "Trofimov",
+    "name": "Blueberry Pie",
+    "description": "Черничный пирог, десертный профиль."
+  },
+  {
+    "id": "trofimov-blackberry",
+    "brand": "Trofimov",
+    "name": "Blackberry",
+    "description": "Ежевика, плотная лесная ягода."
+  },
+  {
+    "id": "trofimov-cherry-cola",
+    "brand": "Trofimov",
+    "name": "Cherry Cola",
+    "description": "Вишнёвая кола, сладкая газировка."
+  },
+  {
+    "id": "bonch-lavender",
+    "brand": "Bonch",
+    "name": "Lavender",
+    "description": "Лаванда, цветочно-пряный и спокойный аромат."
+  },
+  {
+    "id": "bonch-orange",
+    "brand": "Bonch",
+    "name": "Orange",
+    "description": "Сладкий и сочный апельсин."
+  },
+  {
+    "id": "bonch-peanut",
+    "brand": "Bonch",
+    "name": "Peanut",
+    "description": "Арахис, тёплая ореховая сливочность."
+  },
+  {
+    "id": "bonch-grapefruit",
+    "brand": "Bonch",
+    "name": "Grapefruit",
+    "description": "Грейпфрут, освежающая цитрусовая горечь."
+  },
+  {
+    "id": "bonch-base",
+    "brand": "Bonch",
+    "name": "Base",
+    "description": "Фирменная базовая смесь с орехово-пряной нотой."
+  },
+  {
+    "id": "bonch-ginger",
+    "brand": "Bonch",
+    "name": "Ginger",
+    "description": "Имбирь, пряно и бодряще."
+  },
+  {
+    "id": "bonch-sesame",
+    "brand": "Bonch",
+    "name": "Sesame",
+    "description": "Кунжут, орехово-пряный оттенок."
+  },
+  {
+    "id": "bonch-dark-chocolate",
+    "brand": "Bonch",
+    "name": "Dark Chocolate",
+    "description": "Тёмный шоколад, десертный и густой."
+  },
+  {
+    "id": "bonch-coffee",
+    "brand": "Bonch",
+    "name": "Coffee",
+    "description": "Кофе, жареные зерна и горчинка."
+  },
+  {
+    "id": "bonch-caramel",
+    "brand": "Bonch",
+    "name": "Caramel",
+    "description": "Карамель, сахарная сладость и сливочность."
+  },
+  {
+    "id": "overdos-overdose-lemon-lime",
+    "brand": "Overdos",
+    "name": "Overdose Lemon & Lime",
+    "description": "Яркий лимон и лайм, мощный цитрусовый удар."
+  },
+  {
+    "id": "overdos-apple-juicy",
+    "brand": "Overdos",
+    "name": "Apple Juicy",
+    "description": "Сочный яблочный вкус, свежий и сладкий."
+  },
+  {
+    "id": "overdos-blueberry-2022",
+    "brand": "Overdos",
+    "name": "Blueberry 2022",
+    "description": "Черника новой волны, чистая ягодность."
+  },
+  {
+    "id": "overdos-orange-soda",
+    "brand": "Overdos",
+    "name": "Orange Soda",
+    "description": "Апельсиновая газировка, искристый цитрус."
+  },
+  {
+    "id": "overdos-strawberry-kiwi",
+    "brand": "Overdos",
+    "name": "Strawberry Kiwi",
+    "description": "Клубника и киви, свежо и фруктово."
+  },
+  {
+    "id": "overdos-watermelon",
+    "brand": "Overdos",
+    "name": "Watermelon",
+    "description": "Арбуз, летний освежающий профиль."
+  },
+  {
+    "id": "overdos-tarhun",
+    "brand": "Overdos",
+    "name": "Tarhun",
+    "description": "Тархун, травянистая сладость и лимонник."
+  },
+  {
+    "id": "overdos-dear-pear",
+    "brand": "Overdos",
+    "name": "Dear Pear",
+    "description": "Нежная груша, сочная и сладкая."
+  },
+  {
+    "id": "overdos-peach-iced-tea",
+    "brand": "Overdos",
+    "name": "Peach Iced Tea",
+    "description": "Персиковый холодный чай, сладкий и лёгкий."
+  },
+  {
+    "id": "overdos-pink-grapefruit",
+    "brand": "Overdos",
+    "name": "Pink Grapefruit",
+    "description": "Розовый грейпфрут, бодрый цитрус."
+  },
+  {
+    "id": "satir-cola",
+    "brand": "Satir",
+    "name": "Cola",
+    "description": "Классическая кола, сладкая карамельная газировка."
+  },
+  {
+    "id": "satir-lemon-pie",
+    "brand": "Satir",
+    "name": "Lemon Pie",
+    "description": "Лимонный пирог, десертно и освежающе."
+  },
+  {
+    "id": "satir-berry-garden",
+    "brand": "Satir",
+    "name": "Berry Garden",
+    "description": "Садовые ягоды, ярко и сочнo."
+  },
+  {
+    "id": "satir-forest-mint",
+    "brand": "Satir",
+    "name": "Forest Mint",
+    "description": "Лесная мята, чистое охлаждение с травянистой нотой."
+  },
+  {
+    "id": "satir-pineapple-splash",
+    "brand": "Satir",
+    "name": "Pineapple Splash",
+    "description": "Ананас, тропический сладкий акцент."
+  },
+  {
+    "id": "satir-vanilla-sky",
+    "brand": "Satir",
+    "name": "Vanilla Sky",
+    "description": "Ванильный десерт, кремово и мягко."
+  }
+]
