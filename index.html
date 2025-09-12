@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#020617" />
+  <title>Hookah Mixes – Single File (Vanilla JS)</title>
+  <!-- Tailwind CSS по CDN (только стили) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>body{background:#020617}</style>
+  <!-- Telegram WebApp API (опционально, для авторизации внутри Telegram) -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script>
+    // РАННИЕ ОШИБКИ: дружелюбный экран вместо «чёрного»
+    (function(){
+      function showFatal(msg){
+        var root = document.getElementById('root');
+        if (!root) return;
+        root.innerHTML = '\n<div class="min-h-[100svh] flex items-center justify-center p-6">\n  <div class="max-w-md w-full rounded-xl border border-rose-800 bg-rose-950 p-4 text-sm">\n    <div class="font-bold mb-2 text-rose-200">Произошла ошибка</div>\n    <div class="text-rose-100/90 whitespace-pre-wrap break-words">'+ String(msg || 'Unknown error') +'</div>\n  </div>\n</div>';
+      }
+      window.addEventListener('error', function(e){
+        showFatal((e && (e.message || (e.error && e.error.message))) || 'Script error');
+      });
+      window.addEventListener('unhandledrejection', function(e){
+        showFatal((e && (e.reason && (e.reason.message || e.reason))) || 'Unhandled Promise rejection');
+      });
+    })();
+  </script>
+</head>
+<body class="text-slate-100">
+  <div id="root" class="min-h-[100svh]"></div>
+
+  <script>
+  // ========================= ДАННЫЕ ПО УМОЛЧАНИЮ ============================
+  const INLINE_FLAVORS = [
+    { id: "musthave-ice-lemon", brand: "MustHave", name: "Ice Lemon", tags:["цитрус","лед"], strength10:5 },
+    { id: "darkside-supernova", brand: "Darkside", name: "Supernova", tags:["лед","мята"], strength10:5 },
+    { id: "black-burn-mango", brand: "Black Burn", name: "Mango", tags:["фрукт","сладкий"], strength10:6 },
+  ];
+
+  // ========================= УТИЛИТЫ (ГЛОБАЛЬНЫЕ) ===========================
+  const safeNum = (v, def = 0) => { const n = Number(v); return Number.isFinite(n) ? n : def; };
+  const safePercent = (v) => Math.max(0, Math.min(100, safeNum(v, 0)));
+  const percentSum = (parts=[]) => (Array.isArray(parts) ? parts.reduce((a, b) => a + safePercent(b?.percent), 0) : 0);
+  const isMixValid = (parts, title) => (Array.isArray(parts) ? (parts.length > 0 && percentSum(parts) === 100 && String(title||"").trim().length >= 3) : false);
+  const clampPercentForPart = (parts, targetId, newVal) => { const otherSum = percentSum(parts.filter((x) => x?.flavorId !== targetId)); return Math.max(0, Math.min(safePercent(newVal), 100 - otherSum)); };
+  const uuidv4 = () => { let dt = Date.now(); if (typeof performance !== "undefined" && typeof performance.now === "function") dt += performance.now(); return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g,(c)=>{const r=(dt+Math.random()*16)%16|0;dt=Math.floor(dt/16);const v=c==="x"?r:(r&0x3)|0x8;return v.toString(16);}); };
+  const normalizeBrand = (b) => (b || "").trim();
+  const BRAND_STRENGTH10_DEFAULTS = { Darkside: 5, "Black Burn": 6, BlackBurn: 6, MustHave: 5, Overdos: 6, Bonch: 7, Starline: 3 };
+  const getStrength10 = (f) => { if (!f) return 5; if (typeof f.strength10 === 'number' && Number.isFinite(f.strength10)) return Math.max(1, Math.min(10, f.strength10)); const byBrand = BRAND_STRENGTH10_DEFAULTS[normalizeBrand(f.brand)] ?? 5; return byBrand; };
+  const strengthColor = (v) => { if (v == null) return { bg: "bg-slate-800", text: "text-slate-200", border: "border-slate-700" }; if (v < 4) return { bg: "bg-emerald-950", text: "text-emerald-300", border: "border-emerald-800" }; if (v < 7) return { bg: "bg-amber-950", text: "text-amber-300", border: "border-amber-800" }; return { bg: "bg-rose-950", text: "text-rose-300", border: "border-rose-800" }; };
+  const tasteWordFromTag = (tag) => { if (tag == null) return null; const t = String(tag).toLowerCase().trim(); if (!t) return null; const rules = [[/кисл|sour|лимон|lime|грейпфрут/, "кислый"],[/сладк|sweet|sugar|мед|honey/, "сладкий"],[/прян|spice|ginger|имбир/, "пряный"],[/лед|ice|cold|frost|мят/, "ледяной"],[/фрукт|fruit|яблок|banana|mango|pineapple|grape|orange|pear|melon|berry/, "фруктовый"],[/десерт|dessert|cake|pie|cookie|choco|cream|vanilla|waffle/, "десертный"]]; for (const [re,w] of rules) if (re.test(t)) return w; return null; };
+  const getMixTasteLabel = (parts, flavors) => { if (!Array.isArray(parts) || !Array.isArray(flavors) || parts.length === 0) return null; const total = percentSum(parts); if (total <= 0) return null; const scores = new Map(); const add=(raw,w)=>{const word=tasteWordFromTag(raw); if(word) scores.set(word,(scores.get(word)||0)+w);}; for(const p of parts){const w=safePercent(p?.percent); if(w<=0) continue; const fl=flavors.find(f=>f&&f.id===p?.flavorId); if(!fl) continue; if(fl.tags) for(const t of fl.tags) add(t,w); if(fl.name) for(const tk of String(fl.name).toLowerCase().split(/[^a-zа-я0-9]+/i)) add(tk,Math.max(1,w*0.6)); if(fl.description) for(const tk of String(fl.description).toLowerCase().split(/[^a-zа-я0-9]+/i)) add(tk,Math.max(1,w*0.3)); } if(!scores.size) return null; return Array.from(scores.entries()).sort((a,b)=>b[1]-a[1])[0][0]||null; };
+
+  // ========================= СОСТОЯНИЕ ПРИЛОЖЕНИЯ ===========================
+  const state = {
+    flavors: [],
+    activeBrand: "",
+    parts: [], // [{flavorId, percent}]
+    title: "",
+    notes: "",
+    guestMixes: [],
+    activeTab: "builder", // 'builder' | 'guest'
+    user: null // {id, name, username}
+  };
+
+  // ========================= ИНИЦИАЛИЗАЦИЯ ===================================
+  function initAuth(){
+    try {
+      const u = window && window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user;
+      if (u) {
+        const name = [u.first_name, u.last_name].filter(Boolean).join(" ") || u.username || ('User ' + u.id);
+        state.user = { id: u.id, name, username: u.username };
+      }
+    } catch {}
+  }
+
+  async function loadFlavors(){
+    try {
+      const res = await fetch('./hookah_flavors.json', { cache: 'no-store' });
+      if (res.ok) {
+        const arr = await res.json();
+        if (Array.isArray(arr) && arr.length) {
+          const cleaned = arr.map((x) => ({
+            id: String(x.id || `${x.brand}-${x.name}`).trim(),
+            brand: String(x.brand || "").trim(),
+            name: String(x.name || "").trim(),
+            description: x.description != null ? String(x.description) : undefined,
+            tags: Array.isArray(x.tags) ? x.tags : (typeof x.tags === 'string' ? x.tags.split(/[;,|]/).map(s=>s.trim()).filter(Boolean) : undefined),
+            strength10: typeof x.strength10 === 'number' ? x.strength10 : undefined,
+          })).filter((x) => x.id && x.brand && x.name);
+          if (cleaned.length){
+            state.flavors = cleaned;
+            if (!state.activeBrand) state.activeBrand = normalizeBrand(cleaned[0].brand);
+            return;
+          }
+        }
+      }
+    } catch {}
+    // fallback
+    state.flavors = INLINE_FLAVORS.slice();
+    state.activeBrand = state.activeBrand || 'MustHave';
+  }
+
+  async function loadGuestMixes(){
+    try {
+      const res = await fetch('./guest_mixes.json', { cache: 'no-store' });
+      if (res.ok){
+        const data = await res.json();
+        if (Array.isArray(data)) state.guestMixes = data;
+      }
+    } catch {}
+    try {
+      const ls = localStorage.getItem('guest_mixes');
+      if (ls){
+        const arr = JSON.parse(ls);
+        if (Array.isArray(arr)) state.guestMixes = arr;
+      }
+    } catch {}
+  }
+
+  // ========================= РЕНДЕР =========================================
+  function LogoSVG(cls){
+    return `\n<svg class="${cls||'w-8 h-8'}" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">\n  <defs>\n    <linearGradient id="g" x1="0" x2="1">\n      <stop offset="0" stop-opacity="1" stop-color="#38bdf8"/>\n      <stop offset="1" stop-opacity="1" stop-color="#a78bfa"/>\n    </linearGradient>\n  </defs>\n  <circle cx="32" cy="32" r="30" fill="url(#g)" opacity="0.2"/>\n  <path d="M32 10c-4 4-4 8 0 12 4 4 4 8 0 12-4 4-4 8 0 12" stroke="#c7d2fe" stroke-width="3" fill="none" stroke-linecap="round"/>\n  <circle cx="32" cy="50" r="3" fill="#c7d2fe"/>\n</svg>`;
+  }
+
+  function render(){
+    const root = document.getElementById('root');
+    if (!root) return;
+
+    // auth screen
+    if (!state.user){
+      root.innerHTML = `\n      <div class="min-h-[100svh] bg-slate-950 text-slate-100 flex items-center justify-center p-6">\n        <div class="w-full max-w-sm text-center shadow rounded-2xl border border-slate-800 bg-slate-900">\n          <div class="px-3 pt-3">\n            <div class="flex items-center justify-center mb-2">${LogoSVG('w-16 h-16')}</div>\n            <div class="text-lg font-bold">Вход через Telegram</div>\n          </div>\n          <div class="p-3 space-y-3">\n            <div class="text-sm text-slate-300">Чтобы сохранять миксы под вашим именем, откройте приложение внутри Telegram.</div>\n            <button id="openTg" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] bg-slate-100 text-slate-900 hover:bg-white">Открыть Telegram</button>\n          </div>\n        </div>\n      </div>`;
+      const openTg = document.getElementById('openTg');
+      if (openTg){ openTg.addEventListener('click', function(){ try { window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.openTelegramLink && window.Telegram.WebApp.openTelegramLink('https://t.me'); } catch{} }); }
+      return;
+    }
+
+    const brands = Array.from(new Set((state.flavors||[]).map(f=>normalizeBrand(f.brand)))).filter(Boolean).sort();
+    const flavorsOfActive = (state.flavors||[]).filter(f=>normalizeBrand(f.brand)===state.activeBrand);
+    const total = percentSum(state.parts);
+    const mixStrength10 = (function(parts, flavors){
+      if (!Array.isArray(parts) || !Array.isArray(flavors)) return null; const t = percentSum(parts); if (!parts.length || t<=0) return null; let w=0; for (const p of parts){ const pr = safePercent(p?.percent); if (pr<=0) continue; const fl = flavors.find(x=>x && x.id===p?.flavorId); if(!fl) continue; w += getStrength10(fl) * (pr/t);} return w ? Math.round(w*10)/10 : null; }) (state.parts, state.flavors);
+    const mixTaste = getMixTasteLabel(state.parts, state.flavors);
+
+    root.innerHTML = `\n    <div class="min-h-[100svh] bg-slate-950 text-slate-100 p-3">\n      <div class="mx-auto w-full max-w-md space-y-3">\n        <header class="flex items-center justify-between">\n          <div class="flex items-center gap-2 min-w-0">${LogoSVG()}<h1 class="text-lg font-bold truncate">Hookah Mixes</h1></div>\n          <div class="flex items-center gap-2">\n            <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">Здравствуйте, ${state.user && state.user.name ? state.user.name : 'Гость'}</span>\n            <button data-tab="builder" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] ${state.activeTab==='builder' ? 'bg-slate-100 text-slate-900' : 'border border-slate-700 hover:bg-slate-800'}">Конструктор</button>\n            <button data-tab="guest" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] ${state.activeTab==='guest' ? 'bg-slate-100 text-slate-900' : 'border border-slate-700 hover:bg-slate-800'}">Миксы гостей</button>\n          </div>\n        </header>\n
+        ${state.activeTab==='builder' ? `\n        <div class="rounded-2xl border border-slate-800 bg-slate-900">\n          <div class="px-3 pt-3"><div class="text-xs font-semibold">Бренды</div></div>\n          <div class="p-3 space-y-2">\n            <div class="grid grid-cols-2 gap-1">\n              ${brands.map(b=>`<button data-brand="${b}" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] ${state.activeBrand===b ? 'bg-slate-100 text-slate-900' : 'border border-slate-700 hover:bg-slate-800'}">${b}</button>`).join('')}\n              ${brands.length===0 ? '<div class="text-[12px] text-slate-400">Файл hookah_flavors.json не найден</div>' : ''}\n            </div>\n            ${state.activeBrand ? `\n              <div class="space-y-1">\n                <div class="text-[11px] text-slate-400">Вкусы бренда: ${state.activeBrand}</div>\n                ${flavorsOfActive.map(f=>{ const inMix = state.parts.some(p=>p.flavorId===f.id); const s=getStrength10(f); const c=strengthColor(s); return `\n                  <div class="flex items-center justify-between gap-2 text-sm">\n                    <div class="min-w-0">\n                      <div class="flex items-center gap-2">\n                        <div class="font-medium truncate" title="${(f.brand||'')+' • '+(f.name||'')}">${f.name}</div>\n                        <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border ${c.bg} ${c.text} ${c.border}">${s.toFixed(1)}</span>\n                      </div>\n                      ${f.description ? `<div class=\"text-[11px] text-slate-400 truncate\">${f.description.replace(/"/g,'&quot;')}</div>` : ''}\n                    </div>\n                    <button data-add="${f.id}" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] ${inMix ? 'opacity-50 cursor-not-allowed border border-slate-700' : 'border border-slate-700 hover:bg-slate-800'}">${inMix ? '✓' : '+'}</button>\n                  </div>`; }).join('')}\n                ${flavorsOfActive.length===0 ? '<div class="text-[12px] text-slate-400">Нет вкусов для этого бренда</div>' : ''}\n              </div>` : ''}\n          </div>\n        </div>\n
+        <div class="rounded-2xl border border-slate-800 bg-slate-900">\n          <div class="px-3 pt-3"><div class="text-xs font-semibold">Микс</div></div>\n          <div class="p-3 space-y-2">\n            ${state.parts.length===0 ? '<div class="text-[12px] text-slate-400">Добавьте вкусы из списка бренда</div>' : ''}\n            ${state.parts.map(p=>{ const fl = state.flavors.find(f=>f.id===p.flavorId); return `\n              <div class=\"flex items-center gap-2 text-sm\">\n                <span class=\"truncate w-36\" title=\"${(fl && fl.name) || p.flavorId}\">${(fl && fl.name) || p.flavorId}</span>\n                <input type=\"range\" min=\"0\" max=\"100\" step=\"5\" class=\"w-28\" value=\"${safePercent(p.percent)}\" data-range=\"${p.flavorId}\"/>\n                <span class=\"w-10 text-right\">${safePercent(p.percent)}%</span>\n                <button data-remove=\"${p.flavorId}\" class=\"inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] hover:bg-slate-800\">Удалить</button>\n              </div>`; }).join('')}\n            <div class="flex items-center justify-between text-[12px]">\n              <span>Итог: ${total}%</span>\n              <div class="flex items-center gap-2">\n                ${typeof mixStrength10==='number' ? (function(){ const c = strengthColor(mixStrength10); return `<span class=\"inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border ${c.bg} ${c.text} ${c.border}\">${mixStrength10.toFixed(1)}</span>`; })() : ''}\n                ${mixTaste ? `<span class=\"inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900\">${mixTaste}</span>` : ''}\n              </div>\n            </div>\n          </div>\n        </div>\n
+        <div class="rounded-2xl border border-slate-800 bg-slate-900">\n          <div class="px-3 pt-3"><div class="text-xs font-semibold">Название и описание</div></div>\n          <div class="p-3 space-y-2">\n            <input id="title" placeholder="Название микса" value="${(state.title||'').replace(/"/g,'&quot;')}" class="h-9 w-full rounded-xl border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-400 px-3 text-sm outline-none focus:ring-2 focus:ring-slate-600" />\n            <textarea id="notes" placeholder="Описание / заметки…" class="min-h-[72px] w-full rounded-xl border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-400 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-600">${(state.notes||'').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</textarea>\n            <div class="flex gap-2">\n              <button id="reset" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-slate-800">Сброс</button>\n              <button id="save" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] ${isMixValid(state.parts, state.title) ? 'bg-slate-100 text-slate-900' : 'opacity-50 cursor-not-allowed border border-slate-700'}">Сохранить</button>\n            </div>\n          </div>\n        </div>\n        ` : ''}
+
+        ${state.activeTab==='guest' ? `\n        <div class="rounded-2xl border border-slate-800 bg-slate-900">\n          <div class="px-3 pt-3"><div class="text-xs font-semibold">Миксы гостей</div></div>\n          <div class="p-3 space-y-2">\n            ${state.guestMixes.length===0 ? '<div class="text-[12px] text-slate-400">Пока нет сохранённых миксов</div>' : ''}\n            ${state.guestMixes.map(m=>{ const c = typeof m.strength10==='number' ? strengthColor(m.strength10) : strengthColor(null); return `\n              <div class=\"border border-slate-800 rounded-xl p-2 text-sm\">\n                <div class=\"flex items-center gap-2\">\n                  <div class=\"font-semibold truncate\">${(m.title||'').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>\n                  ${typeof m.strength10==='number' ? `<span class=\"inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border ${c.bg} ${c.text} ${c.border}\">${m.strength10.toFixed(1)}</span>` : ''}\n                  ${m.taste ? `<span class=\"inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900\">${m.taste}</span>` : ''}\n                </div>\n                <div class=\"text-[11px] text-slate-400\">микс от ${(m.author||'Гость').replace(/</g,'&lt;')}</div>\n                ${m.notes ? `<div class=\"text-[12px] opacity-80 mt-1\">${String(m.notes).replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>` : ''}\n                <div class=\"mt-1 space-y-0.5\">\n                  ${(m.parts||[]).map(p=>{ const fl = state.flavors.find(f=>f.id===p.flavorId); return `\n                    <div class=\"flex items-center justify-between text-[12px]\">\n                      <span class=\"truncate mr-2\">${fl ? fl.name : p.flavorId}</span>\n                      <span class=\"opacity-70\">${safePercent(p.percent)}%</span>\n                    </div>`; }).join('')}\n                </div>\n              </div>`; }).join('')}\n          </div>\n        </div>` : ''}
+
+      </div>\n    </div>`;
+
+    // ===== События =====
+    // Переключение табов
+    root.querySelectorAll('[data-tab]').forEach(btn=>{
+      btn.addEventListener('click', function(){ state.activeTab = this.getAttribute('data-tab'); render(); });
+    });
+    // Переключение бренда
+    root.querySelectorAll('[data-brand]').forEach(btn=>{
+      btn.addEventListener('click', function(){ state.activeBrand = this.getAttribute('data-brand'); render(); });
+    });
+    // Добавить вкус в микс
+    root.querySelectorAll('[data-add]').forEach(btn=>{
+      btn.addEventListener('click', function(){ const id = this.getAttribute('data-add'); if (!id) return; if (state.parts.some(p=>p.flavorId===id)) return; const def = Math.min(30, Math.max(0, 100 - percentSum(state.parts))); state.parts = state.parts.concat([{ flavorId: id, percent: def }]); render(); });
+    });
+    // Слайдеры
+    root.querySelectorAll('[data-range]').forEach(sl=>{
+      sl.addEventListener('input', function(){ const id = this.getAttribute('data-range'); const val = safePercent(this.value); state.parts = state.parts.map(p => p.flavorId===id ? { ...p, percent: clampPercentForPart(state.parts, id, val) } : p); render(); });
+    });
+    // Удаление
+    root.querySelectorAll('[data-remove]').forEach(btn=>{
+      btn.addEventListener('click', function(){ const id = this.getAttribute('data-remove'); state.parts = state.parts.filter(p=>p.flavorId!==id); render(); });
+    });
+    // Название/описание
+    const title = root.querySelector('#title'); if (title) title.addEventListener('input', e=>{ state.title = e.target.value; });
+    const notes = root.querySelector('#notes'); if (notes) notes.addEventListener('input', e=>{ state.notes = e.target.value; });
+    // Сброс
+    const reset = root.querySelector('#reset'); if (reset) reset.addEventListener('click', ()=>{ state.title=''; state.notes=''; state.parts=[]; render(); });
+    // Сохранение
+    const save = root.querySelector('#save'); if (save) save.addEventListener('click', async ()=>{
+      if (!isMixValid(state.parts, state.title)) return;
+      if (!state.user) return; // требуем авторизацию
+      const mix = { id: uuidv4(), title: String(state.title).trim(), parts: state.parts.slice(), notes: String(state.notes||'').trim(), author: state.user.name || 'Гость', createdAt: Date.now(), taste: getMixTasteLabel(state.parts, state.flavors) || null, strength10: (function(){ const t=percentSum(state.parts); if(!t) return null; let w=0; for(const p of state.parts){ const pr=safePercent(p.percent); if(pr<=0) continue; const fl=state.flavors.find(x=>x&&x.id===p.flavorId); if(!fl) continue; w += getStrength10(fl)*(pr/t);} return w? Math.round(w*10)/10:null; })() };
+      // Node
+      try { const r = await fetch('/api/mixes', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(mix) }); if (r.ok) { const saved = await r.json().catch(()=>null); state.guestMixes = [saved||mix].concat(state.guestMixes).slice(0,500); state.title=''; state.notes=''; state.parts=[]; state.activeTab='guest'; render(); return; } } catch{}
+      // PHP
+      try { const r = await fetch('/save_mixes.php', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(mix) }); if (r.ok) { state.guestMixes = [mix].concat(state.guestMixes).slice(0,500); state.title=''; state.notes=''; state.parts=[]; state.activeTab='guest'; try{ localStorage.setItem('guest_mixes', JSON.stringify(state.guestMixes)); }catch{} render(); return; } } catch{}
+      // Fallback: local + download
+      state.guestMixes = [mix].concat(state.guestMixes).slice(0,500);
+      try { localStorage.setItem('guest_mixes', JSON.stringify(state.guestMixes)); } catch{}
+      try { const blob = new Blob([JSON.stringify(state.guestMixes, null, 2)], { type:'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'guest_mixes.json'; document.body.appendChild(a); a.click(); setTimeout(()=>{ document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);} catch {}
+      state.title=''; state.notes=''; state.parts=[]; state.activeTab='guest'; render();
+    });
+  }
+
+  // ========================= СТАРТ ПРИЛОЖЕНИЯ ===============================
+  (async function start(){
+    try { initAuth(); } catch{}
+    try { await loadFlavors(); } catch{}
+    try { await loadGuestMixes(); } catch{}
+    try { render(); } catch(e){ console.error(e); }
+  })();
+
+  // ========================= SMOKE TESTS (не трогаем старые, добавили новые) ===
+  ;(function(){
+    try{
+      console.group('HookahMixes – smoke tests (vanilla)');
+      { const parts = [ { flavorId:'a', percent:60 }, { flavorId:'b', percent:40 } ]; const total = percentSum(parts); console.assert(total === 100, 'sum = 100'); }
+      { const parts = [ { flavorId:'a', percent:60 }, { flavorId:'b', percent:30 } ]; const total = percentSum(parts); console.assert(total === 90, 'sum = 90'); console.assert(!(parts.length > 0 && total === 100), 'invalid if < 100'); }
+      { const ok = isMixValid([ { flavorId:'a', percent:60 }, { flavorId:'b', percent:40 } ], 'Mix'); const tooLow = isMixValid([ { flavorId:'a', percent:60 }, { flavorId:'b', percent:30 } ], 'Mix'); const tooHigh = isMixValid([ { flavorId:'a', percent:80 }, { flavorId:'b', percent:30 } ], 'Mix'); const shortTitle = isMixValid([ { flavorId:'a', percent:100 } ], 'ab'); console.assert(ok === true, 'valid exactly 100 w/ title'); console.assert(tooLow === false && tooHigh === false, 'totals != 100 invalid'); console.assert(shortTitle === false, 'title >= 3'); }
+      { const parts = [ { flavorId:'a', percent:90 }, { flavorId:'b', percent:0 } ]; const cl = clampPercentForPart(parts, 'b', 20); console.assert(cl === 10, 'clamp remaining'); }
+      { const weird = [ { flavorId:'x', percent: 40 }, { flavorId:'y', percent: '20' }, { flavorId:'z' } ]; console.assert(percentSum(weird) === 60, 'percentSum robust'); }
+      { console.assert(isMixValid([], 'Mix') === false, 'empty invalid'); console.assert(isMixValid([ { flavorId:'a', percent:100 } ], 'a') === false, 'short title invalid'); }
+      { const parts = [ { flavorId:'a', percent:50 } ]; const cl = clampPercentForPart(parts, 'a', -5); console.assert(cl === 0, 'negative clamps to 0'); }
+      { const parts = [ { flavorId:'a', percent:70 }, { flavorId:'b', percent:20 } ]; const cl = clampPercentForPart(parts, 'b', 40); console.assert(cl === 30, 'cannot exceed 100'); }
+      { const fl = [ { id:'a', name:'X', brand:'MustHave' }, { id:'b', name:'Y', brand:'Black Burn' } ]; const v = (function(parts, flavors){ const total = percentSum(parts); let w=0; for(const p of parts){const pr = safePercent(p?.percent); if(pr<=0) continue; const f = flavors.find(x=>x&&x.id===p?.flavorId); if(!f) continue; w += (typeof f.strength10==='number'?f.strength10: (f.brand==='Black Burn'?6:5)) * (pr/total); } return Math.round(w*10)/10; })([ { flavorId:'a', percent:50 }, { flavorId:'b', percent:50 } ], fl); console.assert(v === 5.5 || Math.abs(v-5.5)<1e-9, 'weighted strength'); }
+      { const fl = [ { id:'a', name:'Ice Lemon', brand:'MustHave', tags:['цитрус','лед'] }, { id:'b', name:'Mango', brand:'Black Burn', tags:['фрукт','сладкий'] } ]; const t = getMixTasteLabel([ { flavorId:'a', percent:70 }, { flavorId:'b', percent:30 } ], fl); console.assert(typeof t === 'string' && t.split(' ').length === 1, 'one-word taste'); }
+      { const ok = isMixValid([ { flavorId:'a', percent:100 } ], '  abc '); const bad = isMixValid([ { flavorId:'a', percent:100 } ], '  ab '); console.assert(ok === true && bad === false, 'trimmed title length'); }
+      // (36) NEW: taste null when empty
+      { const t = getMixTasteLabel([], []); console.assert(t === null, 'taste is null for empty parts'); }
+      // (37) NEW: clamp bounds single item
+      { const cl1 = clampPercentForPart([{flavorId:'a', percent:50}], 'a', 150); const cl2 = clampPercentForPart([{flavorId:'a', percent:50}], 'a', -10); console.assert(cl1 === 100 && cl2 === 0, 'clamp single item bounds'); }
+      console.groupEnd();
+    } catch(e){ console.error('Smoke tests error', e); }
+  })();
+  </script>
+</body>
+</html>
