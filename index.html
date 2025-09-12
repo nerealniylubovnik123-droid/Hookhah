@@ -86,42 +86,57 @@
       }
     }catch(_){/* ignore */}
   }
+
   async function loadFlavors(){
+    async function fetchJsonUtf8(url){
+      const res = await fetch(url, { cache:'no-store' });
+      if (!res.ok) return null;
+      try {
+        const buf = await res.arrayBuffer();
+        const text = new TextDecoder('utf-8').decode(buf);
+        return JSON.parse(text);
+      } catch (_) { try { return await res.json(); } catch (_) { return null; } }
+    }
     try{
-      var res=await fetch('./hookah_flavors.json',{cache:'no-store'});
-      if(res.ok){
-        var arr=await res.json();
-        if(Array.isArray(arr)&&arr.length){
-          var cleaned=arr.map(function(x){return{
-            id:String(x.id||((x.brand||'')+'-'+(x.name||''))).trim(),
-            brand:String(x.brand||'').trim(),
-            name:String(x.name||'').trim(),
-            description:x.description!=null?String(x.description):undefined,
-            tags:Array.isArray(x.tags)?x.tags:(typeof x.tags==='string'?x.tags.split(/[;,|]/).map(function(s){return s.trim();}).filter(Boolean):undefined),
-            strength10:typeof x.strength10==='number'?x.strength10:undefined
-          };}).filter(function(x){return x.id && x.brand && x.name;});
-          if(cleaned.length){
-            state.flavors=cleaned;
-            if(!state.activeBrand) state.activeBrand=normalizeBrand(cleaned[0].brand);
-            return;
-          }
+      const arr = await fetchJsonUtf8('./hookah_flavors.json');
+      if (Array.isArray(arr) && arr.length){
+        const cleaned = arr.map(function(x){return{
+          id:String(x.id||((x.brand||'')+'-'+(x.name||''))).trim(),
+          brand:String(x.brand||'').trim(),
+          name:String(x.name||'').trim(),
+          description:x.description!=null?String(x.description):undefined,
+          tags:Array.isArray(x.tags)?x.tags:(typeof x.tags==='string'?x.tags.split(/[;,|]/).map(function(s){return s.trim();}).filter(Boolean):undefined),
+          strength10:typeof x.strength10==='number'?x.strength10:undefined
+        };}).filter(function(x){return x.id && x.brand && x.name;});
+        if(cleaned.length){
+          state.flavors=cleaned;
+          if(!state.activeBrand) state.activeBrand=normalizeBrand(cleaned[0].brand);
+          return;
         }
       }
     }catch(_){/* ignore */}
     state.flavors=INLINE_FLAVORS.slice();
     if(!state.activeBrand) state.activeBrand='MustHave';
   }
+
   async function loadGuestMixes(){
+    async function fetchJsonUtf8(url){
+      try {
+        const res = await fetch(url, { cache:'no-store' });
+        if (!res.ok) return null;
+        try {
+          const buf = await res.arrayBuffer();
+          const text = new TextDecoder('utf-8').decode(buf);
+          return JSON.parse(text);
+        } catch (_) { try { return await res.json(); } catch (_) { return null; } }
+      } catch (_) { return null; }
+    }
+    let data = await fetchJsonUtf8('./guest_mixes.json');
+    if (!Array.isArray(data)) data = await fetchJsonUtf8('/guest_mixes.php');
+    if (Array.isArray(data)) state.guestMixes = data;
     try{
-      var res=await fetch('./guest_mixes.json',{cache:'no-store'});
-      if(res.ok){
-        var data=await res.json();
-        if(Array.isArray(data)) state.guestMixes=data;
-      }
-    }catch(_){/* ignore */}
-    try{
-      var ls=localStorage.getItem('guest_mixes');
-      if(ls){ var arr=JSON.parse(ls); if(Array.isArray(arr)) state.guestMixes=arr; }
+      const ls=localStorage.getItem('guest_mixes');
+      if(ls){ const arr=JSON.parse(ls); if(Array.isArray(arr)) state.guestMixes=arr; }
     }catch(_){/* ignore */}
   }
 
@@ -354,7 +369,7 @@
       // Fallback: локально + скачать
       state.guestMixes=[mix].concat(state.guestMixes).slice(0,500);
       try{ localStorage.setItem('guest_mixes', JSON.stringify(state.guestMixes)); }catch(_){/* ignore */}
-      try{ var json='﻿'+JSON.stringify(state.guestMixes,null,2); var blob=new Blob([json],{type:'application/json; charset=UTF-8'}); var url=URL.createObjectURL(blob); var a=document.createElement('a'); a.href=url; a.download='guest_mixes.json'; document.body.appendChild(a); a.click(); setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 100); }catch(_){/* ignore */}
+      try{ var json='\uFEFF'+JSON.stringify(state.guestMixes,null,2); var blob=new Blob([json],{type:'application/json; charset=UTF-8'}); var url=URL.createObjectURL(blob); var a=document.createElement('a'); a.href=url; a.download='guest_mixes.json'; document.body.appendChild(a); a.click(); setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 100); }catch(_){/* ignore */}
       state.title=''; state.notes=''; state.parts=[]; state.activeTab='guest'; render();
     }); }
   }
