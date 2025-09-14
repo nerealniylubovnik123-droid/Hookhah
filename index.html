@@ -53,7 +53,7 @@
   const clampPercentForPart=(parts,targetId,newVal)=>{const otherSum=percentSum(parts.filter(x=>x && x.flavorId!==targetId));return Math.max(0,Math.min(safePercent(newVal),100-otherSum));};
   const uuidv4=()=>{let dt=Date.now();if(typeof performance!="undefined"&&typeof performance.now==="function")dt+=performance.now();return"xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g,c=>{const r=(dt+Math.random()*16)%16|0;dt=Math.floor(dt/16);const v=c==="x"?r:(r&0x3)|0x8;return v.toString(16);});};
   const normalizeBrand=(b)=>(b||"").trim();
-  const BRAND_STRENGTH10_DEFAULTS={Darkside:6,"Black Burn":6,BlackBurn:6,MustHave:5,Overdos:7,Bonch:7,Starline:3};
+  const BRAND_STRENGTH10_DEFAULTS={Darkside:5,"Black Burn":6,BlackBurn:6,MustHave:5,Overdos:6,Bonch:7,Starline:3};
   const getStrength10=(f)=>{if(!f)return 5;if(typeof f.strength10==='number'&&Number.isFinite(f.strength10))return Math.max(1,Math.min(10,f.strength10));return BRAND_STRENGTH10_DEFAULTS[normalizeBrand(f.brand)]??5;};
   const strengthColor=(v)=>{if(v==null)return{bg:"bg-slate-800",text:"text-slate-200",border:"border-slate-700"};if(v<4)return{bg:"bg-emerald-950",text:"text-emerald-300",border:"border-emerald-800"};if(v<7)return{bg:"bg-amber-950",text:"text-amber-300",border:"border-amber-800"};return{bg:"bg-rose-950",text:"text-rose-300",border:"border-rose-800"};};
   const tasteWordFromTag=(tag)=>{if(tag==null)return null;const t=String(tag).toLowerCase().trim();if(!t)return null;const rules=[[/(кисл|sour|лимон|lime|грейпфрут)/,"кислый"],[/(сладк|sweet|sugar|мед|honey)/,"сладкий"],[/(прян|spice|ginger|имбир)/,"пряный"],[/(лед|ice|cold|frost|мят)/,"ледяной"],[/(фрукт|fruit|яблок|banana|mango|pineapple|grape|orange|pear|melon|berry)/,"фруктовый"],[/(десерт|dessert|cake|pie|cookie|choco|cream|vanilla|waffle)/,"десертный"]];for(const [re,w] of rules){if(re.test(t))return w;}return null;};
@@ -185,7 +185,7 @@
 
     var brands = Array.from(new Set((state.flavors||[]).map(function(f){return normalizeBrand(f.brand);}))).filter(Boolean).sort();
     var flavorsOfActive = (state.flavors||[]).filter(function(f){return normalizeBrand(f.brand)===state.activeBrand;});
-    var searchedFlavors = filterFlavorsByQuery(state.flavors, state.search);
+    var searchedFlavors = filterFlavorsByQueryAdv(state.flavors, state.search);
     var listFlavors = state.search ? searchedFlavors : flavorsOfActive;
 
     var total = percentSum(state.parts);
@@ -374,6 +374,25 @@
     }); }
   }
 
+  // --- Улучшенный поиск по вкусам (имя+описание+теги, русские синонимы) ---
+  function filterFlavorsByQueryAdv(flavors, query){
+    function normalize(s){ return String(s||'').toLowerCase().replace(/ё/g,'е').trim(); }
+    var q = normalize(query);
+    if(!q) return flavors||[];
+    var SYN = {"киви":["kiwi"],"банан":["banana"],"манго":["mango"],"лимон":["lemon","citrus"],"апельсин":["orange"],"грейпфрут":["grapefruit"],"арбуз":["watermelon"],"дыня":["melon"],"виноград":["grape"],"персик":["peach"],"яблок":["apple"],"маракуй":["passion"],"клубник":["strawberry"],"черник":["blueberry"],"мята":["mint"],"лед":["ice","freeze","frost","cold"],"ваниль":["vanilla"],"печень":["cookie","bisc"],"шоколад":["choco","chocolate"],"кисл":["sour"],"слад":["sweet"]};
+    var tokens = q.split(' ').filter(Boolean);
+    function textOf(f){ return normalize([f && f.name, f && f.description, Array.isArray(f && f.tags)? (f.tags.join(' ')) : '' ].join(' ')); }
+    return (flavors||[]).filter(function(f){
+      var text = textOf(f);
+      return tokens.every(function(t){
+        var vars = new Set([t]);
+        Object.entries(SYN).forEach(function(pair){ var ru=pair[0], arr=pair[1]; if(t.indexOf(ru) !== -1){ arr.forEach(function(v){ vars.add(v); }); } });
+        var hit = false; vars.forEach(function(v){ if(text.indexOf(v) !== -1) hit = true; });
+        return hit;
+      });
+    });
+  }
+
   // ========================= СТАРТ ПРИЛОЖЕНИЯ ===============================
   (async function start(){ try{ initAuth(); await loadFlavors(); await loadGuestMixes(); render(); }catch(e){ console.error(e); } })();
 
@@ -390,7 +409,13 @@
     {var t=getMixTasteLabel([],[]); console.assert(t===null,'taste null');}
     // (40) clamp single lower bound
     {var cl3=clampPercentForPart([{flavorId:'a',percent:10}], 'a', -5); console.assert(cl3===0,'clamp to 0');}
-    console.groupEnd();
+    // (41) NEW: расширенный поиск — русские слова и теги
+      { var fl=[{id:'1',name:'Kiwi Smoothie',brand:'A'},{id:'2',name:'Banana Mama',brand:'B'},{id:'3',name:'Ice Lemon',brand:'A',tags:['мята']}];
+        var r1=filterFlavorsByQueryAdv(fl,'киви');
+        var r2=filterFlavorsByQueryAdv(fl,'мята');
+        console.assert(r1.length===1 && r1[0].id==='1','ru→en synonym: киви→kiwi');
+        console.assert(r2.some(function(x){return x.id==='3';}),'match by tags works'); }
+      console.groupEnd();
   }catch(e){ console.error('Smoke tests error', e); } })();
   </script>
 </body>
