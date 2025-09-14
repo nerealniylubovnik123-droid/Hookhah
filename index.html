@@ -305,21 +305,39 @@
             <input id="search" placeholder="Поиск вкуса по названию…" value="${escAttr(state.search||'')}" class="h-9 w-full rounded-xl border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-400 px-3 text-sm outline-none focus:ring-2 focus:ring-slate-600" />
             <div class="grid grid-cols-2 gap-1">${brandsHTML}${brands.length===0?'<div class="text-[12px] text-slate-400">Файл hookah_flavors.json не найден</div>':''}</div>
           </div>
-          ${state.search ? `<div class="text-[11px] text-slate-400">Найдено: ${listFlavors.length}</div>` : (state.activeBrand ? `<div class="text-[11px] text-slate-400">Вкусы бренда: ${escHTML(state.activeBrand)}</div>` : '')}
-          ${flavorsHTML}
-          ${listFlavors.length===0?`<div class="text-[12px] text-slate-400">${state.search?'Ничего не найдено':'Нет вкусов для этого бренда'}</div>`:''}
+          <div id="flavorsMeta" class="text-[11px] text-slate-400">${state.search ? `Найдено: ${listFlavors.length}` : (state.activeBrand ? `Вкусы бренда: ${escHTML(state.activeBrand)}` : '')}</div>
+          <div id="flavorsList">${flavorsHTML}${listFlavors.length===0?`<div class="text-[12px] text-slate-400">${state.search?'Ничего не найдено':'Нет вкусов для этого бренда'}</div>`:''}</div>
         </div>
       </div>`;
 
     const mixBlock = `
-      <div class="rounded-2xl border border-slate-800 bg-slate-900">
+      <div class="rounded-2xl border border-slate-800 bg-slate-900" id="mixBlock">
         <div class="px-3 pt-3"><div class="text-xs font-semibold">Микс</div></div>
         <div class="p-3 space-y-2">
           ${state.parts.length===0?'<div class="text-[12px] text-slate-400">Добавьте вкусы из списка</div>':''}
-          ${partsHTML}
+          ${state.parts.map(function(p){
+            var fl = state.flavors.find(function(x){return x.id===p.flavorId;});
+            var name = (fl && fl.name) || p.flavorId;
+            return (
+              '<div class="flex items-center gap-2 text-sm">
+' +
+              '  <span class="truncate w-36" title="'+escAttr(name)+'">'+escHTML(name)+'</span>
+' +
+              '  <input type="range" min="0" max="100" step="5" class="w-28" value="'+safePercent(p.percent)+'" data-range="'+p.flavorId+'"/>
+' +
+              '  <span class="w-10 text-right" data-percent-for="'+p.flavorId+'">'+safePercent(p.percent)+'%</span>
+' +
+              '  <button data-remove="'+p.flavorId+'" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] hover:bg-slate-800">Удалить</button>
+' +
+              '</div>'
+            );
+          }).join('')}
           <div class="flex items-center justify-between text-[12px]">
-            <span>Итог: ${total}%</span>
-            <div class="flex items-center gap-2">${strengthBadge}${mixTaste?('<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">'+escHTML(mixTaste)+'</span>'):''}</div>
+            <span>Итог: <b id="mixTotal">${total}</b>%</span>
+            <div class="flex items-center gap-2">
+              <span id="mixStrength">${strengthBadge}</span>
+              <span id="mixTaste">${mixTaste?('<span class=\"inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900\">'+escHTML(mixTaste)+'</span>'):''}</span>
+            </div>
           </div>
         </div>
       </div>`;
@@ -368,18 +386,28 @@
     });
     // Поиск
     var search = root.querySelector('#search');
-    if(search){ search.addEventListener('input', function(e){ state.search = e.target.value; render(); }); }
-    // Добавить вкус
-    Array.prototype.forEach.call(root.querySelectorAll('[data-add]'), function(btn){
-      btn.addEventListener('click', function(){ var id=this.getAttribute('data-add'); if(!id) return; if(state.parts.some(function(p){return p.flavorId===id;})) return; var def=Math.min(30, Math.max(0, 100 - percentSum(state.parts))); state.parts = state.parts.concat([{ flavorId:id, percent:def }]); render(); });
-    });
-    // Слайдеры
-    Array.prototype.forEach.call(root.querySelectorAll('[data-range]'), function(sl){
-      sl.addEventListener('input', function(){ var id=this.getAttribute('data-range'); var val=safePercent(this.value); state.parts = state.parts.map(function(p){ return p.flavorId===id ? { flavorId:p.flavorId, percent: clampPercentForPart(state.parts, id, val) } : p; }); render(); });
+    if(search){ search.addEventListener('input', function(e){ state.search = e.target.value; updateSearchUI(); }); }
+    // Кнопки добавления вкусов
+    bindAddButtons();
+    // Элементы микса (слайдеры/удаление)
+    attachMixEvents();
+        var req=safePercent(this.value);
+        // Рассчитываем с учётом clamp
+        var newParts = state.parts.map(function(p){ return p.flavorId===id ? { flavorId:p.flavorId, percent: clampPercentForPart(state.parts, id, req) } : p; });
+        var newVal = newParts.find(function(p){return p.flavorId===id;}).percent;
+        state.parts = newParts;
+        if (newVal !== req) { this.value = newVal; }
+        // Обновить только числа и бейджи
+        updateMixStatsUI();
+        var span = document.querySelector('[data-percent-for="'+id+'"]');
+        if(span) span.textContent = newVal + '%';
+      });
+    }); render(); });
     });
     // Удалить
     Array.prototype.forEach.call(root.querySelectorAll('[data-remove]'), function(btn){
-      btn.addEventListener('click', function(){ var id=this.getAttribute('data-remove'); state.parts = state.parts.filter(function(p){return p.flavorId!==id;}); render(); });
+      btn.addEventListener('click', function(){ var id=this.getAttribute('data-remove'); state.parts = state.parts.filter(function(p){return p.flavorId!==id;}); rerenderMixBlock(); });
+    }); render(); });
     });
     // Поля формы
     var titleEl=root.querySelector('#title'); if(titleEl){ titleEl.addEventListener('input', function(e){ state.title = e.target.value; }); }
@@ -399,6 +427,104 @@
       try{ var json='\uFEFF'+JSON.stringify(state.guestMixes,null,2); var blob=new Blob([json],{type:'application/json; charset=UTF-8'}); var url=URL.createObjectURL(blob); var a=document.createElement('a'); a.href=url; a.download='guest_mixes.json'; document.body.appendChild(a); a.click(); setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 100); }catch(_){/* ignore */}
       state.title=''; state.notes=''; state.parts=[]; state.activeTab='guest'; render();
     }); }
+  }
+  // ======= Помощники для частичного обновления UI (без потери фокуса) =======
+  function updateMixStatsUI(){
+    var total = percentSum(state.parts);
+    var totalEl = document.getElementById('mixTotal'); if(totalEl) totalEl.textContent = String(total);
+    // strength
+    var t = percentSum(state.parts); var w=0; if(t>0){ for(var i=0;i<state.parts.length;i++){ var p=state.parts[i]; var pr=safePercent(p.percent); if(pr<=0) continue; var fl=state.flavors.find(function(x){return x && x.id===p.flavorId;}); if(fl) w += getStrength10(fl) * (pr/t); } }
+    var strength = w? Math.round(w*10)/10 : null;
+    var sEl = document.getElementById('mixStrength'); if(sEl){ if(typeof strength==='number'){ var c=strengthColor(strength); sEl.innerHTML = '<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+strength.toFixed(1)+'</span>'; } else { sEl.innerHTML=''; } }
+    var taste = getMixTasteLabel(state.parts, state.flavors);
+    var tEl = document.getElementById('mixTaste'); if(tEl){ tEl.innerHTML = taste ? ('<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">'+escHTML(taste)+'</span>') : ''; }
+  }
+
+  function bindAddButtons(){
+    var list = document.getElementById('flavorsList'); if(!list) return;
+    Array.prototype.forEach.call(list.querySelectorAll('[data-add]'), function(btn){
+      btn.addEventListener('click', function(){
+        var id=this.getAttribute('data-add');
+        if(!id) return; if(state.parts.some(function(p){return p.flavorId===id;})) return;
+        var def=Math.min(30, Math.max(0, 100 - percentSum(state.parts)));
+        state.parts = state.parts.concat([{ flavorId:id, percent:def }]);
+        rerenderMixBlock();
+        updateSearchUI();
+      });
+    });
+  }
+
+  function attachMixEvents(){
+    // Слайдеры
+    Array.prototype.forEach.call(document.querySelectorAll('[data-range]'), function(sl){
+      sl.addEventListener('input', function(){
+        var id=this.getAttribute('data-range');
+        var req=safePercent(this.value);
+        var newParts = state.parts.map(function(p){ return p.flavorId===id ? { flavorId:p.flavorId, percent: clampPercentForPart(state.parts, id, req) } : p; });
+        var newVal = newParts.find(function(p){return p.flavorId===id;}).percent;
+        state.parts = newParts;
+        if (newVal !== req) { this.value = newVal; }
+        updateMixStatsUI();
+        var span = document.querySelector('[data-percent-for="'+id+'"]');
+        if(span) span.textContent = newVal + '%';
+      });
+    });
+    // Удаление
+    Array.prototype.forEach.call(document.querySelectorAll('[data-remove]'), function(btn){
+      btn.addEventListener('click', function(){ var id=this.getAttribute('data-remove'); state.parts = state.parts.filter(function(p){return p.flavorId!==id;}); rerenderMixBlock(); });
+    });
+  }
+
+  function rerenderMixBlock(){
+    var container = document.getElementById('mixBlock'); if(!container) return;
+    var total = percentSum(state.parts);
+    var strength = (function(){ var t=percentSum(state.parts); if(!t) return null; var w=0; for(var i=0;i<state.parts.length;i++){ var p=state.parts[i]; var pr=safePercent(p.percent); if(pr<=0) continue; var fl=state.flavors.find(function(x){return x && x.id===p.flavorId;}); if(!fl) continue; w+=getStrength10(fl)*(pr/t);} return w?Math.round(w*10)/10:null; })();
+    var strengthBadge=''; if(typeof strength==='number'){ var c=strengthColor(strength); strengthBadge='<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+strength.toFixed(1)+'</span>'; }
+    var mixTaste = getMixTasteLabel(state.parts, state.flavors);
+    var partsHTML = state.parts.map(function(p){ var fl = state.flavors.find(function(x){return x.id===p.flavorId;}); var name=(fl && fl.name)||p.flavorId; return '<div class="flex items-center gap-2 text-sm">
+  <span class="truncate w-36" title="'+escAttr(name)+'">'+escHTML(name)+'</span>
+  <input type="range" min="0" max="100" step="5" class="w-28" value="'+safePercent(p.percent)+'" data-range="'+p.flavorId+'"/>
+  <span class="w-10 text-right" data-percent-for="'+p.flavorId+'">'+safePercent(p.percent)+'%</span>
+  <button data-remove="'+p.flavorId+'" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] hover:bg-slate-800">Удалить</button>
+</div>'; }).join('');
+    var html = '<div class="px-3 pt-3"><div class="text-xs font-semibold">Микс</div></div>
+'+
+               '<div class="p-3 space-y-2">'+
+               (state.parts.length===0?'<div class="text-[12px] text-slate-400">Добавьте вкусы из списка</div>':'')+
+               partsHTML+
+               '<div class="flex items-center justify-between text-[12px]">'+
+               '  <span>Итог: <b id="mixTotal">'+total+'</b>%</span>'+ 
+               '  <div class="flex items-center gap-2"><span id="mixStrength">'+strengthBadge+'</span><span id="mixTaste">'+(mixTaste?('<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">'+escHTML(mixTaste)+'</span>'):'')+'</span></div>'+ 
+               '</div>'+ 
+               '</div>';
+    container.innerHTML = html;
+    attachMixEvents();
+  }
+
+  function updateSearchUI(){
+    var meta = document.getElementById('flavorsMeta');
+    var list = document.getElementById('flavorsList');
+    if(!meta || !list) return;
+    var flavorsOfActive = (state.flavors||[]).filter(function(f){return normalizeBrand(f.brand)===state.activeBrand;});
+    var searchedFlavors = filterFlavorsByQueryAdv(state.flavors, state.search);
+    var listFlavors = state.search ? searchedFlavors : flavorsOfActive;
+    meta.textContent = state.search ? ('Найдено: '+listFlavors.length) : (state.activeBrand ? ('Вкусы бренда: '+state.activeBrand) : '');
+    list.innerHTML = listFlavors.map(function(f){
+      var inMix = state.parts.some(function(p){return p.flavorId===f.id;});
+      var s = getStrength10(f); var c = strengthColor(s);
+      var desc = f.description ? '<div class="text-[11px] text-slate-400 truncate">'+escHTML(f.description)+'</div>' : '';
+      return '<div class="flex items-center justify-between gap-2 text-sm">
+  <div class="min-w-0">
+    <div class="flex items-center gap-2">
+      <div class="font-medium truncate" title="'+escAttr((f.brand||'')+' • '+(f.name||''))+'">'+escHTML(f.name)+' <span class="opacity-60">('+escHTML(f.brand)+')</span></div>
+      <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+s.toFixed(1)+'</span>
+    </div>
+    '+desc+'
+  </div>
+  <button data-add="'+f.id+'" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] '+(inMix?'opacity-50 cursor-not-allowed border border-slate-700':'border border-slate-700 hover:bg-slate-800')+'">'+(inMix?'✓':'+')+'</button>
+</div>';
+    }).join('') + (listFlavors.length===0?('<div class="text-[12px] text-slate-400">'+(state.search?'Ничего не найдено':'Нет вкусов для этого бренда')+'</div>'):'');
+    bindAddButtons();
   }
 
   // --- Улучшенный поиск по вкусам (имя+описание+теги, русские синонимы) ---
