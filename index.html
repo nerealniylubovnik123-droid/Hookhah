@@ -73,7 +73,9 @@
     notes:"",
     guestMixes:[],
     activeTab:"builder", // 'builder' | 'guest'
-    user:null // {id, name, username}
+    user:null, // {id, name, username}
+    showSplash:false, // показать приветственный экран после авторизации
+    logoUrl:null // путь к jpeg-логотипу из той же папки
   };
 
   // ========================= ИНИЦИАЛИЗАЦИЯ ===================================
@@ -83,6 +85,7 @@
       if(u){
         var name=[u.first_name,u.last_name].filter(Boolean).join(' ')||u.username||('User '+u.id);
         state.user={id:u.id,name:name,username:u.username};
+        state.showSplash = true; // после авторизации покажем приветственный экран
       }
     }catch(_){/* ignore */}
   }
@@ -141,6 +144,14 @@
   }
 
   // ========================= ВСПОМОГАТЕЛЬНОЕ ================================
+  // Поиск jpeg-логотипа в той же папке: logo.jpg → logo.jpeg → ранее загруженное фото → SVG
+  async function detectLogo(){
+    async function exists(url){ try{ const r=await fetch(url,{method:'HEAD',cache:'no-store'}); return r.ok; }catch(_){ return false; } }
+    const candidates=[ './logo.jpg','./logo.jpeg','./logo.JPG','./logo.JPEG','./AKGpihYIdG2xycCNV3hAm2gVxkuF4tS5.jpg' ];
+    for(const c of candidates){ if(await exists(c)){ state.logoUrl=c; return; } }
+    state.logoUrl=null;
+  }
+
   function LogoSVG(cls){
     return (
       '<svg class="'+(cls||'w-8 h-8')+'" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">\n' +
@@ -180,6 +191,22 @@
       root.innerHTML = loginHTML;
       var openTg=document.getElementById('openTg');
       if(openTg){ openTg.addEventListener('click', function(){ try{ window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.openTelegramLink && window.Telegram.WebApp.openTelegramLink('https://t.me'); }catch(_){/* ignore */} }); }
+      return;
+    }
+
+    // Приветственный экран после авторизации
+    if(state.showSplash){
+      const logoBlock = state.logoUrl ? `<img src="${state.logoUrl}" alt="logo" class="w-24 h-24 rounded-xl object-cover shadow"/>` : `${LogoSVG('w-24 h-24')}`;
+      root.innerHTML = `
+        <div class="min-h-[100svh] bg-slate-950 text-slate-100 flex items-center justify-center p-6">
+          <div class="w-full max-w-sm text-center shadow rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4">
+            <div class="flex items-center justify-center">${logoBlock}</div>
+            <div class="text-lg font-bold">готовы стать кальянным миксологом</div>
+            <button id="goApp" class="inline-flex items-center justify-center rounded-xl h-10 px-4 text-[14px] bg-slate-100 text-slate-900 hover:bg-white">поехали</button>
+          </div>
+        </div>`;
+      var go=document.getElementById('goApp');
+      if(go){ go.addEventListener('click', function(){ state.showSplash=false; render(); }); }
       return;
     }
 
@@ -394,7 +421,7 @@
   }
 
   // ========================= СТАРТ ПРИЛОЖЕНИЯ ===============================
-  (async function start(){ try{ initAuth(); await loadFlavors(); await loadGuestMixes(); render(); }catch(e){ console.error(e); } })();
+  (async function start(){ try{ initAuth(); await detectLogo(); await loadFlavors(); await loadGuestMixes(); render(); }catch(e){ console.error(e); } })();
 
   // ========================= SMOKE TESTS ====================================
   ;(function(){ try{
