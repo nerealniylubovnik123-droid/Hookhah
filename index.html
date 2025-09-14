@@ -58,24 +58,41 @@
   const strengthColor=(v)=>{if(v==null)return{bg:"bg-slate-800",text:"text-slate-200",border:"border-slate-700"};if(v<4)return{bg:"bg-emerald-950",text:"text-emerald-300",border:"border-emerald-800"};if(v<7)return{bg:"bg-amber-950",text:"text-amber-300",border:"border-amber-800"};return{bg:"bg-rose-950",text:"text-rose-300",border:"border-rose-800"};};
   const tasteWordFromTag=(tag)=>{if(tag==null)return null;const t=String(tag).toLowerCase().trim();if(!t)return null;const rules=[[/(кисл|sour|лимон|lime|грейпфрут)/,"кислый"],[/(сладк|sweet|sugar|мед|honey)/,"сладкий"],[/(прян|spice|ginger|имбир)/,"пряный"],[/(лед|ice|cold|frost|мят)/,"ледяной"],[/(фрукт|fruit|яблок|banana|mango|pineapple|grape|orange|pear|melon|berry)/,"фруктовый"],[/(десерт|dessert|cake|pie|cookie|choco|cream|vanilla|waffle)/,"десертный"]];for(const [re,w] of rules){if(re.test(t))return w;}return null;};
   const getMixTasteLabel=(parts,flavors)=>{if(!Array.isArray(parts)||!Array.isArray(flavors)||parts.length===0)return null;const total=percentSum(parts);if(total<=0)return null;const scores=new Map();const add=(raw,w)=>{const word=tasteWordFromTag(raw);if(word)scores.set(word,(scores.get(word)||0)+w);};for(const p of parts){const w=safePercent(p && p.percent);if(w<=0)continue;const fl=flavors.find(f=>f&&f.id===(p && p.flavorId));if(!fl)continue;if(fl.tags)for(const t of fl.tags)add(t,w);if(fl.name)for(const tk of String(fl.name).toLowerCase().split(/[^a-zа-я0-9]+/i))add(tk,Math.max(1,w*0.6));if(fl.description)for(const tk of String(fl.description).toLowerCase().split(/[^a-zа-я0-9]+/i))add(tk,Math.max(1,w*0.3));}if(!scores.size)return null;return Array.from(scores.entries()).sort((a,b)=>b[1]-a[1])[0][0]||null;};
-  const normalizeSearch=(s)=>String(s||"").toLowerCase().trim();
-  const filterFlavorsByQuery=(flavors,query)=>{const q=normalizeSearch(query);if(!q)return flavors||[];return(flavors||[]).filter(f=>String(f && f.name || "").toLowerCase().includes(q));};
   const escAttr=(s)=>String(s).replace(/"/g,'&quot;');
   const escHTML=(s)=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  // --- Улучшенный поиск по вкусам (имя+описание+теги, русские синонимы) ---
+  function filterFlavorsByQueryAdv(flavors, query){
+    function normalize(s){ return String(s||'').toLowerCase().replace(/ё/g,'е').trim(); }
+    var q = normalize(query);
+    if(!q) return flavors||[];
+    var SYN = {"киви":["kiwi"],"банан":["banana"],"манго":["mango"],"лимон":["lemon","citrus"],"апельсин":["orange"],"грейпфрут":["grapefruit"],"арбуз":["watermelon"],"дыня":["melon"],"виноград":["grape"],"персик":["peach"],"яблок":["apple"],"маракуй":["passion"],"клубник":["strawberry"],"черник":["blueberry"],"мята":["mint"],"лед":["ice","freeze","frost","cold"],"ваниль":["vanilla"],"печень":["cookie","bisc"],"шоколад":["choco","chocolate"],"кисл":["sour"],"слад":["sweet"]};
+    var tokens = q.split(/\s+/).filter(Boolean);
+    function textOf(f){ return normalize([f && f.name, f && f.description, Array.isArray(f && f.tags)? (f.tags.join(' ')) : '' ].join(' ')); }
+    return (flavors||[]).filter(function(f){
+      var text = textOf(f);
+      return tokens.every(function(t){
+        var vars = new Set([t]);
+        Object.entries(SYN).forEach(function(pair){ var ru=pair[0], arr=pair[1]; if(t.indexOf(ru) !== -1){ arr.forEach(function(v){ vars.add(v); }); } });
+        var hit = false; vars.forEach(function(v){ if(text.indexOf(v) !== -1) hit = true; });
+        return hit;
+      });
+    });
+  }
 
   // ========================= СОСТОЯНИЕ ======================================
   const state={
     flavors:[],
     activeBrand:"",
-    search:"", // строка поиска по вкусам (имя)
-    parts:[], // [{flavorId, percent}]
+    search:"",
+    parts:[],
     title:"",
     notes:"",
     guestMixes:[],
-    activeTab:"builder", // 'builder' | 'guest'
-    user:null, // {id, name, username}
-    showSplash:false, // показать приветственный экран после авторизации
-    logoUrl:null // путь к jpeg-логотипу из той же папки
+    activeTab:"builder",
+    user:null,
+    showSplash:false,
+    logoUrl:null
   };
 
   // ========================= ИНИЦИАЛИЗАЦИЯ ===================================
@@ -85,7 +102,7 @@
       if(u){
         var name=[u.first_name,u.last_name].filter(Boolean).join(' ')||u.username||('User '+u.id);
         state.user={id:u.id,name:name,username:u.username};
-        state.showSplash = true; // после авторизации покажем приветственный экран
+        state.showSplash = true;
       }
     }catch(_){/* ignore */}
   }
@@ -144,7 +161,6 @@
   }
 
   // ========================= ВСПОМОГАТЕЛЬНОЕ ================================
-  // Поиск jpeg-логотипа в той же папке: logo.jpg → logo.jpeg → ранее загруженное фото → SVG
   async function detectLogo(){
     async function exists(url){ try{ const r=await fetch(url,{method:'HEAD',cache:'no-store'}); return r.ok; }catch(_){ return false; } }
     const candidates=[ './logo.jpg','./logo.jpeg','./logo.JPG','./logo.JPEG','./AKGpihYIdG2xycCNV3hAm2gVxkuF4tS5.jpg' ];
@@ -229,62 +245,59 @@
     var strengthBadge='';
     if(typeof mixStrength10==='number'){
       var c=strengthColor(mixStrength10);
-      strengthBadge='<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+mixStrength10.toFixed(1)+'</span>';
+      strengthBadge=`<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border ${c.bg} ${c.text} ${c.border}">${mixStrength10.toFixed(1)}</span>`;
     }
 
     // Списки HTML
-    var brandsHTML = brands.map(function(b){ return '<button data-brand="'+b+'" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] '+(state.activeBrand===b?'bg-slate-100 text-slate-900':'border border-slate-700 hover:bg-slate-800')+'">'+b+'</button>'; }).join('');
+    var brandsHTML = brands.map(function(b){ return `<button data-brand="${b}" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] ${state.activeBrand===b?'bg-slate-100 text-slate-900':'border border-slate-700 hover:bg-slate-800'}">${b}</button>`; }).join('');
 
     var flavorsHTML = listFlavors.map(function(f){
       var inMix = state.parts.some(function(p){return p.flavorId===f.id;});
       var s = getStrength10(f);
       var c = strengthColor(s);
-      var desc = f.description ? '<div class="text-[11px] text-slate-400 truncate">'+escHTML(f.description)+'</div>' : '';
-      return (
-        '<div class="flex items-center justify-between gap-2 text-sm">\n' +
-        '  <div class="min-w-0">\n' +
-        '    <div class="flex items-center gap-2">\n' +
-        '      <div class="font-medium truncate" title="'+escAttr((f.brand||'')+' • '+(f.name||''))+'">'+escHTML(f.name)+' <span class="opacity-60">('+escHTML(f.brand)+')</span></div>\n' +
-        '      <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+s.toFixed(1)+'</span>\n' +
-        '    </div>\n' +
-        '    '+desc+'\n' +
-        '  </div>\n' +
-        '  <button data-add="'+f.id+'" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] '+(inMix?'opacity-50 cursor-not-allowed border border-slate-700':'border border-slate-700 hover:bg-slate-800')+'">'+(inMix?'✓':'+')+'</button>\n' +
-        '</div>'
-      );
+      var desc = f.description ? `<div class="text-[11px] text-slate-400 truncate">${escHTML(f.description)}</div>` : '';
+      return `
+        <div class="flex items-center justify-between gap-2 text-sm">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <div class="font-medium truncate" title="${escAttr((f.brand||'')+' • '+(f.name||''))}">${escHTML(f.name)} <span class="opacity-60">(${escHTML(f.brand)})</span></div>
+              <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border ${c.bg} ${c.text} ${c.border}">${s.toFixed(1)}</span>
+            </div>
+            ${desc}
+          </div>
+          <button data-add="${f.id}" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] ${inMix?'opacity-50 cursor-not-allowed border border-slate-700':'border border-slate-700 hover:bg-slate-800'}">${inMix?'✓':'+'}</button>
+        </div>`;
     }).join('');
 
     var partsHTML = state.parts.map(function(p){
       var fl = state.flavors.find(function(x){return x.id===p.flavorId;});
       var name = (fl && fl.name) || p.flavorId;
-      return (
-        '<div class="flex items-center gap-2 text-sm">\n' +
-        '  <span class="truncate w-36" title="'+escAttr(name)+'">'+escHTML(name)+'</span>\n' +
-        '  <input type="range" min="0" max="100" step="5" class="w-28" value="'+safePercent(p.percent)+'" data-range="'+p.flavorId+'"/>\n' +
-        '  <span class="w-10 text-right">'+safePercent(p.percent)+'%</span>\n' +
-        '  <button data-remove="'+p.flavorId+'" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] hover:bg-slate-800">Удалить</button>\n' +
-        '</div>'
-      );
+      return `
+        <div class="flex items-center gap-2 text-sm">
+          <span class="truncate w-36" title="${escAttr(name)}">${escHTML(name)}</span>
+          <input type="range" min="0" max="100" step="5" class="w-28" value="${safePercent(p.percent)}" data-range="${p.flavorId}"/>
+          <span class="w-10 text-right" data-percent-for="${p.flavorId}">${safePercent(p.percent)}%</span>
+          <button data-remove="${p.flavorId}" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] hover:bg-slate-800">Удалить</button>
+        </div>`;
     }).join('');
 
     var guestHTML = state.guestMixes.map(function(m){
       var c = typeof m.strength10==='number' ? strengthColor(m.strength10) : strengthColor(null);
-      var sBadge = typeof m.strength10==='number' ? '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+m.strength10.toFixed(1)+'</span>' : '';
-      var tBadge = m.taste ? '<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">'+escHTML(m.taste)+'</span>' : '';
-      var notes = m.notes ? '<div class="text-[12px] opacity-80 mt-1">'+escHTML(m.notes)+'</div>' : '';
-      var parts = (m.parts||[]).map(function(pp){ var fl = state.flavors.find(function(x){return x.id===pp.flavorId;}); return '<div class="flex items-center justify-between text-[12px]"><span class="truncate mr-2">'+escHTML(fl?fl.name:pp.flavorId)+'</span><span class="opacity-70">'+safePercent(pp.percent)+'%</span></div>'; }).join('');
-      return (
-        '<div class="border border-slate-800 rounded-xl p-2 text-sm">\n' +
-        '  <div class="flex items-center gap-2">\n' +
-        '    <div class="font-semibold truncate">'+escHTML(m.title)+'</div>\n' +
-        '    '+sBadge+'\n' +
-        '    '+tBadge+'\n' +
-        '  </div>\n' +
-        '  <div class="text-[11px] text-slate-400">микс от '+escHTML(m.author||'Гость')+'</div>\n' +
-        '  '+notes+'\n' +
-        '  <div class="mt-1 space-y-0.5">'+parts+'</div>\n' +
-        '</div>'
-      );
+      var sBadge = typeof m.strength10==='number' ? `<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border ${c.bg} ${c.text} ${c.border}">${m.strength10.toFixed(1)}</span>` : '';
+      var tBadge = m.taste ? `<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">${escHTML(m.taste)}</span>` : '';
+      var notes = m.notes ? `<div class="text-[12px] opacity-80 mt-1">${escHTML(m.notes)}</div>` : '';
+      var parts = (m.parts||[]).map(function(pp){ var fl = state.flavors.find(function(x){return x.id===pp.flavorId;}); return `<div class="flex items-center justify-between text-[12px]"><span class="truncate mr-2">${escHTML(fl?fl.name:pp.flavorId)}</span><span class="opacity-70">${safePercent(pp.percent)}%</span></div>`; }).join('');
+      return `
+        <div class="border border-slate-800 rounded-xl p-2 text-sm">
+          <div class="flex items-center gap-2">
+            <div class="font-semibold truncate">${escHTML(m.title)}</div>
+            ${sBadge}
+            ${tBadge}
+          </div>
+          <div class="text-[11px] text-slate-400">микс от ${escHTML(m.author||'Гость')}</div>
+          ${notes}
+          <div class="mt-1 space-y-0.5">${parts}</div>
+        </div>`;
     }).join('');
 
     const headerHTML = `
@@ -315,28 +328,12 @@
         <div class="px-3 pt-3"><div class="text-xs font-semibold">Микс</div></div>
         <div class="p-3 space-y-2">
           ${state.parts.length===0?'<div class="text-[12px] text-slate-400">Добавьте вкусы из списка</div>':''}
-          ${state.parts.map(function(p){
-            var fl = state.flavors.find(function(x){return x.id===p.flavorId;});
-            var name = (fl && fl.name) || p.flavorId;
-            return (
-              '<div class="flex items-center gap-2 text-sm">
-' +
-              '  <span class="truncate w-36" title="'+escAttr(name)+'">'+escHTML(name)+'</span>
-' +
-              '  <input type="range" min="0" max="100" step="5" class="w-28" value="'+safePercent(p.percent)+'" data-range="'+p.flavorId+'"/>
-' +
-              '  <span class="w-10 text-right" data-percent-for="'+p.flavorId+'">'+safePercent(p.percent)+'%</span>
-' +
-              '  <button data-remove="'+p.flavorId+'" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] hover:bg-slate-800">Удалить</button>
-' +
-              '</div>'
-            );
-          }).join('')}
+          ${partsHTML}
           <div class="flex items-center justify-between text-[12px]">
             <span>Итог: <b id="mixTotal">${total}</b>%</span>
             <div class="flex items-center gap-2">
               <span id="mixStrength">${strengthBadge}</span>
-              <span id="mixTaste">${mixTaste?('<span class=\"inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900\">'+escHTML(mixTaste)+'</span>'):''}</span>
+              <span id="mixTaste">${mixTaste?(`<span class=\"inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900\">${escHTML(mixTaste)}</span>`):''}</span>
             </div>
           </div>
         </div>
@@ -391,24 +388,7 @@
     bindAddButtons();
     // Элементы микса (слайдеры/удаление)
     attachMixEvents();
-        var req=safePercent(this.value);
-        // Рассчитываем с учётом clamp
-        var newParts = state.parts.map(function(p){ return p.flavorId===id ? { flavorId:p.flavorId, percent: clampPercentForPart(state.parts, id, req) } : p; });
-        var newVal = newParts.find(function(p){return p.flavorId===id;}).percent;
-        state.parts = newParts;
-        if (newVal !== req) { this.value = newVal; }
-        // Обновить только числа и бейджи
-        updateMixStatsUI();
-        var span = document.querySelector('[data-percent-for="'+id+'"]');
-        if(span) span.textContent = newVal + '%';
-      });
-    }); render(); });
-    });
-    // Удалить
-    Array.prototype.forEach.call(root.querySelectorAll('[data-remove]'), function(btn){
-      btn.addEventListener('click', function(){ var id=this.getAttribute('data-remove'); state.parts = state.parts.filter(function(p){return p.flavorId!==id;}); rerenderMixBlock(); });
-    }); render(); });
-    });
+
     // Поля формы
     var titleEl=root.querySelector('#title'); if(titleEl){ titleEl.addEventListener('input', function(e){ state.title = e.target.value; }); }
     var notesEl=root.querySelector('#notes'); if(notesEl){ notesEl.addEventListener('input', function(e){ state.notes = e.target.value; }); }
@@ -428,6 +408,7 @@
       state.title=''; state.notes=''; state.parts=[]; state.activeTab='guest'; render();
     }); }
   }
+
   // ======= Помощники для частичного обновления UI (без потери фокуса) =======
   function updateMixStatsUI(){
     var total = percentSum(state.parts);
@@ -435,9 +416,9 @@
     // strength
     var t = percentSum(state.parts); var w=0; if(t>0){ for(var i=0;i<state.parts.length;i++){ var p=state.parts[i]; var pr=safePercent(p.percent); if(pr<=0) continue; var fl=state.flavors.find(function(x){return x && x.id===p.flavorId;}); if(fl) w += getStrength10(fl) * (pr/t); } }
     var strength = w? Math.round(w*10)/10 : null;
-    var sEl = document.getElementById('mixStrength'); if(sEl){ if(typeof strength==='number'){ var c=strengthColor(strength); sEl.innerHTML = '<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+strength.toFixed(1)+'</span>'; } else { sEl.innerHTML=''; } }
+    var sEl = document.getElementById('mixStrength'); if(sEl){ if(typeof strength==='number'){ var c=strengthColor(strength); sEl.innerHTML = `<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border ${c.bg} ${c.text} ${c.border}">${strength.toFixed(1)}</span>`; } else { sEl.innerHTML=''; } }
     var taste = getMixTasteLabel(state.parts, state.flavors);
-    var tEl = document.getElementById('mixTaste'); if(tEl){ tEl.innerHTML = taste ? ('<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">'+escHTML(taste)+'</span>') : ''; }
+    var tEl = document.getElementById('mixTaste'); if(tEl){ tEl.innerHTML = taste ? (`<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">${escHTML(taste)}</span>`) : ''; }
   }
 
   function bindAddButtons(){
@@ -479,24 +460,25 @@
     var container = document.getElementById('mixBlock'); if(!container) return;
     var total = percentSum(state.parts);
     var strength = (function(){ var t=percentSum(state.parts); if(!t) return null; var w=0; for(var i=0;i<state.parts.length;i++){ var p=state.parts[i]; var pr=safePercent(p.percent); if(pr<=0) continue; var fl=state.flavors.find(function(x){return x && x.id===p.flavorId;}); if(!fl) continue; w+=getStrength10(fl)*(pr/t);} return w?Math.round(w*10)/10:null; })();
-    var strengthBadge=''; if(typeof strength==='number'){ var c=strengthColor(strength); strengthBadge='<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+strength.toFixed(1)+'</span>'; }
+    var strengthBadge=''; if(typeof strength==='number'){ var c=strengthColor(strength); strengthBadge=`<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border ${c.bg} ${c.text} ${c.border}">${strength.toFixed(1)}</span>`; }
     var mixTaste = getMixTasteLabel(state.parts, state.flavors);
-    var partsHTML = state.parts.map(function(p){ var fl = state.flavors.find(function(x){return x.id===p.flavorId;}); var name=(fl && fl.name)||p.flavorId; return '<div class="flex items-center gap-2 text-sm">
-  <span class="truncate w-36" title="'+escAttr(name)+'">'+escHTML(name)+'</span>
-  <input type="range" min="0" max="100" step="5" class="w-28" value="'+safePercent(p.percent)+'" data-range="'+p.flavorId+'"/>
-  <span class="w-10 text-right" data-percent-for="'+p.flavorId+'">'+safePercent(p.percent)+'%</span>
-  <button data-remove="'+p.flavorId+'" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] hover:bg-slate-800">Удалить</button>
-</div>'; }).join('');
-    var html = '<div class="px-3 pt-3"><div class="text-xs font-semibold">Микс</div></div>
-'+
-               '<div class="p-3 space-y-2">'+
-               (state.parts.length===0?'<div class="text-[12px] text-slate-400">Добавьте вкусы из списка</div>':'')+
-               partsHTML+
-               '<div class="flex items-center justify-between text-[12px]">'+
-               '  <span>Итог: <b id="mixTotal">'+total+'</b>%</span>'+ 
-               '  <div class="flex items-center gap-2"><span id="mixStrength">'+strengthBadge+'</span><span id="mixTaste">'+(mixTaste?('<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">'+escHTML(mixTaste)+'</span>'):'')+'</span></div>'+ 
-               '</div>'+ 
-               '</div>';
+    var partsHTML = state.parts.map(function(p){ var fl = state.flavors.find(function(x){return x.id===p.flavorId;}); var name=(fl && fl.name)||p.flavorId; return `
+      <div class="flex items-center gap-2 text-sm">
+        <span class="truncate w-36" title="${escAttr(name)}">${escHTML(name)}</span>
+        <input type="range" min="0" max="100" step="5" class="w-28" value="${safePercent(p.percent)}" data-range="${p.flavorId}"/>
+        <span class="w-10 text-right" data-percent-for="${p.flavorId}">${safePercent(p.percent)}%</span>
+        <button data-remove="${p.flavorId}" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] hover:bg-slate-800">Удалить</button>
+      </div>`; }).join('');
+    var html = `
+      <div class="px-3 pt-3"><div class="text-xs font-semibold">Микс</div></div>
+      <div class="p-3 space-y-2">
+        ${state.parts.length===0?'<div class="text-[12px] text-slate-400">Добавьте вкусы из списка</div>':''}
+        ${partsHTML}
+        <div class="flex items-center justify-between text-[12px]">
+          <span>Итог: <b id="mixTotal">${total}</b>%</span>
+          <div class="flex items-center gap-2"><span id="mixStrength">${strengthBadge}</span><span id="mixTaste">${mixTaste?(`<span class=\"inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900\">${escHTML(mixTaste)}</span>`):''}</span></div>
+        </div>
+      </div>`;
     container.innerHTML = html;
     attachMixEvents();
   }
@@ -512,38 +494,20 @@
     list.innerHTML = listFlavors.map(function(f){
       var inMix = state.parts.some(function(p){return p.flavorId===f.id;});
       var s = getStrength10(f); var c = strengthColor(s);
-      var desc = f.description ? '<div class="text-[11px] text-slate-400 truncate">'+escHTML(f.description)+'</div>' : '';
-      return '<div class="flex items-center justify-between gap-2 text-sm">
-  <div class="min-w-0">
-    <div class="flex items-center gap-2">
-      <div class="font-medium truncate" title="'+escAttr((f.brand||'')+' • '+(f.name||''))+'">'+escHTML(f.name)+' <span class="opacity-60">('+escHTML(f.brand)+')</span></div>
-      <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+s.toFixed(1)+'</span>
-    </div>
-    '+desc+'
-  </div>
-  <button data-add="'+f.id+'" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] '+(inMix?'opacity-50 cursor-not-allowed border border-slate-700':'border border-slate-700 hover:bg-slate-800')+'">'+(inMix?'✓':'+')+'</button>
-</div>';
-    }).join('') + (listFlavors.length===0?('<div class="text-[12px] text-slate-400">'+(state.search?'Ничего не найдено':'Нет вкусов для этого бренда')+'</div>'):'');
+      var desc = f.description ? `<div class="text-[11px] text-slate-400 truncate">${escHTML(f.description)}</div>` : '';
+      return `
+        <div class="flex items-center justify-between gap-2 text-sm">
+          <div class="min-w-0">
+            <div class="flex items-center gap-2">
+              <div class="font-medium truncate" title="${escAttr((f.brand||'')+' • '+(f.name||''))}">${escHTML(f.name)} <span class="opacity-60">(${escHTML(f.brand)})</span></div>
+              <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border ${c.bg} ${c.text} ${c.border}">${s.toFixed(1)}</span>
+            </div>
+            ${desc}
+          </div>
+          <button data-add="${f.id}" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] ${inMix?'opacity-50 cursor-not-allowed border border-slate-700':'border border-slate-700 hover:bg-slate-800'}">${inMix?'✓':'+'}</button>
+        </div>`;
+    }).join('') + (listFlavors.length===0?(`<div class="text-[12px] text-slate-400">${state.search?'Ничего не найдено':'Нет вкусов для этого бренда'}</div>`):'');
     bindAddButtons();
-  }
-
-  // --- Улучшенный поиск по вкусам (имя+описание+теги, русские синонимы) ---
-  function filterFlavorsByQueryAdv(flavors, query){
-    function normalize(s){ return String(s||'').toLowerCase().replace(/ё/g,'е').trim(); }
-    var q = normalize(query);
-    if(!q) return flavors||[];
-    var SYN = {"киви":["kiwi"],"банан":["banana"],"манго":["mango"],"лимон":["lemon","citrus"],"апельсин":["orange"],"грейпфрут":["grapefruit"],"арбуз":["watermelon"],"дыня":["melon"],"виноград":["grape"],"персик":["peach"],"яблок":["apple"],"маракуй":["passion"],"клубник":["strawberry"],"черник":["blueberry"],"мята":["mint"],"лед":["ice","freeze","frost","cold"],"ваниль":["vanilla"],"печень":["cookie","bisc"],"шоколад":["choco","chocolate"],"кисл":["sour"],"слад":["sweet"]};
-    var tokens = q.split(' ').filter(Boolean);
-    function textOf(f){ return normalize([f && f.name, f && f.description, Array.isArray(f && f.tags)? (f.tags.join(' ')) : '' ].join(' ')); }
-    return (flavors||[]).filter(function(f){
-      var text = textOf(f);
-      return tokens.every(function(t){
-        var vars = new Set([t]);
-        Object.entries(SYN).forEach(function(pair){ var ru=pair[0], arr=pair[1]; if(t.indexOf(ru) !== -1){ arr.forEach(function(v){ vars.add(v); }); } });
-        var hit = false; vars.forEach(function(v){ if(text.indexOf(v) !== -1) hit = true; });
-        return hit;
-      });
-    });
   }
 
   // ========================= СТАРТ ПРИЛОЖЕНИЯ ===============================
@@ -557,18 +521,15 @@
     {var ok=isMixValid([{flavorId:'a',percent:60},{flavorId:'b',percent:40}], 'Mix'); console.assert(ok===true,'valid=100+title');}
     {var cl=clampPercentForPart([{flavorId:'a',percent:90},{flavorId:'b',percent:0}], 'b', 20); console.assert(cl===10,'clamp remaining');}
     {var cl2=clampPercentForPart([{flavorId:'a',percent:50}], 'a', 150); console.assert(cl2===100,'clamp max');}
-    {var r=filterFlavorsByQuery([{id:'1',name:'Mango'},{id:'2',name:'Ice'},{id:'3',name:'Ice Mango'}], 'mango'); console.assert(r.length===2,'search across brands');}
-    // (39) taste null when empty
+    {var r=filterFlavorsByQueryAdv([{id:'1',name:'Mango'},{id:'2',name:'Ice'},{id:'3',name:'Ice Mango'}], 'mango'); console.assert(r.length===2,'search across brands');}
     {var t=getMixTasteLabel([],[]); console.assert(t===null,'taste null');}
-    // (40) clamp single lower bound
     {var cl3=clampPercentForPart([{flavorId:'a',percent:10}], 'a', -5); console.assert(cl3===0,'clamp to 0');}
-    // (41) NEW: расширенный поиск — русские слова и теги
-      { var fl=[{id:'1',name:'Kiwi Smoothie',brand:'A'},{id:'2',name:'Banana Mama',brand:'B'},{id:'3',name:'Ice Lemon',brand:'A',tags:['мята']}];
-        var r1=filterFlavorsByQueryAdv(fl,'киви');
-        var r2=filterFlavorsByQueryAdv(fl,'мята');
-        console.assert(r1.length===1 && r1[0].id==='1','ru→en synonym: киви→kiwi');
-        console.assert(r2.some(function(x){return x.id==='3';}),'match by tags works'); }
-      console.groupEnd();
+    { var fl=[{id:'1',name:'Kiwi Smoothie',brand:'A'},{id:'2',name:'Banana Mama',brand:'B'},{id:'3',name:'Ice Lemon',brand:'A',tags:['мята']}];
+      var r1=filterFlavorsByQueryAdv(fl,'киви');
+      var r2=filterFlavorsByQueryAdv(fl,'мята');
+      console.assert(r1.length===1 && r1[0].id==='1','ru→en synonym: киви→kiwi');
+      console.assert(r2.some(function(x){return x.id==='3';}),'match by tags works'); }
+    console.groupEnd();
   }catch(e){ console.error('Smoke tests error', e); } })();
   </script>
 </body>
