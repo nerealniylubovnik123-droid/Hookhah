@@ -44,9 +44,11 @@
 
   // 2) Если сайт открыт на GitHub Pages — ходим на Render по вашему домену:
   //    Пример: 'https://my-hookah-app.onrender.com'
-  const API_BASE = (location.hostname.endsWith('github.io'))
-    ? 'https://hookhah.onrender.com'   // ← ЗАМЕНИТЕ на ваш Render-домен
-    : '';
+  // Всегда шлём на бэкенд (кроме локальной разработки)
+const API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+  ? '' // локально фронт и сервер обычно на одном домене/порте
+  : 'https://<ИМЯ-ВАШЕГО-БЭКЕНДА>.onrender.com';   // ← поставьте ваш URL из Render → Overview
+
 
   const api = (path, opts = {}) => fetch(`${API_BASE}${path}`, {
     cache: 'no-store',
