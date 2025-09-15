@@ -1,67 +1,89 @@
-// server.js — простой backend для гостевых миксов
-
-const express = require('express');
-const cors = require('cors');
-const fs = require('fs/promises');
-const path = require('path');
-
-const PORT = process.env.PORT || 8080;
-const DATA_FILE = path.join(__dirname, 'guest_mixes.json');
-const PUBLIC_DIR = path.join(__dirname, 'public');
+// server.js
+const express = require("express");
+const fs = require("fs");
+const path = require("path");
+const bodyParser = require("body-parser");
+const cors = require("cors");
 
 const app = express();
-app.use(cors());
-app.use(express.json({ limit: '1mb' }));
-app.use('/', express.static(PUBLIC_DIR));
+const PORT = process.env.PORT || 8080;
 
-// читаем JSON
-async function readJson() {
+// Включаем CORS и JSON
+app.use(cors());
+app.use(bodyParser.json());
+
+// Пути к JSON
+const FLAVORS_FILE = path.join(__dirname, "flavors.json");
+const MIXES_FILE = path.join(__dirname, "guest_mixes.json");
+
+// Хелпер: загрузка файла
+function loadJson(file) {
   try {
-    const buf = await fs.readFile(DATA_FILE, 'utf8');
-    return JSON.parse(buf);
-  } catch {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch (e) {
     return [];
   }
 }
 
-// пишем JSON
-async function writeJson(data) {
-  await fs.writeFile(DATA_FILE, JSON.stringify(data, null, 2), 'utf8');
+// Хелпер: сохранение файла
+function saveJson(file, data) {
+  fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
 }
 
-// список миксов
-app.get('/api/mixes', async (req, res) => {
-  const mixes = await readJson();
-  res.json(mixes);
+// ---- API ----
+
+// Healthcheck
+app.get("/healthz", (req, res) => {
+  res.json({ ok: true, uptime: process.uptime() });
 });
 
-// добавить микс
-app.post('/api/mixes', async (req, res) => {
-  const body = req.body;
-  if (!body || !body.title || !Array.isArray(body.parts)) {
-    return res.status(400).json({ error: 'Invalid mix' });
+// Все вкусы
+app.get("/api/flavors", (req, res) => {
+  res.json(loadJson(FLAVORS_FILE));
+});
+
+// Добавление вкуса (только админ с токеном)
+app.post("/api/flavors", (req, res) => {
+  const token = req.header("X-Admin-Token");
+  if (token !== process.env.ADMIN_TOKEN) {
+    return res.status(403).json({ error: "Forbidden" });
   }
-  const mixes = await readJson();
-  const newMix = {
-    id: Date.now().toString(),
-    ...body,
-    createdAt: Date.now(),
-  };
-  mixes.unshift(newMix);
-  await writeJson(mixes);
-  res.status(201).json(newMix);
+
+  const flavors = loadJson(FLAVORS_FILE);
+  const newFlavor = req.body;
+  flavors.push(newFlavor);
+  saveJson(FLAVORS_FILE, flavors);
+
+  res.json({ ok: true, flavor: newFlavor });
 });
 
-// удалить микс по id
-app.delete('/api/mixes/:id', async (req, res) => {
+// Все миксы
+app.get("/api/mixes", (req, res) => {
+  res.json(loadJson(MIXES_FILE));
+});
+
+// Добавить микс
+app.post("/api/mixes", (req, res) => {
+  const mixes = loadJson(MIXES_FILE);
+  const newMix = { ...req.body, id: Date.now().toString() };
+  mixes.push(newMix);
+  saveJson(MIXES_FILE, mixes);
+  res.json({ ok: true, mix: newMix });
+});
+
+// Удалить микс (только автор)
+app.delete("/api/mixes/:id", (req, res) => {
   const id = req.params.id;
-  let mixes = await readJson();
-  mixes = mixes.filter(m => m.id !== id);
-  await writeJson(mixes);
-  res.status(204).end();
+  const mixes = loadJson(MIXES_FILE);
+  const filtered = mixes.filter(m => m.id !== id);
+  if (filtered.length === mixes.length) {
+    return res.status(404).json({ error: "Not found" });
+  }
+  saveJson(MIXES_FILE, filtered);
+  res.json({ ok: true });
 });
 
-app.listen(PORT, async () => {
-  try { await fs.access(DATA_FILE); } catch { await writeJson([]); }
+// Запуск
+app.listen(PORT, () => {
   console.log(`✅ Server started: http://localhost:${PORT}`);
 });
