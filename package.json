@@ -1,24 +1,16 @@
 {
-  "name": "hookhah",
+  "name": "hookhah-backend",
   "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "private": true,
+  "type": "commonjs",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node server.js"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/nerealniylubovnik123-droid/Hookhah.git"
-  },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/nerealniylubovnik123-droid/Hookhah/issues"
-  },
-  "homepage": "https://github.com/nerealniylubovnik123-droid/Hookhah#readme",
   "dependencies": {
     "cors": "^2.8.5",
-    "express": "^5.1.0"
+    "express": "^4.19.2"
   }
 }
