@@ -72,7 +72,7 @@ app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 
 // ====== HEALTH ======
-app.get('/healthz', (_req, res) => res.json({ ok: true, ts: now() }));
+app.get('/healthz', (_req, res) => res.json({ ok: true, ts: Date.now() }));
 
 // ====== FLAVORS ======
 
