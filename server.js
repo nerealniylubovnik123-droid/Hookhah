@@ -1,244 +1,150 @@
 // server.js
-// Мини-бэкенд для Hookah Mixes: JSON-файлы вместо БД.
-// Поддерживает:
-//  - GET/POST/DELETE /api/mixes
-//  - GET/POST/PUT/DELETE /api/flavors (POST/PUT/DELETE — только админ)
-//  - статику из ./public (или из текущей папки, если ./public нет)
-// Авторизация админа: либо заголовок X-Admin-Token == ADMIN_TOKEN,
-// либо authorId == ADMIN_ID (Telegram ID) из переменных окружения.
-
-const fs = require('fs');
-const path = require('path');
 const express = require('express');
+const fs = require('fs');
+const fsp = fs.promises;
+const path = require('path');
 const cors = require('cors');
 
-// ====== НАСТРОЙКИ ======
-const PORT = Number(process.env.PORT) || 8080;
-
-// Админские секреты (задайте хотя бы один)
-const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
-const ADMIN_ID = process.env.ADMIN_ID || ''; // Telegram user id (число строкой)
-
-// ====== ПУТИ К ФАЙЛАМ ======
-const ROOT = __dirname;
-const PUBLIC_DIR = fs.existsSync(path.join(ROOT, 'public')) ? path.join(ROOT, 'public') : ROOT;
-const MIXES_FILE = path.join(ROOT, 'guest_mixes.json');
-const FLAVORS_FILE = path.join(ROOT, 'hookah_flavors.json');
-
-// ====== ВСПОМОГАТЕЛЬНЫЕ ======
-function ensureFile(file, initial = '[]') {
-  if (!fs.existsSync(file)) {
-    fs.writeFileSync(file, initial, 'utf8');
-  }
-}
-function readJsonSafe(file, def = []) {
-  try {
-    const raw = fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, '');
-    return JSON.parse(raw);
-  } catch (_e) {
-    return def;
-  }
-}
-function writeJsonPretty(file, data) {
-  const tmp = file + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 2), 'utf8');
-  fs.renameSync(tmp, file);
-}
-function isAdminByToken(req) {
-  if (!ADMIN_TOKEN) return false;
-  return (req.get('X-Admin-Token') || '') === ADMIN_TOKEN;
-}
-function isAdminById(req) {
-  if (!ADMIN_ID) return false;
-  const authorId = (req.body && (req.body.authorId || req.body.userId)) || req.get('X-User-Id');
-  return String(authorId || '') === String(ADMIN_ID);
-}
-function requireAdmin(req, res, next) {
-  if (isAdminByToken(req) || isAdminById(req)) return next();
-  if (!ADMIN_TOKEN && !ADMIN_ID) {
-    return res.status(500).json({ error: 'ADMIN_TOKEN/ADMIN_ID не настроены на сервере' });
-  }
-  return res.status(403).json({ error: 'Forbidden' });
-}
-function now() { return Date.now(); }
-
-// ====== ИНИЦИАЛИЗАЦИЯ ======
-ensureFile(MIXES_FILE, '[]');
-ensureFile(FLAVORS_FILE, '[]');
-
 const app = express();
-app.disable('x-powered-by');
+const PORT = process.env.PORT || 8080;
+
+// --- CORS (разрешаем с любого домена; при желании сузьте origin)
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 
-// ====== HEALTH ======
-app.get('/healthz', (_req, res) => res.json({ ok: true, ts: Date.now() }));
+// --- файлы-хранилища
+const DATA_DIR = __dirname;
+const FLAVORS_FILE = path.join(DATA_DIR, 'hookah_flavors.json');
+const MIXES_FILE   = path.join(DATA_DIR, 'guest_mixes.json');
 
-// ====== FLAVORS ======
+// --- утилиты чтения/записи
+async function readJson(file, fallback) {
+  try {
+    const buf = await fsp.readFile(file);
+    const txt = new TextDecoder('utf-8').decode(buf);
+    return JSON.parse(txt);
+  } catch {
+    return fallback;
+  }
+}
+async function writeJson(file, data) {
+  const txt = JSON.stringify(data, null, 2);
+  await fsp.writeFile(file, txt, 'utf8');
+}
 
-// GET /api/flavors — вернуть все вкусы
-app.get('/api/flavors', (_req, res) => {
-  const list = readJsonSafe(FLAVORS_FILE, []);
-  res.json(list);
+// --- health
+app.get('/healthz', (req, res) => {
+  res.json({ ok: true, time: Date.now(), pid: process.pid });
 });
 
-// POST /api/flavors — добавить/обновить вкус (только админ)
-app.post('/api/flavors', requireAdmin, (req, res) => {
-  const b = req.body || {};
-  const brand = String(b.brand || '').trim();
-  const name = String(b.name || '').trim();
-  if (!brand || !name) {
-    return res.status(400).json({ error: 'brand и name обязательны' });
-  }
-  // id: либо передан, либо склеиваем brand-name
-  const id = (b.id ? String(b.id) : `${brand}-${name}`).
-    toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9\-_.]+/gi, '');
+// --- FLAVORS
+app.get('/api/flavors', async (req, res) => {
+  const arr = await readJson(FLAVORS_FILE, []);
+  res.json(arr);
+});
 
+app.post('/api/flavors', async (req, res) => {
+  const body = req.body || {};
+  const token = req.header('X-Admin-Token') || '';
+  const ADMIN_TOKEN = process.env.ADMIN_TOKEN || '';
+  const ADMIN_ID    = process.env.ADMIN_ID || '';
+
+  const authorId = body.authorId ? String(body.authorId) : null;
+  const tokenOk  = ADMIN_TOKEN && token && token === ADMIN_TOKEN;
+  const idOk     = ADMIN_ID && authorId && String(authorId) === String(ADMIN_ID);
+
+  if (!tokenOk && !idOk) {
+    return res.status(403).json({ error: 'Forbidden. Provide X-Admin-Token or authorId matching ADMIN_ID.' });
+  }
+
+  const brand = String(body.brand || '').trim();
+  const name  = String(body.name  || '').trim();
+
+  if (!brand || !name) {
+    return res.status(400).json({ error: 'brand and name are required' });
+  }
+
+  const id = String(body.id || (brand + '-' + name).replace(/\s+/g, '-').toLowerCase()).trim();
   const item = {
     id,
     brand,
     name,
-    description: b.description != null ? String(b.description) : undefined,
-    tags: Array.isArray(b.tags) ? b.tags.filter(Boolean) : undefined,
-    strength10: (typeof b.strength10 === 'number') ? b.strength10 : undefined,
+    description: body.description != null ? String(body.description) : undefined,
+    tags: Array.isArray(body.tags) ? body.tags.filter(Boolean) : undefined,
+    strength10: (typeof body.strength10 === 'number' ? body.strength10 : undefined)
   };
 
-  const list = readJsonSafe(FLAVORS_FILE, []);
-  const idx = list.findIndex(x => x && x.id === id);
-  if (idx >= 0) list[idx] = { ...list[idx], ...item };
-  else list.unshift(item);
+  const arr = await readJson(FLAVORS_FILE, []);
+  const exists = arr.findIndex(x => x && x.id === id);
+  if (exists >= 0) arr[exists] = item; else arr.push(item);
+  await writeJson(FLAVORS_FILE, arr);
 
-  try {
-    writeJsonPretty(FLAVORS_FILE, list);
-    res.json(item);
-  } catch (e) {
-    console.error('write flavors error', e);
-    res.status(500).json({ error: 'write error' });
+  res.json(item);
+});
+
+// --- MIXES
+app.get('/api/mixes', async (req, res) => {
+  const arr = await readJson(MIXES_FILE, []);
+  // сортировка по дате
+  arr.sort((a, b) => (b?.createdAt || 0) - (a?.createdAt || 0));
+  res.json(arr);
+});
+
+app.post('/api/mixes', async (req, res) => {
+  const m = req.body || {};
+  if (!Array.isArray(m.parts) || !m.parts.length || !m.title) {
+    return res.status(400).json({ error: 'invalid mix' });
   }
+  // нормализация
+  m.id = m.id || cryptoRandomId();
+  m.title = String(m.title).trim();
+  m.notes = m.notes != null ? String(m.notes) : '';
+  m.author = m.author != null ? String(m.author) : 'Гость';
+  m.authorId = m.authorId != null ? String(m.authorId) : undefined;
+  m.createdAt = m.createdAt || Date.now();
+
+  const arr = await readJson(MIXES_FILE, []);
+  arr.unshift(m);
+  // ограничим
+  while (arr.length > 1000) arr.pop();
+  await writeJson(MIXES_FILE, arr);
+  res.json(m);
 });
 
-// PUT /api/flavors/:id — правка вкуса (админ)
-app.put('/api/flavors/:id', requireAdmin, (req, res) => {
-  const id = String(req.params.id || '');
-  const list = readJsonSafe(FLAVORS_FILE, []);
-  const idx = list.findIndex(x => x && x.id === id);
-  if (idx < 0) return res.status(404).json({ error: 'not found' });
-  const b = req.body || {};
-  list[idx] = {
-    ...list[idx],
-    brand: b.brand != null ? String(b.brand) : list[idx].brand,
-    name: b.name != null ? String(b.name) : list[idx].name,
-    description: b.description != null ? String(b.description) : list[idx].description,
-    tags: Array.isArray(b.tags) ? b.tags.filter(Boolean) : list[idx].tags,
-    strength10: (typeof b.strength10 === 'number') ? b.strength10 : list[idx].strength10,
-  };
-  try {
-    writeJsonPretty(FLAVORS_FILE, list);
-    res.json(list[idx]);
-  } catch (e) {
-    console.error('put flavors error', e);
-    res.status(500).json({ error: 'write error' });
-  }
-});
+app.delete('/api/mixes/:id', async (req, res) => {
+  const id = req.params.id;
+  // Защита: можно удалять только свой микс (по authorId)
+  const authorId = String(req.header('X-Author-Id') || '');
+  const ADMIN_ID = process.env.ADMIN_ID || '';
 
-// DELETE /api/flavors/:id — удалить вкус (админ)
-app.delete('/api/flavors/:id', requireAdmin, (req, res) => {
-  const id = String(req.params.id || '');
-  const list = readJsonSafe(FLAVORS_FILE, []);
-  const next = list.filter(x => x && x.id !== id);
-  if (next.length === list.length) return res.status(404).json({ error: 'not found' });
-  try {
-    writeJsonPretty(FLAVORS_FILE, next);
-    res.status(204).end();
-  } catch (e) {
-    console.error('delete flavors error', e);
-    res.status(500).json({ error: 'write error' });
-  }
-});
-
-// ====== MIXES ======
-
-// GET /api/mixes — вернуть миксы (сортировка по createdAt desc)
-app.get('/api/mixes', (_req, res) => {
-  const list = readJsonSafe(MIXES_FILE, []);
-  list.sort((a, b) => (b?.createdAt || 0) - (a?.createdAt || 0));
-  res.json(list);
-});
-
-// POST /api/mixes — добавить микс (для всех пользователей)
-app.post('/api/mixes', (req, res) => {
-  const b = req.body || {};
-  const title = String(b.title || '').trim();
-  const parts = Array.isArray(b.parts) ? b.parts : [];
-  const total = parts.reduce((s, p) => s + Math.max(0, Math.min(100, Number(p?.percent) || 0)), 0);
-
-  if (!title || title.length < 3) return res.status(400).json({ error: 'title слишком короткий' });
-  if (!parts.length) return res.status(400).json({ error: 'parts пуст' });
-  if (total !== 100) return res.status(400).json({ error: 'сумма процентов должна быть 100' });
-
-  const mix = {
-    id: String(b.id || `${Date.now()}-${Math.random().toString(16).slice(2)}`),
-    title,
-    parts: parts.map(p => ({ flavorId: String(p.flavorId), percent: Number(p.percent) })),
-    notes: b.notes != null ? String(b.notes) : '',
-    author: b.author != null ? String(b.author) : 'Гость',
-    authorId: b.authorId != null ? String(b.authorId) : null, // важно для удаления
-    createdAt: Number(b.createdAt || Date.now()),
-    taste: b.taste != null ? String(b.taste) : null,
-    strength10: (typeof b.strength10 === 'number') ? b.strength10 : null,
-  };
-
-  const list = readJsonSafe(MIXES_FILE, []);
-  const exists = list.find(x => x && x.id === mix.id);
-  if (!exists) list.unshift(mix);
-
-  try {
-    writeJsonPretty(MIXES_FILE, list.slice(0, 1000)); // ограничим историю
-    res.json(mix);
-  } catch (e) {
-    console.error('write mixes error', e);
-    res.status(500).json({ error: 'write error' });
-  }
-});
-
-// DELETE /api/mixes/:id — удалить микс (владелец или админ)
-app.delete('/api/mixes/:id', (req, res) => {
-  const id = String(req.params.id || '');
-  const list = readJsonSafe(MIXES_FILE, []);
-  const idx = list.findIndex(x => x && x.id === id);
+  let arr = await readJson(MIXES_FILE, []);
+  const idx = arr.findIndex(x => x && x.id === id);
   if (idx < 0) return res.status(404).json({ error: 'not found' });
 
-  const userId = req.get('X-User-Id') || req.query.userId || (req.body && req.body.userId);
-  const isOwner = userId && list[idx]?.authorId && String(userId) === String(list[idx].authorId);
-  const isAdmin = isAdminByToken(req) || (ADMIN_ID && String(userId || '') === String(ADMIN_ID));
+  const item = arr[idx];
+  const owner = String(item.authorId || '') || ''; // может быть пустым у старых записей
+  const allowed = (owner && authorId && owner === authorId) || (ADMIN_ID && authorId === ADMIN_ID);
 
-  if (!isOwner && !isAdmin) {
-    return res.status(403).json({ error: 'only owner or admin can delete' });
-  }
+  if (!allowed) return res.status(403).json({ error: 'forbidden' });
 
-  list.splice(idx, 1);
-  try {
-    writeJsonPretty(MIXES_FILE, list);
-    res.status(204).end();
-  } catch (e) {
-    console.error('delete mixes error', e);
-    res.status(500).json({ error: 'write error' });
-  }
+  arr.splice(idx, 1);
+  await writeJson(MIXES_FILE, arr);
+  res.status(204).end();
 });
 
-// ====== СТАТИКА ======
-app.use(express.static(PUBLIC_DIR, { extensions: ['html'], index: 'index.html' }));
-app.get('*', (_req, res) => {
-  // SPA fallback на index.html
-  const indexFile = path.join(PUBLIC_DIR, 'index.html');
-  if (fs.existsSync(indexFile)) return res.sendFile(indexFile);
-  res.status(404).send('Not Found');
-});
+// --- статика (опционально, если кладёте index.html рядом)
+app.use(express.static(path.join(__dirname, 'public')));
 
-// ====== СТАРТ ======
+// --- старт
 app.listen(PORT, () => {
   console.log(`✅ Server started: http://localhost:${PORT}`);
-  if (!ADMIN_TOKEN && !ADMIN_ID) {
-    console.log('⚠️  ВНИМАНИЕ: не задан ADMIN_TOKEN или ADMIN_ID — POST/PUT/DELETE /api/flavors вернёт 500.');
-  }
 });
+
+// --- простенький id
+function cryptoRandomId() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
