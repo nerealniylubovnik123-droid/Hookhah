@@ -9,17 +9,17 @@
   <style>body{background:#020617}</style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script>
-    // РАННИЙ обработчик: дружелюбный экран вместо «чёрного»
+    /* РАННИЙ обработчик: дружелюбный экран вместо «чёрного» */
     (function(){
       function showFatal(msg){
         var root = document.getElementById('root');
         if (!root) return;
         root.innerHTML = (
-          '<div class="min-h-[100svh] flex items-center justify-center p-6">\\n' +
-          '  <div class="max-w-md w-full rounded-xl border border-rose-800 bg-rose-950 p-4 text-sm">\\n' +
-          '    <div class="font-bold mb-2 text-rose-200">Произошла ошибка</div>\\n' +
-          '    <div class="text-rose-100/90 whitespace-pre-wrap break-words">' + String(msg || 'Unknown error') + '</div>\\n' +
-          '  </div>\\n' +
+          '<div class="min-h-[100svh] flex items-center justify-center p-6">\n' +
+          '  <div class="max-w-md w-full rounded-xl border border-rose-800 bg-rose-950 p-4 text-sm">\n' +
+          '    <div class="font-bold mb-2 text-rose-200">Произошла ошибка</div>\n' +
+          '    <div class="text-rose-100/90 whitespace-pre-wrap break-words">' + String(msg || 'Unknown error') + '</div>\n' +
+          '  </div>\n' +
           '</div>'
         );
       }
@@ -38,6 +38,22 @@
   <div id="root" class="min-h-[100svh]"></div>
 
   <script>
+  // ========================= АДМИН-НАСТРОЙКИ ================================
+  // 1) ЗАМЕНИТЕ на ваш Telegram user id (число). Узнать в @userinfobot (кнопка Start).
+  const ADMIN_TG_ID = 504348666; // ← ВАШ ID СЮДА
+
+  // 2) Если сайт открыт на GitHub Pages — ходим на Render по вашему домену:
+  //    Пример: 'https://my-hookah-app.onrender.com'
+  const API_BASE = (location.hostname.endsWith('github.io'))
+    ? 'https://hookhah.onrender.com'   // ← ЗАМЕНИТЕ на ваш Render-домен
+    : '';
+
+  const api = (path, opts = {}) => fetch(`${API_BASE}${path}`, {
+    cache: 'no-store',
+    ...opts,
+    headers: { 'Content-Type': 'application/json; charset=UTF-8', ...(opts.headers||{}) }
+  });
+
   // ========================= ДАННЫЕ ПО УМОЛЧАНИЮ ============================
   const INLINE_FLAVORS = [
     { id: "musthave-ice-lemon", brand: "MustHave", name: "Ice Lemon", tags:["цитрус","лед"], strength10:5 },
@@ -61,7 +77,7 @@
   const escAttr=(s)=>String(s).replace(/"/g,'&quot;');
   const escHTML=(s)=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-  // --- ГАРАНТИЯ: всегда объявляем функцию поиска в глобале (window) ---
+  /* Поиск: объявляем в window, чтобы не «пропадал» */
   (function ensureSearchExists(){
     if (typeof window === 'undefined') return;
     if (typeof window.filterFlavorsByQueryAdv === 'function') return;
@@ -69,47 +85,20 @@
       function normalize(s){ return String(s||'').toLowerCase().replace(/ё/g,'е').trim(); }
       var q = normalize(query);
       if(!q) return flavors||[];
-      var SYN = {
-        "киви":["kiwi"],"банан":["banana"],"манго":["mango"],"лимон":["lemon","citrus"],
-        "апельсин":["orange"],"грейпфрут":["grapefruit"],"арбуз":["watermelon"],
-        "дыня":["melon"],"виноград":["grape"],"персик":["peach"],"яблок":["apple"],
-        "маракуй":["passion"],"клубник":["strawberry"],"черник":["blueberry"],
-        "мята":["mint"],"лед":["ice","freeze","frost","cold"],"ваниль":["vanilla"],
-        "печень":["cookie","bisc"],"шоколад":["choco","chocolate"],
-        "кисл":["sour"],"слад":["sweet"]
-      };
+      var SYN = {"киви":["kiwi"],"банан":["banana"],"манго":["mango"],"лимон":["lemon","citrus"],"апельсин":["orange"],"грейпфрут":["grapefruit"],"арбуз":["watermelon"],"дыня":["melon"],"виноград":["grape"],"персик":["peach"],"яблок":["apple"],"маракуй":["passion"],"клубник":["strawberry"],"черник":["blueberry"],"мята":["mint"],"лед":["ice","freeze","frost","cold"],"ваниль":["vanilla"],"печень":["cookie","bisc"],"шоколад":["choco","chocolate"],"кисл":["sour"],"слад":["sweet"]};
       var tokens = q.split(/\s+/).filter(Boolean);
-      function textOf(f){
-        return normalize([
-          f && f.name,
-          f && f.description,
-          Array.isArray(f && f.tags) ? f.tags.join(' ') : ''
-        ].join(' '));
-      }
+      function textOf(f){ return normalize([f && f.name, f && f.description, Array.isArray(f && f.tags)? (f.tags.join(' ')) : '' ].join(' ')); }
       return (flavors||[]).filter(function(f){
         var text = textOf(f);
         return tokens.every(function(t){
-          var variants = new Set([t]);
-          Object.entries(SYN).forEach(function([ru, arr]){
-            if (t.indexOf(ru) !== -1) arr.forEach(function(v){ variants.add(v); });
-          });
-          var hit = false;
-          variants.forEach(function(v){ if (text.indexOf(v) !== -1) hit = true; });
+          var vars = new Set([t]);
+          Object.entries(SYN).forEach(function(pair){ var ru=pair[0], arr=pair[1]; if(t.indexOf(ru) !== -1){ arr.forEach(function(v){ vars.add(v); }); } });
+          var hit = false; vars.forEach(function(v){ if(text.indexOf(v) !== -1) hit = true; });
           return hit;
         });
       });
     };
   })();
-
-  // ========================= API BASE (Render/GitHub/локально) ==============
-  const API_BASE = (location.hostname.endsWith('github.io'))
-    ? 'https://ВАШ-СЕРВИС.onrender.com'
-    : '';
-  const api = (path, opts = {}) => fetch(`${API_BASE}${path}`, {
-    cache: 'no-store',
-    ...opts,
-    headers: { 'Content-Type': 'application/json; charset=UTF-8', ...(opts.headers||{}) }
-  });
 
   // ========================= СОСТОЯНИЕ ======================================
   const state={
@@ -123,9 +112,10 @@
     activeTab:"builder",
     user:null,
     showSplash:false,
-    logoUrl:null
+    logoUrl:null,
+    showAdmin:false,
+    adminToken:null
   };
-
   const FRONT_ALLOW_DELETE_NO_AUTHOR = true;
 
   // ========================= ИНИЦИАЛИЗАЦИЯ ===================================
@@ -136,8 +126,10 @@
         var name=[u.first_name,u.last_name].filter(Boolean).join(' ')||u.username||('User '+u.id);
         state.user={id:u.id,name:name,username:u.username};
         state.showSplash = true;
+        state.showAdmin = (u.id === ADMIN_TG_ID);
       }
     }catch(_){/* ignore */}
+    try{ state.adminToken = localStorage.getItem('admin_token') || null; }catch(_){}
   }
 
   async function loadFlavors(){
@@ -172,6 +164,7 @@
     if(!state.activeBrand) state.activeBrand='MustHave';
   }
 
+  // Гостевые миксы из сервера (если доступен), иначе кэш
   async function loadGuestMixes(){
     try {
       const res = await api('/api/mixes');
@@ -197,16 +190,16 @@
 
   function LogoSVG(cls){
     return (
-      '<svg class="'+(cls||'w-8 h-8')+'" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">\\n' +
-      '  <defs>\\n' +
-      '    <linearGradient id="g" x1="0" x2="1">\\n' +
-      '      <stop offset="0" stop-opacity="1" stop-color="#38bdf8"/>\\n' +
-      '      <stop offset="1" stop-opacity="1" stop-color="#a78bfa"/>\\n' +
-      '    </linearGradient>\\n' +
-      '  </defs>\\n' +
-      '  <circle cx="32" cy="32" r="30" fill="url(#g)" opacity="0.2"/>\\n' +
-      '  <path d="M32 10c-4 4-4 8 0 12 4 4 4 8 0 12-4 4-4 8 0 12" stroke="#c7d2fe" stroke-width="3" fill="none" stroke-linecap="round"/>\\n' +
-      '  <circle cx="32" cy="50" r="3" fill="#c7d2fe"/>\\n' +
+      '<svg class="'+(cls||'w-8 h-8')+'" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">\n' +
+      '  <defs>\n' +
+      '    <linearGradient id="g" x1="0" x2="1">\n' +
+      '      <stop offset="0" stop-opacity="1" stop-color="#38bdf8"/>\n' +
+      '      <stop offset="1" stop-opacity="1" stop-color="#a78bfa"/>\n' +
+      '    </linearGradient>\n' +
+      '  </defs>\n' +
+      '  <circle cx="32" cy="32" r="30" fill="url(#g)" opacity="0.2"/>\n' +
+      '  <path d="M32 10c-4 4-4 8 0 12 4 4 4 8 0 12-4 4-4 8 0 12" stroke="#c7d2fe" stroke-width="3" fill="none" stroke-linecap="round"/>\n' +
+      '  <circle cx="32" cy="50" r="3" fill="#c7d2fe"/>\n' +
       '  </svg>'
     );
   }
@@ -216,7 +209,7 @@
     var root=document.getElementById('root');
     if(!root) return;
 
-    // Экран авторизации (если Telegram WebApp не предоставил user)
+    // Экран авторизации
     if(!state.user){
       const loginHTML = `
         <div class="min-h-[100svh] bg-slate-950 text-slate-100 flex items-center justify-center p-6">
@@ -237,7 +230,7 @@
       return;
     }
 
-    // Приветственный экран после авторизации
+    // Приветственный экран
     if(state.showSplash){
       const logoBlock = state.logoUrl ? `<img src="${state.logoUrl}" alt="logo" class="w-24 h-24 rounded-xl object-cover shadow"/>` : `${LogoSVG('w-24 h-24')}`;
       root.innerHTML = `
@@ -255,7 +248,6 @@
 
     var brands = Array.from(new Set((state.flavors||[]).map(function(f){return normalizeBrand(f.brand);}))).filter(Boolean).sort();
     var flavorsOfActive = (state.flavors||[]).filter(function(f){return normalizeBrand(f.brand)===state.activeBrand;});
-    // безопасный доступ к функции поиска из window
     var searchFn = (typeof window.filterFlavorsByQueryAdv === 'function') ? window.filterFlavorsByQueryAdv : function(arr,q){
       q = String(q||'').toLowerCase(); if(!q) return arr||[];
       return (arr||[]).filter(function(f){
@@ -267,7 +259,6 @@
     var listFlavors = state.search ? searchedFlavors : flavorsOfActive;
 
     var total = percentSum(state.parts);
-
     var mixStrength10 = (function(parts, flavors){
       if(!Array.isArray(parts)||!Array.isArray(flavors)) return null;
       var t=percentSum(parts); if(!parts.length||t<=0) return null;
@@ -275,7 +266,6 @@
       return w? Math.round(w*10)/10 : null;
     })(state.parts, state.flavors);
     var mixTaste = getMixTasteLabel(state.parts, state.flavors);
-
     var strengthBadge='';
     if(typeof mixStrength10==='number'){
       var c=strengthColor(mixStrength10);
@@ -314,6 +304,7 @@
         </div>`;
     }).join('');
 
+    // Гостевые миксы
     var guestHTML = state.guestMixes.map(function(m){
       var c = typeof m.strength10==='number' ? strengthColor(m.strength10) : strengthColor(null);
       var sBadge = typeof m.strength10==='number' ? `<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border ${c.bg} ${c.text} ${c.border}">${m.strength10.toFixed(1)}</span>` : '';
@@ -335,6 +326,30 @@
           <div class="mt-1 space-y-0.5">${parts}</div>
         </div>`;
     }).join('');
+
+    // === Блок админа: только для ADMIN_TG_ID ===
+    const adminBlock = (!state.showAdmin) ? '' : `
+      <div class="rounded-2xl border border-emerald-800 bg-emerald-950">
+        <div class="px-3 pt-3"><div class="text-xs font-semibold text-emerald-200">Админ · добавление вкуса</div></div>
+        <div class="p-3 space-y-2 text-sm">
+          <div class="grid grid-cols-2 gap-2">
+            <input id="admBrand" placeholder="Бренд" class="h-9 rounded-xl border border-emerald-800 bg-emerald-950 text-emerald-100 placeholder-emerald-400 px-3 text-sm outline-none focus:ring-2 focus:ring-emerald-600" />
+            <input id="admName" placeholder="Название" class="h-9 rounded-xl border border-emerald-800 bg-emerald-950 text-emerald-100 placeholder-emerald-400 px-3 text-sm outline-none focus:ring-2 focus:ring-emerald-600" />
+          </div>
+          <input id="admTags" placeholder="Теги (через запятую)" class="h-9 w-full rounded-xl border border-emerald-800 bg-emerald-950 text-emerald-100 placeholder-emerald-400 px-3 text-sm outline-none focus:ring-2 focus:ring-emerald-600" />
+          <input id="admStrength" type="number" min="1" max="10" step="1" placeholder="Крепость 1-10 (опционально)" class="h-9 w-full rounded-xl border border-emerald-800 bg-emerald-950 text-emerald-100 placeholder-emerald-400 px-3 text-sm outline-none focus:ring-2 focus:ring-emerald-600" />
+          <textarea id="admDesc" placeholder="Описание (опционально)" class="min-h-[72px] w-full rounded-xl border border-emerald-800 bg-emerald-950 text-emerald-100 placeholder-emerald-400 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-600"></textarea>
+          <div class="flex items-center gap-2">
+            <input id="admToken" placeholder="Админ-токен" class="h-9 flex-1 rounded-xl border border-emerald-800 bg-emerald-950 text-emerald-100 placeholder-emerald-400 px-3 text-sm outline-none focus:ring-2 focus:ring-emerald-600" />
+            <button id="admSaveToken" class="h-9 px-3 rounded-xl bg-emerald-200 text-emerald-900">Сохранить токен</button>
+          </div>
+          <div class="flex gap-2">
+            <button id="admAddFlavor" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] bg-emerald-200 text-emerald-900 hover:bg-emerald-100">Добавить вкус</button>
+            <button id="admReload" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-emerald-700 hover:bg-emerald-900/40">Перезагрузить вкусы</button>
+          </div>
+          <div id="admMsg" class="text-[12px] text-emerald-300"></div>
+        </div>
+      </div>`;
 
     const headerHTML = `
       <header class="flex items-center justify-between">
@@ -401,6 +416,7 @@
       <div class="min-h-[100svh] bg-slate-950 text-slate-100 p-3">
         <div class="mx-auto w-full max-w-md space-y-3">
           ${headerHTML}
+          ${adminBlock}
           ${state.activeTab==='builder' ? `${brandsBlock}${mixBlock}${titleBlock}` : ''}
           ${state.activeTab==='guest' ? `${guestBlock}` : ''}
         </div>
@@ -428,23 +444,23 @@
     var notesEl=root.querySelector('#notes'); if(notesEl){ notesEl.addEventListener('input', function(e){ state.notes = e.target.value; }); }
     var resetEl=root.querySelector('#reset'); if(resetEl){ resetEl.addEventListener('click', function(){ state.title=''; state.notes=''; state.parts=[]; render(); }); }
 
+    // Сохранить микс
     var saveEl=root.querySelector('#save'); 
     if(saveEl){ 
       saveEl.addEventListener('click', async function(){
         if(!isMixValid(state.parts, state.title)) return;
         if(!state.user) return;
-
         var mix={
           id:uuidv4(),
           title:String(state.title).trim(),
           parts: state.parts.slice(),
           notes:String(state.notes||'').trim(),
           author: state.user.name || 'Гость',
+          authorId: state.user.id,
           createdAt: Date.now(),
           taste: getMixTasteLabel(state.parts, state.flavors) || null,
           strength10: (function(){ var t=percentSum(state.parts); if(!t) return null; var w=0; for(var i=0;i<state.parts.length;i++){ var p=state.parts[i]; var pr=safePercent(p.percent); if(pr<=0) continue; var fl=state.flavors.find(function(x){return x && x.id===p.flavorId;}); if(!fl) continue; w+=getStrength10(fl)*(pr/t);} return w?Math.round(w*10)/10:null; })()
         };
-
         try{
           var r=await api('/api/mixes',{method:'POST',body:JSON.stringify(mix)});
           if(!r.ok){ alert('Не удалось сохранить микс ('+r.status+')'); return; }
@@ -457,6 +473,7 @@
       }); 
     }
 
+    // Удалить микс
     root.querySelectorAll('[data-del]').forEach(function(btn){
       btn.addEventListener('click', async function(){
         const id = btn.getAttribute('data-del');
@@ -475,9 +492,65 @@
         }
       });
     });
+
+    // ===== Админ: сохранить токен
+    var btnTok = root.querySelector('#admSaveToken');
+    if (btnTok){
+      btnTok.addEventListener('click', function(){
+        var v = (root.querySelector('#admToken')||{}).value || '';
+        try{ localStorage.setItem('admin_token', v); }catch(_){}
+        state.adminToken = v || null;
+        var m = root.querySelector('#admMsg'); if(m){ m.textContent = 'Токен сохранён в браузере.'; }
+      });
+    }
+    // ===== Админ: перезагрузка вкусов
+    var btnReload = root.querySelector('#admReload');
+    if (btnReload){
+      btnReload.addEventListener('click', async function(){
+        await loadFlavors();
+        state.activeBrand = state.activeBrand || (state.flavors[0] && state.flavors[0].brand) || '';
+        render();
+      });
+    }
+    // ===== Админ: добавить вкус
+    var btnAdd = root.querySelector('#admAddFlavor');
+    if (btnAdd){
+      btnAdd.addEventListener('click', async function(){
+        var brand = (root.querySelector('#admBrand')||{}).value||'';
+        var name  = (root.querySelector('#admName')||{}).value||'';
+        var tags  = (root.querySelector('#admTags')||{}).value||'';
+        var desc  = (root.querySelector('#admDesc')||{}).value||'';
+        var str10 = (root.querySelector('#admStrength')||{}).value||'';
+        if (!brand.trim() || !name.trim()){ alert('Укажите бренд и название'); return; }
+        var payload = {
+          id: (brand.trim()+'-'+name.trim()).replace(/\s+/g,'-').toLowerCase(),
+          brand: brand.trim(),
+          name: name.trim(),
+          description: desc.trim() || undefined,
+          tags: tags ? tags.split(',').map(s=>s.trim()).filter(Boolean) : undefined,
+          strength10: str10 ? Number(str10) : undefined
+        };
+        try{
+          var headers = { 'X-Admin-Token': state.adminToken || '' };
+          var r = await api('/api/flavors', { method:'POST', body: JSON.stringify(payload), headers });
+          if (!r.ok){
+            var txt = await r.text();
+            alert('Ошибка сохранения: '+r.status+' '+txt);
+            return;
+          }
+          // Перечитать файл с сервера, чтобы увидеть в общем списке
+          await loadFlavors();
+          state.activeBrand = normalizeBrand(payload.brand);
+          render();
+          var m = root.querySelector('#admMsg'); if(m){ m.textContent = 'Вкус добавлен на сервер.'; }
+        }catch(e){
+          console.error(e); alert('Сеть/сервер недоступны');
+        }
+      });
+    }
   }
 
-  // ======= Помощники для частичного обновления UI =======
+  // Частичные обновления
   function updateMixStatsUI(){
     var total = percentSum(state.parts);
     var totalEl = document.getElementById('mixTotal'); if(totalEl) totalEl.textContent = String(total);
@@ -487,7 +560,6 @@
     var taste = getMixTasteLabel(state.parts, state.flavors);
     var tEl = document.getElementById('mixTaste'); if(tEl){ tEl.innerHTML = taste ? (`<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">${escHTML(taste)}</span>`) : ''; }
   }
-
   function bindAddButtons(){
     var list = document.getElementById('flavorsList'); if(!list) return;
     Array.prototype.forEach.call(list.querySelectorAll('[data-add]'), function(btn){
@@ -501,7 +573,6 @@
       });
     });
   }
-
   function attachMixEvents(){
     Array.prototype.forEach.call(document.querySelectorAll('[data-range]'), function(sl){
       sl.addEventListener('input', function(){
@@ -520,7 +591,6 @@
       btn.addEventListener('click', function(){ var id=this.getAttribute('data-remove'); state.parts = state.parts.filter(function(p){return p.flavorId!==id;}); rerenderMixBlock(); });
     });
   }
-
   function rerenderMixBlock(){
     var container = document.getElementById('mixBlock'); if(!container) return;
     var total = percentSum(state.parts);
@@ -547,7 +617,6 @@
     container.innerHTML = html;
     attachMixEvents();
   }
-
   function updateSearchUI(){
     var meta = document.getElementById('flavorsMeta');
     var list = document.getElementById('flavorsList');
@@ -582,7 +651,7 @@
     bindAddButtons();
   }
 
-  // ========================= СТАРТ ПРИЛОЖЕНИЯ ===============================
+  // ========================= СТАРТ ==========================================
   (async function start(){ 
     try{ 
       initAuth(); 
@@ -610,11 +679,6 @@
     {var r=filterFlavorsByQueryAdv([{id:'1',name:'Mango'},{id:'2',name:'Ice'},{id:'3',name:'Ice Mango'}], 'mango'); console.assert(r.length===2,'search across brands');}
     {var t=getMixTasteLabel([],[]); console.assert(t===null,'taste null');}
     {var cl3=clampPercentForPart([{flavorId:'a',percent:10}], 'a', -5); console.assert(cl3===0,'clamp to 0');}
-    { var fl=[{id:'1',name:'Kiwi Smoothie',brand:'A'},{id:'2',name:'Banana Mama',brand:'B'},{id:'3',name:'Ice Lemon',brand:'A',tags:['мята']}];
-      var r1=filterFlavorsByQueryAdv(fl,'киви');
-      var r2=filterFlavorsByQueryAdv(fl,'мята');
-      console.assert(r1.length===1 && r1[0].id==='1','ru→en synonym: киви→kiwi');
-      console.assert(r2.some(function(x){return x.id==='3';}),'match by tags works'); }
     console.groupEnd();
   }catch(e){ console.error('Smoke tests error', e); } })();
   </script>
