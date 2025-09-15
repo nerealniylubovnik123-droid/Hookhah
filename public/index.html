@@ -514,43 +514,103 @@ const API_BASE = (location.hostname === 'localhost' || location.hostname === '12
         render();
       });
     }
-    // ===== Админ: добавить вкус
-    var btnAdd = root.querySelector('#admAddFlavor');
-    if (btnAdd){
-      btnAdd.addEventListener('click', async function(){
-        var brand = (root.querySelector('#admBrand')||{}).value||'';
-        var name  = (root.querySelector('#admName')||{}).value||'';
-        var tags  = (root.querySelector('#admTags')||{}).value||'';
-        var desc  = (root.querySelector('#admDesc')||{}).value||'';
-        var str10 = (root.querySelector('#admStrength')||{}).value||'';
-        if (!brand.trim() || !name.trim()){ alert('Укажите бренд и название'); return; }
-        var payload = {
-          id: (brand.trim()+'-'+name.trim()).replace(/\s+/g,'-').toLowerCase(),
-          brand: brand.trim(),
-          name: name.trim(),
-          description: desc.trim() || undefined,
-          tags: tags ? tags.split(',').map(s=>s.trim()).filter(Boolean) : undefined,
-          strength10: str10 ? Number(str10) : undefined
-        };
-        try{
-          var headers = { 'X-Admin-Token': state.adminToken || '' };
-          var r = await api('/api/flavors', { method:'POST', body: JSON.stringify(payload), headers });
-          if (!r.ok){
-            var txt = await r.text();
-            alert('Ошибка сохранения: '+r.status+' '+txt);
-            return;
-          }
-          // Перечитать файл с сервера, чтобы увидеть в общем списке
-          await loadFlavors();
-          state.activeBrand = normalizeBrand(payload.brand);
-          render();
-          var m = root.querySelector('#admMsg'); if(m){ m.textContent = 'Вкус добавлен на сервер.'; }
-        }catch(e){
-          console.error(e); alert('Сеть/сервер недоступны');
-        }
-      });
+    // ===== Админ: сохранить токен
+var btnTok = root.querySelector('#admSaveToken');
+if (btnTok){
+  btnTok.addEventListener('click', function(){
+    var v = (root.querySelector('#admToken')||{}).value || '';
+    try{ localStorage.setItem('admin_token', v); }catch(_){}
+    state.adminToken = v || null;
+    var m = root.querySelector('#admMsg'); 
+    if(m){ m.textContent = v ? 'Токен сохранён в браузере.' : 'Токен очищён.'; }
+  });
+}
+// При первом рендере подтянем токен из LS (если ещё не в state)
+if (state.adminToken == null){
+  try { state.adminToken = localStorage.getItem('admin_token') || null; } catch(_){}
+}
+
+// ===== Админ: перезагрузка вкусов
+var btnReload = root.querySelector('#admReload');
+if (btnReload){
+  btnReload.addEventListener('click', async function(){
+    await loadFlavors();
+    state.activeBrand = state.activeBrand || (state.flavors[0] && state.flavors[0].brand) || '';
+    render();
+  });
+}
+
+// ===== Админ: добавить вкус
+var btnAdd = root.querySelector('#admAddFlavor');
+if (btnAdd){
+  btnAdd.addEventListener('click', async function(){
+    var brand = (root.querySelector('#admBrand')||{}).value||'';
+    var name  = (root.querySelector('#admName')||{}).value||'';
+    var tags  = (root.querySelector('#admTags')||{}).value||'';
+    var desc  = (root.querySelector('#admDesc')||{}).value||'';
+    var str10 = (root.querySelector('#admStrength')||{}).value||'';
+
+    if (!brand.trim() || !name.trim()){ 
+      alert('Укажите бренд и название'); 
+      return; 
     }
-  }
+
+    // Формируем payload
+    var payload = {
+      id: (brand.trim()+'-'+name.trim()).replace(/\s+/g,'-').toLowerCase(),
+      brand: brand.trim(),
+      name: name.trim(),
+      description: desc.trim() || undefined,
+      tags: tags ? tags.split(',').map(function(s){return s.trim();}).filter(Boolean) : undefined,
+      strength10: str10 ? Number(str10) : undefined
+    };
+
+    // Если админ-токена нет, попробуем вариант с ADMIN_ID (нужен Telegram user)
+    var headers = {};
+    if (state && state.adminToken){
+      headers['X-Admin-Token'] = state.adminToken; // вариант с ADMIN_TOKEN
+    } else if (state && state.user && state.user.id){
+      payload.authorId = state.user.id;            // вариант с ADMIN_ID
+    }
+
+    try{
+      var r = await api('/api/flavors', { 
+        method:'POST', 
+        headers: headers, 
+        body: JSON.stringify(payload) 
+      });
+
+      if (!r.ok){
+        var txt = '';
+        try { txt = await r.text(); } catch(_){}
+        if (r.status === 403){
+          alert('Нет прав (403). Проверьте, что на сервере задан ADMIN_TOKEN/ADMIN_ID, и что вы передаёте корректный токен или залогинены как админский Telegram ID. Ответ сервера: ' + txt);
+        } else if (r.status === 500){
+          alert('Ошибка сервера (500). Вероятно, не настроены ADMIN_TOKEN/ADMIN_ID на сервере. Ответ: ' + txt);
+        } else {
+          alert('Не удалось добавить вкус ('+r.status+'). Ответ: ' + txt);
+        }
+        return;
+      }
+
+      var saved = await r.json().catch(function(){ return null; });
+      // Обновляем список вкусов, сбрасываем форму
+      await loadFlavors();
+      render();
+
+      // Очистим поля формы для удобства
+      var fields = ['#admBrand','#admName','#admTags','#admDesc','#admStrength'];
+      fields.forEach(function(sel){
+        var el = root.querySelector(sel); if (el) el.value = '';
+      });
+
+      alert('Вкус успешно сохранён' + (saved && saved.id ? (' (id: ' + saved.id + ')') : ''));
+    }catch(e){
+      console.error(e);
+      alert('Ошибка сети при добавлении вкуса');
+    }
+  });
+}
 
   // Частичные обновления
   function updateMixStatsUI(){
