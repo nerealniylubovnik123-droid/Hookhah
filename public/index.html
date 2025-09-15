@@ -15,11 +15,11 @@
         var root = document.getElementById('root');
         if (!root) return;
         root.innerHTML = (
-          '<div class="min-h-[100svh] flex items-center justify-center p-6">\n' +
-          '  <div class="max-w-md w-full rounded-xl border border-rose-800 bg-rose-950 p-4 text-sm">\n' +
-          '    <div class="font-bold mb-2 text-rose-200">Произошла ошибка</div>\n' +
-          '    <div class="text-rose-100/90 whitespace-pre-wrap break-words">' + String(msg || 'Unknown error') + '</div>\n' +
-          '  </div>\n' +
+          '<div class="min-h-[100svh] flex items-center justify-center p-6">\\n' +
+          '  <div class="max-w-md w-full rounded-xl border border-rose-800 bg-rose-950 p-4 text-sm">\\n' +
+          '    <div class="font-bold mb-2 text-rose-200">Произошла ошибка</div>\\n' +
+          '    <div class="text-rose-100/90 whitespace-pre-wrap break-words">' + String(msg || 'Unknown error') + '</div>\\n' +
+          '  </div>\\n' +
           '</div>'
         );
       }
@@ -61,24 +61,52 @@
   const escAttr=(s)=>String(s).replace(/"/g,'&quot;');
   const escHTML=(s)=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-  // --- Улучшенный поиск по вкусам (имя+описание+теги, русские синонимы) ---
+  // --- Улучшенный поиск по вкусам (имя+описание+теги, русско-английские синонимы) ---
   function filterFlavorsByQueryAdv(flavors, query){
     function normalize(s){ return String(s||'').toLowerCase().replace(/ё/g,'е').trim(); }
     var q = normalize(query);
     if(!q) return flavors||[];
-    var SYN = {"киви":["kiwi"],"банан":["banana"],"манго":["mango"],"лимон":["lemon","citrus"],"апельсин":["orange"],"грейпфрут":["grapefruit"],"арбуз":["watermelon"],"дыня":["melon"],"виноград":["grape"],"персик":["peach"],"яблок":["apple"],"маракуй":["passion"],"клубник":["strawberry"],"черник":["blueberry"],"мята":["mint"],"лед":["ice","freeze","frost","cold"],"ваниль":["vanilla"],"печень":["cookie","bisc"],"шоколад":["choco","chocolate"],"кисл":["sour"],"слад":["sweet"]};
-    var tokens = q.split(/\s+/).filter(Boolean);
-    function textOf(f){ return normalize([f && f.name, f && f.description, Array.isArray(f && f.tags)? (f.tags.join(' ')) : '' ].join(' ')); }
+    var SYN = {
+      "киви":["kiwi"],"банан":["banana"],"манго":["mango"],"лимон":["lemon","citrus"],
+      "апельсин":["orange"],"грейпфрут":["grapefruit"],"арбуз":["watermelon"],
+      "дыня":["melon"],"виноград":["grape"],"персик":["peach"],"яблок":["apple"],
+      "маракуй":["passion"],"клубник":["strawberry"],"черник":["blueberry"],
+      "мята":["mint"],"лед":["ice","freeze","frost","cold"],"ваниль":["vanilla"],
+      "печень":["cookie","bisc"],"шоколад":["choco","chocolate"],
+      "кисл":["sour"],"слад":["sweet"]
+    };
+    var tokens = q.split(/\\s+/).filter(Boolean);
+    function textOf(f){
+      return normalize([
+        f && f.name,
+        f && f.description,
+        Array.isArray(f && f.tags) ? f.tags.join(' ') : ''
+      ].join(' '));
+    }
     return (flavors||[]).filter(function(f){
       var text = textOf(f);
       return tokens.every(function(t){
-        var vars = new Set([t]);
-        Object.entries(SYN).forEach(function(pair){ var ru=pair[0], arr=pair[1]; if(t.indexOf(ru) !== -1){ arr.forEach(function(v){ vars.add(v); }); } });
-        var hit = false; vars.forEach(function(v){ if(text.indexOf(v) !== -1) hit = true; });
+        var variants = new Set([t]);
+        Object.entries(SYN).forEach(function([ru, arr]){
+          if (t.indexOf(ru) !== -1) arr.forEach(function(v){ variants.add(v); });
+        });
+        var hit = false;
+        variants.forEach(function(v){ if (text.indexOf(v) !== -1) hit = true; });
         return hit;
       });
     });
   }
+
+  // ========================= API BASE (Render/GitHub/локально) ==============
+  // ВСТАВЬТЕ ваш Render-домен ниже (только если открываете с GitHub Pages)
+  const API_BASE = (location.hostname.endsWith('github.io'))
+    ? 'https://ВАШ-СЕРВИС.onrender.com'   // ← ЗАМЕНИТЕ на ваш адрес Render
+    : '';
+  const api = (path, opts = {}) => fetch(`${API_BASE}${path}`, {
+    cache: 'no-store',
+    ...opts,
+    headers: { 'Content-Type': 'application/json; charset=UTF-8', ...(opts.headers||{}) }
+  });
 
   // ========================= СОСТОЯНИЕ ======================================
   const state={
@@ -94,6 +122,9 @@
     showSplash:false,
     logoUrl:null
   };
+
+  // Разрешить ли временно показывать «Удалить» у записей без authorId (для старых данных)
+  const FRONT_ALLOW_DELETE_NO_AUTHOR = true;
 
   // ========================= ИНИЦИАЛИЗАЦИЯ ===================================
   function initAuth(){
@@ -139,25 +170,20 @@
     if(!state.activeBrand) state.activeBrand='MustHave';
   }
 
+  // ----------- ЗАГРУЗКА МИКСОВ: сервер = источник правды, LS = кэш ----------
   async function loadGuestMixes(){
-    async function fetchJsonUtf8(url){
+    try {
+      const res = await api('/api/mixes');
+      const data = await res.json();
+      state.guestMixes = Array.isArray(data) ? data : [];
+      try { localStorage.setItem('guest_mixes_cache', JSON.stringify(state.guestMixes)); } catch {}
+    } catch {
       try {
-        const res = await fetch(url, { cache:'no-store' });
-        if (!res.ok) return null;
-        try {
-          const buf = await res.arrayBuffer();
-          const text = new TextDecoder('utf-8').decode(buf);
-          return JSON.parse(text);
-        } catch (_) { try { return await res.json(); } catch (_) { return null; } }
-      } catch (_) { return null; }
+        const ls = localStorage.getItem('guest_mixes_cache');
+        state.guestMixes = ls ? JSON.parse(ls) : [];
+      } catch { state.guestMixes = []; }
     }
-    let data = await fetchJsonUtf8('./guest_mixes.json');
-    if (!Array.isArray(data)) data = await fetchJsonUtf8('/guest_mixes.php');
-    if (Array.isArray(data)) state.guestMixes = data;
-    try{
-      const ls=localStorage.getItem('guest_mixes');
-      if(ls){ const arr=JSON.parse(ls); if(Array.isArray(arr)) state.guestMixes=arr; }
-    }catch(_){/* ignore */}
+    state.guestMixes.sort((a,b)=>(b?.createdAt||0)-(a?.createdAt||0));
   }
 
   // ========================= ВСПОМОГАТЕЛЬНОЕ ================================
@@ -170,17 +196,17 @@
 
   function LogoSVG(cls){
     return (
-      '<svg class="'+(cls||'w-8 h-8')+'" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">\n' +
-      '  <defs>\n' +
-      '    <linearGradient id="g" x1="0" x2="1">\n' +
-      '      <stop offset="0" stop-opacity="1" stop-color="#38bdf8"/>\n' +
-      '      <stop offset="1" stop-opacity="1" stop-color="#a78bfa"/>\n' +
-      '    </linearGradient>\n' +
-      '  </defs>\n' +
-      '  <circle cx="32" cy="32" r="30" fill="url(#g)" opacity="0.2"/>\n' +
-      '  <path d="M32 10c-4 4-4 8 0 12 4 4 4 8 0 12-4 4-4 8 0 12" stroke="#c7d2fe" stroke-width="3" fill="none" stroke-linecap="round"/>\n' +
-      '  <circle cx="32" cy="50" r="3" fill="#c7d2fe"/>\n' +
-      '</svg>'
+      '<svg class="'+(cls||'w-8 h-8')+'" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">\\n' +
+      '  <defs>\\n' +
+      '    <linearGradient id="g" x1="0" x2="1">\\n' +
+      '      <stop offset="0" stop-opacity="1" stop-color="#38bdf8"/>\\n' +
+      '      <stop offset="1" stop-opacity="1" stop-color="#a78bfa"/>\\n' +
+      '    </linearGradient>\\n' +
+      '  </defs>\\n' +
+      '  <circle cx="32" cy="32" r="30" fill="url(#g)" opacity="0.2"/>\\n' +
+      '  <path d="M32 10c-4 4-4 8 0 12 4 4 4 8 0 12-4 4-4 8 0 12" stroke="#c7d2fe" stroke-width="3" fill="none" stroke-linecap="round"/>\\n' +
+      '  <circle cx="32" cy="50" r="3" fill="#c7d2fe"/>\\n' +
+      '  </svg>'
     );
   }
 
@@ -265,7 +291,7 @@
             </div>
             ${desc}
           </div>
-          <button data-add="${f.id}" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] ${inMix?'opacity-50 cursor-not-allowed border border-slate-700':'border border-slate-700 hover:bg-slate-800'}">${inMix?'✓':'+'}</button>
+          <button data-add="${f.id}" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] ${inMix?'opacity-50 cursor-not-allowed border border-slate-700':'border border-slate-700 hover:bg-slate-800'}">${inMix?'✓': '+'}</button>
         </div>`;
     }).join('');
 
@@ -287,12 +313,15 @@
       var tBadge = m.taste ? `<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">${escHTML(m.taste)}</span>` : '';
       var notes = m.notes ? `<div class="text-[12px] opacity-80 mt-1">${escHTML(m.notes)}</div>` : '';
       var parts = (m.parts||[]).map(function(pp){ var fl = state.flavors.find(function(x){return x.id===pp.flavorId;}); return `<div class="flex items-center justify-between text-[12px]"><span class="truncate mr-2">${escHTML(fl?fl.name:pp.flavorId)}</span><span class="opacity-70">${safePercent(pp.percent)}%</span></div>`; }).join('');
+      var canDelete = !!(state.user && (m.authorId === state.user.id || (FRONT_ALLOW_DELETE_NO_AUTHOR && (m.authorId==null))));
+      var delBtn = canDelete ? `<button data-del="${m.id}" class="ml-auto inline-flex items-center justify-center rounded-xl h-7 px-2 text-[11px] border border-rose-700 text-rose-300 hover:bg-rose-900/40">Удалить</button>` : '';
       return `
         <div class="border border-slate-800 rounded-xl p-2 text-sm">
           <div class="flex items-center gap-2">
             <div class="font-semibold truncate">${escHTML(m.title)}</div>
             ${sBadge}
             ${tBadge}
+            ${delBtn}
           </div>
           <div class="text-[11px] text-slate-400">микс от ${escHTML(m.author||'Гость')}</div>
           ${notes}
@@ -329,7 +358,7 @@
         <div class="p-3 space-y-2">
           ${state.parts.length===0?'<div class="text-[12px] text-slate-400">Добавьте вкусы из списка</div>':''}
           ${partsHTML}
-          <div class="flex items-center justify-between text-[12px]">
+          <div class="flex items-center justify между text-[12px]">
             <span>Итог: <b id="mixTotal">${total}</b>%</span>
             <div class="flex items-center gap-2">
               <span id="mixStrength">${strengthBadge}</span>
@@ -373,47 +402,78 @@
     root.innerHTML = bodyHTML;
 
     // ===== События =====
-    // Переключение табов
     Array.prototype.forEach.call(root.querySelectorAll('[data-tab]'), function(btn){
-      btn.addEventListener('click', function(){ state.activeTab = this.getAttribute('data-tab'); render(); });
+      btn.addEventListener('click', async function(){
+        state.activeTab = this.getAttribute('data-tab');
+        if (state.activeTab === 'guest') { await loadGuestMixes(); }
+        render();
+      });
     });
-    // Переключение бренда
     Array.prototype.forEach.call(root.querySelectorAll('[data-brand]'), function(btn){
       btn.addEventListener('click', function(){ state.activeBrand = this.getAttribute('data-brand'); state.search=''; render(); });
     });
-    // Поиск
     var search = root.querySelector('#search');
     if(search){ search.addEventListener('input', function(e){ state.search = e.target.value; updateSearchUI(); }); }
-    // Кнопки добавления вкусов
     bindAddButtons();
-    // Элементы микса (слайдеры/удаление)
     attachMixEvents();
 
-    // Поля формы
     var titleEl=root.querySelector('#title'); if(titleEl){ titleEl.addEventListener('input', function(e){ state.title = e.target.value; }); }
     var notesEl=root.querySelector('#notes'); if(notesEl){ notesEl.addEventListener('input', function(e){ state.notes = e.target.value; }); }
     var resetEl=root.querySelector('#reset'); if(resetEl){ resetEl.addEventListener('click', function(){ state.title=''; state.notes=''; state.parts=[]; render(); }); }
-    var saveEl=root.querySelector('#save'); if(saveEl){ saveEl.addEventListener('click', async function(){
-      if(!isMixValid(state.parts, state.title)) return;
-      if(!state.user) return; // требуем авторизацию
-      var mix={ id:uuidv4(), title:String(state.title).trim(), parts: state.parts.slice(), notes:String(state.notes||'').trim(), author: state.user.name || 'Гость', createdAt: Date.now(), taste: getMixTasteLabel(state.parts, state.flavors) || null, strength10: (function(){ var t=percentSum(state.parts); if(!t) return null; var w=0; for(var i=0;i<state.parts.length;i++){ var p=state.parts[i]; var pr=safePercent(p.percent); if(pr<=0) continue; var fl=state.flavors.find(function(x){return x && x.id===p.flavorId;}); if(!fl) continue; w+=getStrength10(fl)*(pr/t);} return w?Math.round(w*10)/10:null; })() };
-      // Node
-      try{ var r1=await fetch('/api/mixes',{method:'POST',headers:{'Content-Type':'application/json; charset=UTF-8'},body:JSON.stringify(mix)}); if(r1.ok){ var saved=await r1.json().catch(function(){return null;}); state.guestMixes=[(saved||mix)].concat(state.guestMixes).slice(0,500); state.title=''; state.notes=''; state.parts=[]; state.activeTab='guest'; try{ localStorage.setItem('guest_mixes', JSON.stringify(state.guestMixes)); }catch(_){/* ignore */} render(); return; } }catch(_){/* ignore */}
-      // PHP
-      try{ var r2=await fetch('/save_mixes.php',{method:'POST',headers:{'Content-Type':'application/json; charset=UTF-8'},body:JSON.stringify(mix)}); if(r2.ok){ state.guestMixes=[mix].concat(state.guestMixes).slice(0,500); state.title=''; state.notes=''; state.parts=[]; state.activeTab='guest'; try{ localStorage.setItem('guest_mixes', JSON.stringify(state.guestMixes)); }catch(_){/* ignore */} render(); return; } }catch(_){/* ignore */}
-      // Fallback: локально + скачать
-      state.guestMixes=[mix].concat(state.guestMixes).slice(0,500);
-      try{ localStorage.setItem('guest_mixes', JSON.stringify(state.guestMixes)); }catch(_){/* ignore */}
-      try{ var json='\uFEFF'+JSON.stringify(state.guestMixes,null,2); var blob=new Blob([json],{type:'application/json; charset=UTF-8'}); var url=URL.createObjectURL(blob); var a=document.createElement('a'); a.href=url; a.download='guest_mixes.json'; document.body.appendChild(a); a.click(); setTimeout(function(){ document.body.removeChild(a); URL.revokeObjectURL(url); }, 100); }catch(_){/* ignore */}
-      state.title=''; state.notes=''; state.parts=[]; state.activeTab='guest'; render();
-    }); }
+
+    var saveEl=root.querySelector('#save'); 
+    if(saveEl){ 
+      saveEl.addEventListener('click', async function(){
+        if(!isMixValid(state.parts, state.title)) return;
+        if(!state.user) return;
+
+        var mix={
+          id:uuidv4(),
+          title:String(state.title).trim(),
+          parts: state.parts.slice(),
+          notes:String(state.notes||'').trim(),
+          author: state.user.name || 'Гость',
+          createdAt: Date.now(),
+          taste: getMixTasteLabel(state.parts, state.flavors) || null,
+          strength10: (function(){ var t=percentSum(state.parts); if(!t) return null; var w=0; for(var i=0;i<state.parts.length;i++){ var p=state.parts[i]; var pr=safePercent(p.percent); if(pr<=0) continue; var fl=state.flavors.find(function(x){return x && x.id===p.flavorId;}); if(!fl) continue; w+=getStrength10(fl)*(pr/t);} return w?Math.round(w*10)/10:null; })()
+        };
+
+        try{
+          var r=await api('/api/mixes',{method:'POST',body:JSON.stringify(mix)});
+          if(!r.ok){ alert('Не удалось сохранить микс ('+r.status+')'); return; }
+          await loadGuestMixes();
+          state.title=''; state.notes=''; state.parts=[]; state.activeTab='guest';
+          render();
+        }catch(e){
+          console.error(e); alert('Ошибка сети при сохранении');
+        }
+      }); 
+    }
+
+    root.querySelectorAll('[data-del]').forEach(function(btn){
+      btn.addEventListener('click', async function(){
+        const id = btn.getAttribute('data-del');
+        if (!id) return;
+        if (!confirm('Удалить микс?')) return;
+        try{
+          const res = await api(`/api/mixes/${encodeURIComponent(id)}`, { method:'DELETE' });
+          if (res.ok || res.status===204) {
+            await loadGuestMixes();
+            render();
+          } else {
+            alert('Удаление запрещено или не удалось ('+res.status+')');
+          }
+        }catch(e){
+          console.error(e); alert('Ошибка сети при удалении');
+        }
+      });
+    });
   }
 
-  // ======= Помощники для частичного обновления UI (без потери фокуса) =======
+  // ======= Помощники для частичного обновления UI =======
   function updateMixStatsUI(){
     var total = percentSum(state.parts);
     var totalEl = document.getElementById('mixTotal'); if(totalEl) totalEl.textContent = String(total);
-    // strength
     var t = percentSum(state.parts); var w=0; if(t>0){ for(var i=0;i<state.parts.length;i++){ var p=state.parts[i]; var pr=safePercent(p.percent); if(pr<=0) continue; var fl=state.flavors.find(function(x){return x && x.id===p.flavorId;}); if(fl) w += getStrength10(fl) * (pr/t); } }
     var strength = w? Math.round(w*10)/10 : null;
     var sEl = document.getElementById('mixStrength'); if(sEl){ if(typeof strength==='number'){ var c=strengthColor(strength); sEl.innerHTML = `<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border ${c.bg} ${c.text} ${c.border}">${strength.toFixed(1)}</span>`; } else { sEl.innerHTML=''; } }
@@ -436,7 +496,6 @@
   }
 
   function attachMixEvents(){
-    // Слайдеры
     Array.prototype.forEach.call(document.querySelectorAll('[data-range]'), function(sl){
       sl.addEventListener('input', function(){
         var id=this.getAttribute('data-range');
@@ -450,7 +509,6 @@
         if(span) span.textContent = newVal + '%';
       });
     });
-    // Удаление
     Array.prototype.forEach.call(document.querySelectorAll('[data-remove]'), function(btn){
       btn.addEventListener('click', function(){ var id=this.getAttribute('data-remove'); state.parts = state.parts.filter(function(p){return p.flavorId!==id;}); rerenderMixBlock(); });
     });
@@ -511,7 +569,21 @@
   }
 
   // ========================= СТАРТ ПРИЛОЖЕНИЯ ===============================
-  (async function start(){ try{ initAuth(); await detectLogo(); await loadFlavors(); await loadGuestMixes(); render(); }catch(e){ console.error(e); } })();
+  (async function start(){ 
+    try{ 
+      initAuth(); 
+      await detectLogo(); 
+      await loadFlavors(); 
+      await loadGuestMixes(); 
+      render();
+      setInterval(async () => {
+        const before = JSON.stringify(state.guestMixes?.map(m=>m.id));
+        await loadGuestMixes();
+        const after  = JSON.stringify(state.guestMixes?.map(m=>m.id));
+        if (before !== after) render();
+      }, 10000);
+    }catch(e){ console.error(e); } 
+  })();
 
   // ========================= SMOKE TESTS ====================================
   ;(function(){ try{
