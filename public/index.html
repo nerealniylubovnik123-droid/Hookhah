@@ -9,19 +9,18 @@
   <style>body{background:#020617}</style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <script>
-    // Дружелюбный экран ошибок
+    // Дружелюбный экран ошибок (чтобы вместо чёрного экрана показать причину)
     (function(){
       function showFatal(msg){
         var root = document.getElementById('root');
         if (!root) return;
-        root.innerHTML = (
-          '<div class="min-h-[100svh] flex items-center justify-center p-6">\n' +
-          '  <div class="max-w-md w-full rounded-xl border border-rose-800 bg-rose-950 p-4 text-sm">\n' +
-          '    <div class="font-bold mb-2 text-rose-200">Произошла ошибка</div>\n' +
-          '    <div class="text-rose-100/90 whitespace-pre-wrap break-words">' + String(msg || 'Unknown error') + '</div>\n' +
-          '  </div>\n' +
-          '</div>'
-        );
+        root.innerHTML =
+          '<div class="min-h-[100svh] flex items-center justify-center p-6">'+
+          '  <div class="max-w-md w-full rounded-xl border border-rose-800 bg-rose-950 p-4 text-sm">'+
+          '    <div class="font-bold mb-2 text-rose-200">Произошла ошибка</div>'+
+          '    <div class="text-rose-100/90 whitespace-pre-wrap break-words">'+ String(msg||'Unknown error') +'</div>'+
+          '  </div>'+
+          '</div>';
       }
       window.addEventListener('error', function(e){
         var m = (e && (e.message || (e.error && e.error.message))) || 'Script error';
@@ -35,331 +34,627 @@
   </script>
 </head>
 <body class="text-slate-100">
-  <div id="root" class="min-h-[100svh]"></div>
+<div id="root" class="min-h-[100svh]"></div>
 
-  <script>
-  // ========================= API BASE ========================================
-  const API_BASE = "https://hookhah.onrender.com";
-  const api = (path, opts={}) => fetch(API_BASE + path, {
-    cache: "no-store",
-    ...opts,
-    headers: { "Content-Type": "application/json; charset=UTF-8", ...(opts.headers||{}) }
-  });
+<script>
+/* ========================= API BASE ========================= */
+const API_BASE = "https://hookhah.onrender.com";
+const api = (path, opts={}) => fetch(API_BASE + path, {
+  cache: "no-store",
+  ...opts,
+  headers: { "Content-Type": "application/json; charset=UTF-8", ...(opts.headers||{}) }
+});
 
-  // ========================= УТИЛИТЫ =========================================
-  const safeNum = (v, d=0) => { const n = Number(v); return Number.isFinite(n)?n:d; };
-  const safePercent = (v) => Math.max(0, Math.min(100, safeNum(v, 0)));
-  const percentSum = (parts=[]) => (Array.isArray(parts)?parts.reduce((a,b)=>a+safePercent(b && b.percent),0):0);
-  const isMixValid = (parts,title) => (Array.isArray(parts)?(parts.length>0 && percentSum(parts)===100 && String(title||'').trim().length>=3):false);
-  const clampPercentForPart=(parts,targetId,newVal)=>{
-    const other=percentSum(parts.filter(x=>x&&x.flavorId!==targetId));
-    return Math.max(0,Math.min(safePercent(newVal),100-other));
-  };
-  const uuidv4=()=>{let dt=Date.now();if(typeof performance!='undefined'&&typeof performance.now==='function')dt+=performance.now();return'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=(dt+Math.random()*16)%16|0;dt=Math.floor(dt/16);const v=c==='x'?r:(r&0x3)|0x8;return v.toString(16);});};
-  const normalizeBrand=(b)=>(b||'').trim();
-  const BRAND_STRENGTH10_DEFAULTS={Darkside:5,"Black Burn":6,BlackBurn:6,MustHave:5,Overdos:6,Bonch:7,Starline:3};
-  const getStrength10=(f)=>{
-    if(!f) return 5;
-    if(typeof f.strength10==='number'&&Number.isFinite(f.strength10)) return Math.max(1,Math.min(10,f.strength10));
-    return BRAND_STRENGTH10_DEFAULTS[normalizeBrand(f.brand)]??5;
-  };
-  const strengthColor=(v)=>{
-    if(v==null)return{bg:"bg-slate-800",text:"text-slate-200",border:"border-slate-700"};
-    if(v<4)return{bg:"bg-emerald-950",text:"text-emerald-300",border:"border-emerald-800"};
-    if(v<7)return{bg:"bg-amber-950",text:"text-amber-300",border:"border-amber-800"};
-    return{bg:"bg-rose-950",text:"text-rose-300",border:"border-rose-800"};
-  };
-  const tasteWordFromTag=(tag)=>{
-    if(tag==null)return null;const t=String(tag).toLowerCase().trim();if(!t)return null;
-    const rules=[
-      [/(кисл|sour|лимон|lime|грейпфрут)/,"кислый"],
-      [/(сладк|sweet|sugar|мед|honey)/,"сладкий"],
-      [/(прян|spice|ginger|имбир)/,"пряный"],
-      [/(лед|ice|cold|frost|мят)/,"ледяной"],
-      [/(фрукт|fruit|яблок|banana|mango|pineapple|grape|orange|pear|melon|berry)/,"фруктовый"],
-      [/(десерт|dessert|cake|pie|cookie|choco|cream|vanilla|waffle)/,"десертный"]
-    ];
-    for (const [re,w] of rules){ if(re.test(t)) return w; }
-    return null;
-  };
-  const getMixTasteLabel=(parts,flavors)=>{
-    if(!Array.isArray(parts)||!Array.isArray(flavors)||parts.length===0)return null;
-    const total=percentSum(parts); if(total<=0)return null;
-    const scores=new Map();
-    const add=(raw,w)=>{const word=tasteWordFromTag(raw);if(word)scores.set(word,(scores.get(word)||0)+w);};
-    for (const p of parts){
-      const w=safePercent(p&&p.percent); if(w<=0)continue;
-      const fl=flavors.find(f=>f&&f.id===(p&&p.flavorId)); if(!fl)continue;
-      if(fl.tags) for(const t of fl.tags) add(t,w);
-      if(fl.name) for(const tk of String(fl.name).toLowerCase().split(/[^a-zа-я0-9]+/i)) add(tk,Math.max(1,w*0.6));
-      if(fl.description) for(const tk of String(fl.description).toLowerCase().split(/[^a-zа-я0-9]+/i)) add(tk,Math.max(1,w*0.3));
-    }
-    if(!scores.size)return null;
-    return Array.from(scores.entries()).sort((a,b)=>b[1]-a[1])[0][0]||null;
-  };
-  const escAttr=(s)=>String(s).replace(/"/g,'&quot;');
-  const escHTML=(s)=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-
-  // --- Поиск по вкусам (имя + теги + описание) с RU/EN синонимами
-  function filterFlavorsByQueryAdv(flavors, query){
-    function normalize(s){ return String(s||'').toLowerCase().replace(/ё/g,'е').trim(); }
-    var q = normalize(query);
-    if(!q) return flavors||[];
-    var SYN = {"киви":["kiwi"],"банан":["banana"],"манго":["mango"],"лимон":["lemon","citrus"],"апельсин":["orange"],"грейпфрут":["grapefruit"],"арбуз":["watermelon"],"дыня":["melon"],"виноград":["grape"],"персик":["peach"],"яблок":["apple"],"маракуй":["passion"],"клубник":["strawberry"],"черник":["blueberry"],"мята":["mint"],"лед":["ice","freeze","frost","cold"],"ваниль":["vanilla"],"печень":["cookie","bisc"],"шоколад":["choco","chocolate"],"кисл":["sour"],"слад":["sweet"]};
-    var tokens = q.split(/\s+/).filter(Boolean);
-    function textOf(f){ return normalize([f && f.name, f && f.description, Array.isArray(f && f.tags)? (f.tags.join(' ')) : '' ].join(' ')); }
-    return (flavors||[]).filter(function(f){
-      var text = textOf(f);
-      return tokens.every(function(t){
-        var vars = new Set([t]);
-        Object.entries(SYN).forEach(function(pair){ var ru=pair[0], arr=pair[1]; if(t.indexOf(ru) !== -1){ arr.forEach(function(v){ vars.add(v); }); } });
-        var hit = false; vars.forEach(function(v){ if(text.indexOf(v) !== -1) hit = true; });
-        return hit;
-      });
-    });
+/* ========================= УТИЛИТЫ ========================= */
+const safeNum = (v, d=0) => { const n = Number(v); return Number.isFinite(n)?n:d; };
+const safePercent = (v) => Math.max(0, Math.min(100, safeNum(v, 0)));
+const percentSum = (parts=[]) => (Array.isArray(parts)?parts.reduce((a,b)=>a+safePercent(b && b.percent),0):0);
+const isMixValid = (parts,title) => (Array.isArray(parts)?(parts.length>0 && percentSum(parts)===100 && String(title||'').trim().length>=3):false);
+const clampPercentForPart=(parts,targetId,newVal)=>{
+  const other=percentSum(parts.filter(x=>x&&x.flavorId!==targetId));
+  return Math.max(0,Math.min(safePercent(newVal),100-other));
+};
+const uuidv4=()=>{let dt=Date.now();if(typeof performance!='undefined'&&typeof performance.now==='function')dt+=performance.now();return'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=(dt+Math.random()*16)%16|0;dt=Math.floor(dt/16);const v=c==='x'?r:(r&0x3)|0x8;return v.toString(16);});};
+const normalizeBrand=(b)=>(b||'').trim();
+const BRAND_STRENGTH10_DEFAULTS={Darkside:5,"Black Burn":6,BlackBurn:6,MustHave:5,Overdose:6,Bonch:7,Starline:3}; // Overdose фикс
+const getStrength10=(f)=>{
+  if(!f) return 5;
+  if(typeof f.strength10==='number'&&Number.isFinite(f.strength10)) return Math.max(1,Math.min(10,f.strength10));
+  return BRAND_STRENGTH10_DEFAULTS[normalizeBrand(f.brand)]??5;
+};
+const strengthColor=(v)=>{
+  if(v==null)return{bg:"bg-slate-800",text:"text-slate-200",border:"border-slate-700"};
+  if(v<4)return{bg:"bg-emerald-950",text:"text-emerald-300",border:"border-emerald-800"};
+  if(v<7)return{bg:"bg-amber-950",text:"text-amber-300",border:"border-amber-800"};
+  return{bg:"bg-rose-950",text:"text-rose-300",border:"border-rose-800"};
+};
+const tasteWordFromTag=(tag)=>{
+  if(tag==null)return null;const t=String(tag).toLowerCase().trim();if(!t)return null;
+  const rules=[
+    [/(кисл|sour|лимон|lime|грейпфрут)/,"кислый"],
+    [/(сладк|sweet|sugar|мед|honey)/,"сладкий"],
+    [/(прян|spice|ginger|имбир)/,"пряный"],
+    [/(лед|ice|cold|frost|мят)/,"ледяной"],
+    [/(фрукт|fruit|яблок|banana|mango|pineapple|grape|orange|pear|melon|berry)/,"фруктовый"],
+    [/(десерт|dessert|cake|pie|cookie|choco|cream|vanilla|waffle)/,"десертный"]
+  ];
+  for (const [re,w] of rules){ if(re.test(t)) return w; }
+  return null;
+};
+const getMixTasteLabel=(parts,flavors)=>{
+  if(!Array.isArray(parts)||!Array.isArray(flavors)||parts.length===0)return null;
+  const total=percentSum(parts); if(total<=0)return null;
+  const scores=new Map();
+  const add=(raw,w)=>{const word=tasteWordFromTag(raw);if(word)scores.set(word,(scores.get(word)||0)+w);};
+  for (const p of parts){
+    const w=safePercent(p&&p.percent); if(w<=0)continue;
+    const fl=flavors.find(f=>f&&f.id===(p&&p.flavorId)); if(!fl)continue;
+    if(fl.tags) for(const t of fl.tags) add(t,w);
+    if(fl.name) for(const tk of String(fl.name).toLowerCase().split(/[^a-zа-я0-9]+/i)) add(tk,Math.max(1,w*0.6));
+    if(fl.description) for(const tk of String(fl.description).toLowerCase().split(/[^a-zа-я0-9]+/i)) add(tk,Math.max(1,w*0.3));
   }
+  if(!scores.size)return null;
+  return Array.from(scores.entries()).sort((a,b)=>b[1]-a[1])[0][0]||null;
+};
+const escAttr=(s)=>String(s).replace(/"/g,'&quot;');
+const escHTML=(s)=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-  // ========================= СОСТОЯНИЕ ======================================
-  const state={
-    flavors:[],
-    activeBrand:"",
-    search:"",
-    parts:[],
-    title:"",
-    notes:"",
-    guestMixes:[],
-    activeTab:"builder",
-    user:null,
-    showSplash:false,
-    logoUrl:null,
-    adminToken: localStorage.getItem('admin_token') || ""
-  };
+/* --- Поиск по вкусам (имя + теги + описание) с RU/EN синонимами --- */
+function filterFlavorsByQueryAdv(flavors, query){
+  function normalize(s){ return String(s||'').toLowerCase().replace(/ё/g,'е').trim(); }
+  var q = normalize(query);
+  if(!q) return flavors||[];
+  var SYN = {"киви":["kiwi"],"банан":["banana"],"манго":["mango"],"лимон":["lemon","citrus"],"апельсин":["orange"],"грейпфрут":["grapefruit"],"арбуз":["watermelon"],"дыня":["melon"],"виноград":["grape"],"персик":["peach"],"яблок":["apple"],"маракуй":["passion"],"клубник":["strawberry"],"черник":["blueberry"],"мята":["mint"],"лед":["ice","freeze","frost","cold"],"ваниль":["vanilla"],"печень":["cookie","bisc"],"шоколад":["choco","chocolate"],"кисл":["sour"],"слад":["sweet"]};
+  var tokens = q.split(/\s+/).filter(Boolean);
+  function textOf(f){ return normalize([f && f.name, f && f.description, Array.isArray(f && f.tags)? (f.tags.join(' ')) : '' ].join(' ')); }
+  return (flavors||[]).filter(function(f){
+    var text = textOf(f);
+    return tokens.every(function(t){
+      var vars = new Set([t]);
+      Object.entries(SYN).forEach(function(pair){ var ru=pair[0], arr=pair[1]; if(t.indexOf(ru) !== -1){ arr.forEach(function(v){ vars.add(v); }); } });
+      var hit = false; vars.forEach(function(v){ if(text.indexOf(v) !== -1) hit = true; });
+      return hit;
+    });
+  });
+}
 
-  // ========================= ИНИЦИАЛИЗАЦИЯ ===================================
-  function initAuth(){
-    try{
-      var u=window?.Telegram?.WebApp?.initDataUnsafe?.user;
-      if(u){
-        var name=[u.first_name,u.last_name].filter(Boolean).join(' ')||u.username||('User '+u.id);
-        state.user={id:String(u.id),name,username:u.username};
-        state.showSplash = true;
+/* ========================= СОСТОЯНИЕ ========================= */
+const state={
+  flavors:[],
+  activeBrand:"",
+  search:"",
+  parts:[],
+  title:"",
+  notes:"",
+  guestMixes:[],
+  activeTab:"builder", // builder | guest | admin
+  user:null,
+  showSplash:false,
+  logoUrl:null,
+  adminToken: localStorage.getItem('admin_token') || ""
+};
+
+/* ========================= ИНИЦИАЛИЗАЦИЯ ========================= */
+function initAuth(){
+  try{
+    var u=window?.Telegram?.WebApp?.initDataUnsafe?.user;
+    if(u){
+      var name=[u.first_name,u.last_name].filter(Boolean).join(' ')||u.username||('User '+u.id);
+      state.user={id:String(u.id),name,username:u.username};
+      state.showSplash = true;
+      return;
+    }
+  }catch(_){}
+  // гостевой режим (вне Telegram)
+  state.user = { id:"anon", name:"Гость" };
+  state.showSplash = true;
+}
+
+async function loadFlavors(){
+  try{
+    const r = await api('/api/flavors');
+    if (r.ok){
+      const data = await r.json();
+      if (Array.isArray(data)){
+        state.flavors = data;
+        state.activeBrand = state.activeBrand || (data[0] && data[0].brand) || "";
         return;
       }
-    }catch(_){}
-    // гостевой режим (если открыто не из Telegram)
-    state.user = { id:"anon", name:"Гость" };
-    state.showSplash = true;
+    }
+  }catch(_){}
+  state.flavors = [];
+}
+
+async function loadGuestMixes(){
+  try{
+    const r = await api('/api/mixes');
+    if (r.ok){
+      const arr = await r.json();
+      state.guestMixes = Array.isArray(arr) ? arr : [];
+      state.guestMixes.sort((a,b)=>(b?.createdAt||0)-(a?.createdAt||0));
+    }
+  }catch(_){ state.guestMixes = []; }
+}
+
+async function detectLogo(){
+  async function exists(url){ try{ const r=await fetch(url,{method:'HEAD',cache:'no-store'}); return r.ok; }catch(_){ return false; } }
+  const candidates=[ './logo.jpg','./logo.jpeg','./logo.JPG','./logo.JPEG','./AKGpihYIdG2xycCNV3hAm2gVxkuF4tS5.jpg' ];
+  for(const c of candidates){ if(await exists(c)){ state.logoUrl=c; return; } }
+  state.logoUrl=null;
+}
+
+function LogoSVG(cls){
+  return (
+    '<svg class="'+(cls||'w-8 h-8')+'" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">'+
+    '  <defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#38bdf8"/><stop offset="1" stop-color="#a78bfa"/></linearGradient></defs>'+
+    '  <circle cx="32" cy="32" r="30" fill="url(#g)" opacity="0.2"/>'+
+    '  <path d="M32 10c-4 4-4 8 0 12 4 4 4 8 0 12-4 4-4 8 0 12" stroke="#c7d2fe" stroke-width="3" fill="none" stroke-linecap="round"/>'+
+    '  <circle cx="32" cy="50" r="3" fill="#c7d2fe"/>'+
+    '</svg>'
+  );
+}
+
+/* ========================= РЕНДЕР ========================= */
+function render(){
+  var root=document.getElementById('root');
+  if(!root) return;
+
+  if(!state.user){
+    root.innerHTML = '<div class="min-h-[100svh] flex items-center justify-center p-6 text-sm">Инициализация…</div>';
+    return;
   }
 
-  async function loadFlavors(){
-    try{
-      const r = await api('/api/flavors');
-      if (r.ok){
-        const data = await r.json();
-        if (Array.isArray(data)){
-          state.flavors = data;
-          state.activeBrand = state.activeBrand || (data[0] && data[0].brand) || "";
+  if(state.showSplash){
+    const logoBlock = state.logoUrl ? '<img src="'+state.logoUrl+'" alt="logo" class="w-24 h-24 rounded-xl object-cover shadow"/>' : (LogoSVG('w-24 h-24'));
+    root.innerHTML = `
+      <div class="min-h-[100svh] bg-slate-950 text-slate-100 flex items-center justify-center p-6">
+        <div class="w-full max-w-sm text-center shadow rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4">
+          <div class="flex items-center justify-center">${logoBlock}</div>
+          <div class="text-lg font-bold">готовы стать кальянным миксологом</div>
+          <button id="goApp" class="inline-flex items-center justify-center rounded-xl h-10 px-4 text-[14px] bg-slate-100 text-slate-900 hover:bg-white">поехали</button>
+        </div>
+      </div>`;
+    var go=document.getElementById('goApp');
+    if(go){ go.addEventListener('click', function(){ state.showSplash=false; render(); }); }
+    return;
+  }
+
+  var brands = Array.from(new Set((state.flavors||[]).map(function(f){return normalizeBrand(f.brand);}))).filter(Boolean).sort();
+  var flavorsOfActive = (state.flavors||[]).filter(function(f){return normalizeBrand(f.brand)===state.activeBrand;});
+  var searchedFlavors = filterFlavorsByQueryAdv(state.flavors, state.search);
+  var listFlavors = state.search ? searchedFlavors : flavorsOfActive;
+  var total = percentSum(state.parts);
+
+  var mixStrength10 = (function(parts, flavors){
+    if(!Array.isArray(parts)||!Array.isArray(flavors)) return null;
+    var t=percentSum(parts); if(!parts.length||t<=0) return null;
+    var w=0; for(var i=0;i<parts.length;i++){
+      var p=parts[i]; var pr=safePercent(p && p.percent); if(pr<=0) continue;
+      var fl=flavors.find(function(x){return x && x.id===(p && p.flavorId);}); if(!fl) continue;
+      w += getStrength10(fl) * (pr/t);
+    }
+    return w? Math.round(w*10)/10 : null;
+  })(state.parts, state.flavors);
+  var mixTaste = getMixTasteLabel(state.parts, state.flavors);
+
+  var strengthBadge='';
+  if(typeof mixStrength10==='number'){
+    var c=strengthColor(mixStrength10);
+    strengthBadge=`<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border ${c.bg} ${c.text} ${c.border}">${mixStrength10.toFixed(1)}</span>`;
+  }
+
+  var brandsHTML = brands.map(function(b){
+    return `<button data-brand="${b}" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] ${state.activeBrand===b?'bg-slate-100 text-slate-900':'border border-slate-700 hover:bg-slate-800'}">${b}</button>`;
+  }).join('');
+
+  var flavorsHTML = listFlavors.map(function(f){
+    var inMix = state.parts.some(function(p){return p.flavorId===f.id;});
+    var s = getStrength10(f);
+    var c = strengthColor(s);
+    var desc = f.description ? `<div class="text-[11px] text-slate-400 truncate">${escHTML(f.description)}</div>` : '';
+    return `
+      <div class="flex items-center justify-between gap-2 text-sm">
+        <div class="min-w-0">
+          <div class="flex items-center gap-2">
+            <div class="font-medium truncate" title="${escAttr((f.brand||'')+' • '+(f.name||''))}">${escHTML(f.name)} <span class="opacity-60">(${escHTML(f.brand)})</span></div>
+            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border ${c.bg} ${c.text} ${c.border}">${s.toFixed(1)}</span>
+          </div>
+          ${desc}
+        </div>
+        <button data-add="${f.id}" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] ${inMix?'opacity-50 cursor-not-allowed border border-slate-700':'border border-slate-700 hover:bg-slate-800'}">${inMix?'✓': '+'}</button>
+      </div>`;
+  }).join('');
+
+  var partsHTML = state.parts.map(function(p){
+    var fl = state.flavors.find(function(x){return x.id===p.flavorId;});
+    var name = (fl && fl.name) || p.flavorId;
+    return `
+      <div class="flex items-center gap-2 text-sm">
+        <span class="truncate w-36" title="${escAttr(name)}">${escHTML(name)}</span>
+        <input type="range" min="0" max="100" step="5" class="w-28" value="${safePercent(p.percent)}" data-range="${p.flavorId}"/>
+        <span class="w-10 text-right" data-percent-for="${p.flavorId}">${safePercent(p.percent)}%</span>
+        <button data-remove="${p.flavorId}" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] hover:bg-slate-800">Удалить</button>
+      </div>`;
+  }).join('');
+
+  var guestHTML = state.guestMixes.map(function(m){
+    var c = typeof m.strength10==='number' ? strengthColor(m.strength10) : strengthColor(null);
+    var sBadge = typeof m.strength10==='number' ? `<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border ${c.bg} ${c.text} ${c.border}">${m.strength10.toFixed(1)}</span>` : '';
+    var tBadge = m.taste ? `<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">${escHTML(m.taste)}</span>` : '';
+    var notes = m.notes ? `<div class="text-[12px] opacity-80 mt-1">${escHTML(m.notes)}</div>` : '';
+    var parts = (m.parts||[]).map(function(pp){
+      var fl = state.flavors.find(function(x){return x.id===pp.flavorId;});
+      return `<div class="flex items-center justify-between text-[12px]"><span class="truncate mr-2">${escHTML(fl?fl.name:pp.flavorId)}</span><span class="opacity-70">${safePercent(pp.percent)}%</span></div>`;
+    }).join('');
+    var canDelete = !!(state.user && (m.authorId && String(m.authorId)===String(state.user.id)));
+    var delBtn = canDelete ? `<button data-del="${m.id}" class="ml-auto inline-flex items-center justify-center rounded-xl h-7 px-2 text-[11px] border border-rose-700 text-rose-300 hover:bg-rose-900/40">Удалить</button>` : '';
+    return `
+      <div class="border border-slate-800 rounded-xl p-2 text-sm">
+        <div class="flex items-center gap-2">
+          <div class="font-semibold truncate">${escHTML(m.title)}</div>
+          ${sBadge}
+          ${tBadge}
+          ${delBtn}
+        </div>
+        <div class="text-[11px] text-slate-400">микс от ${escHTML(m.author||'Гость')}</div>
+        ${notes}
+        <div class="mt-1 space-y-0.5">${parts}</div>
+      </div>`;
+  }).join('');
+
+  const headerHTML = `
+    <header class="flex items-center justify-between">
+      <div class="flex items-center gap-2 min-w-0">${LogoSVG()}<h1 class="text-lg font-bold truncate">Hookah Mixes</h1></div>
+      <div class="flex items-center gap-2">
+        <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">Здравствуйте, ${escHTML(state.user && state.user.name ? state.user.name : 'Гость')}</span>
+        <button data-tab="builder" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] ${state.activeTab==='builder'?'bg-slate-100 text-slate-900':'border border-slate-700 hover:bg-slate-800'}">Конструктор</button>
+        <button data-tab="guest" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] ${state.activeTab==='guest'?'bg-slate-100 text-slate-900':'border border-slate-700 hover:bg-slate-800'}">Миксы гостей</button>
+        <button data-tab="admin" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] ${state.activeTab==='admin'?'bg-slate-100 text-slate-900':'border border-slate-700 hover:bg-slate-800'}">Админ</button>
+      </div>
+    </header>`;
+
+  const brandsBlock = `
+    <div class="rounded-2xl border border-slate-800 bg-slate-900">
+      <div class="px-3 pt-3"><div class="text-xs font-semibold">Бренды</div></div>
+      <div class="p-3 space-y-2">
+        <div class="space-y-2">
+          <input id="search" placeholder="Поиск вкуса по названию…" value="${escAttr(state.search||'')}" class="h-9 w-full rounded-xl border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-400 px-3 text-sm outline-none focus:ring-2 focus:ring-slate-600" />
+          <div class="grid grid-cols-2 gap-1">${brandsHTML}${brands.length===0?'<div class="text-[12px] text-slate-400">Нет брендов (добавьте вкусы)</div>':''}</div>
+        </div>
+        <div id="flavorsMeta" class="text-[11px] text-slate-400">${state.search ? `Найдено: ${listFlavors.length}` : (state.activeBrand ? `Вкусы бренда: ${escHTML(state.activeBrand)}` : '')}</div>
+        <div id="flavorsList">${flavorsHTML}${listFlavors.length===0?`<div class="text-[12px] text-slate-400">${state.search?'Ничего не найдено':'Нет вкусов для этого бренда'}</div>`:''}</div>
+      </div>
+    </div>`;
+
+  const mixBlock = `
+    <div class="rounded-2xl border border-slate-800 bg-slate-900" id="mixBlock">
+      <div class="px-3 pt-3"><div class="text-xs font-semibold">Микс</div></div>
+      <div class="p-3 space-y-2">
+        ${state.parts.length===0?'<div class="text-[12px] text-slate-400">Добавьте вкусы из списка</div>':''}
+        ${partsHTML}
+        <div class="flex items-center justify-between text-[12px]">
+          <span>Итог: <b id="mixTotal">${total}</b>%</span>
+          <div class="flex items-center gap-2">
+            <span id="mixStrength">${strengthBadge}</span>
+            <span id="mixTaste">${mixTaste?(`<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">${escHTML(mixTaste)}</span>`):''}</span>
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+  const titleBlock = `
+    <div class="rounded-2xl border border-slate-800 bg-slate-900">
+      <div class="px-3 pt-3"><div class="text-xs font-semibold">Название и описание</div></div>
+      <div class="p-3 space-y-2">
+        <input id="title" placeholder="Название микса" value="${escAttr(state.title||'')}" class="h-9 w-full rounded-xl border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-400 px-3 text-sm outline-none focus:ring-2 focus:ring-slate-600" />
+        <textarea id="notes" placeholder="Описание / заметки…" class="min-h-[72px] w-full rounded-xl border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-400 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-600">${escHTML(state.notes||'')}</textarea>
+        <div class="flex gap-2">
+          <button id="reset" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-slate-800">Сброс</button>
+          <button id="save" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] ${isMixValid(state.parts,state.title)?'bg-slate-100 text-slate-900':'opacity-50 cursor-not-allowed border border-slate-700'}">Сохранить</button>
+        </div>
+      </div>
+    </div>`;
+
+  // Гости — ИСПРАВЛЕННЫЙ шаблон (закрыт полностью)
+  const guestBlock = `
+    <div class="rounded-2xl border border-slate-800 bg-slate-900">
+      <div class="px-3 pt-3"><div class="text-xs font-semibold">Миксы гостей</div></div>
+      <div class="p-3 space-y-2">
+        ${state.guestMixes.length===0?'<div class="text-[12px] text-slate-400">Пока нет сохранённых миксов</div>':''}
+        ${guestHTML}
+      </div>
+    </div>`;
+
+  // Админ
+  const adminBlock = `
+    <div class="rounded-2xl border border-slate-800 bg-slate-900">
+      <div class="px-3 pt-3"><div class="text-xs font-semibold">Админ</div></div>
+      <div class="p-3 space-y-3 text-sm">
+        <div class="space-y-2">
+          <label class="text-[11px] opacity-70">Admin token (как на сервере ADMIN_TOKEN)</label>
+          <input id="admToken" value="${escAttr(state.adminToken||'')}" class="h-9 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-sm outline-none">
+          <button id="admSaveToken" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-slate-800">Сохранить токен</button>
+          <div id="admMsg" class="text-[11px] text-emerald-400"></div>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <input id="admBrand" placeholder="Бренд" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3 text-sm outline-none">
+          <input id="admName" placeholder="Название" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3 text-sm outline-none">
+          <input id="admTags" placeholder="Теги (через ,)" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3 text-sm outline-none">
+          <input id="admStrength" placeholder="Крепость 1-10" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3 text-sm outline-none">
+          <div class="col-span-2">
+            <textarea id="admDesc" placeholder="Описание" class="min-h-[64px] w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm outline-none"></textarea>
+          </div>
+        </div>
+        <div class="flex gap-2">
+          <button id="admAddFlavor" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] bg-slate-100 text-slate-900">Добавить вкус</button>
+          <button id="admReload" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-slate-800">Обновить список вкусов</button>
+        </div>
+        <div class="text-[11px] text-slate-400">После добавления вкус появится в общем списке без перезагрузки.</div>
+      </div>
+    </div>`;
+
+  const bodyHTML = `
+    <div class="min-h-[100svh] bg-slate-950 text-slate-100 p-3">
+      <div class="mx-auto w-full max-w-md space-y-3">
+        ${headerHTML}
+        ${state.activeTab==='builder' ? `${brandsBlock}${mixBlock}${titleBlock}` : ''}
+        ${state.activeTab==='guest'   ? `${guestBlock}` : ''}
+        ${state.activeTab==='admin'   ? `${adminBlock}` : ''}
+      </div>
+    </div>`;
+
+  root.innerHTML = bodyHTML;
+
+  /* ===== События ===== */
+  // Переключение табов
+  Array.prototype.forEach.call(root.querySelectorAll('[data-tab]'), function(btn){
+    btn.addEventListener('click', async function(){
+      state.activeTab = this.getAttribute('data-tab');
+      if (state.activeTab === 'guest') { await loadGuestMixes(); }
+      render();
+    });
+  });
+  // Переключение бренда
+  Array.prototype.forEach.call(root.querySelectorAll('[data-brand]'), function(btn){
+    btn.addEventListener('click', function(){ state.activeBrand = this.getAttribute('data-brand'); state.search=''; render(); });
+  });
+  // Поиск
+  var search = root.querySelector('#search');
+  if(search){ search.addEventListener('input', function(e){ state.search = e.target.value; updateSearchUI(); }); }
+
+  // Кнопки добавления вкусов
+  bindAddButtons();
+  // Слайдеры и удаление частей
+  attachMixEvents();
+
+  // Поля формы
+  var titleEl=root.querySelector('#title'); if(titleEl){ titleEl.addEventListener('input', function(e){ state.title = e.target.value; }); }
+  var notesEl=root.querySelector('#notes'); if(notesEl){ notesEl.addEventListener('input', function(e){ state.notes = e.target.value; }); }
+  var resetEl=root.querySelector('#reset'); if(resetEl){ resetEl.addEventListener('click', function(){ state.title=''; state.notes=''; state.parts=[]; render(); }); }
+
+  // Сохранить микс
+  var saveEl=root.querySelector('#save'); 
+  if(saveEl){ 
+    saveEl.addEventListener('click', async function(){
+      if(!isMixValid(state.parts, state.title)) return;
+      if(!state.user) return;
+
+      var mix={
+        id:uuidv4(),
+        title:String(state.title).trim(),
+        parts: state.parts.slice(),
+        notes:String(state.notes||'').trim(),
+        author: state.user.name || 'Гость',
+        authorId: state.user.id || null,
+        createdAt: Date.now(),
+        taste: getMixTasteLabel(state.parts, state.flavors) || null,
+        strength10: (function(){ var t=percentSum(state.parts); if(!t) return null; var w=0; for(var i=0;i<state.parts.length;i++){ var p=state.parts[i]; var pr=safePercent(p.percent); if(pr<=0) continue; var fl=state.flavors.find(function(x){return x && x.id===p.flavorId;}); if(!fl) continue; w+=getStrength10(fl)*(pr/t);} return w?Math.round(w*10)/10:null; })()
+      };
+
+      try{
+        var r=await api('/api/mixes',{method:'POST',body:JSON.stringify(mix)});
+        if(!r.ok){ alert('Не удалось сохранить микс ('+r.status+')'); return; }
+        await loadGuestMixes();
+        state.title=''; state.notes=''; state.parts=[]; state.activeTab='guest';
+        render();
+      }catch(e){
+        console.error(e); alert('Ошибка сети при сохранении');
+      }
+    }); 
+  }
+
+  // Удалить микс
+  root.querySelectorAll('[data-del]').forEach(function(btn){
+    btn.addEventListener('click', async function(){
+      const id = btn.getAttribute('data-del');
+      if (!id) return;
+      if (!confirm('Удалить микс?')) return;
+      try{
+        const res = await api(`/api/mixes/${encodeURIComponent(id)}`, {
+          method:'DELETE',
+          headers: { "X-User-Id": String(state.user && state.user.id || '') }
+        });
+        if (res.ok || res.status===204) {
+          await loadGuestMixes();
+          render();
+        } else {
+          alert('Удаление запрещено или не удалось ('+res.status+')');
+        }
+      }catch(e){
+        console.error(e); alert('Ошибка сети при удалении');
+      }
+    });
+  });
+
+  /* ===== Админ ===== */
+  var btnTok = root.querySelector('#admSaveToken');
+  if (btnTok){
+    btnTok.addEventListener('click', function(){
+      var v = (root.querySelector('#admToken')||{}).value || '';
+      try{ localStorage.setItem('admin_token', v); }catch(_){}
+      state.adminToken = v || '';
+      var m = root.querySelector('#admMsg'); if(m){ m.textContent = 'Токен сохранён.'; }
+    });
+  }
+  var btnReload = root.querySelector('#admReload');
+  if (btnReload){
+    btnReload.addEventListener('click', async function(){
+      await loadFlavors();
+      state.activeBrand = state.activeBrand || (state.flavors[0] && state.flavors[0].brand) || '';
+      render();
+    });
+  }
+  var btnAdd = root.querySelector('#admAddFlavor');
+  if (btnAdd){
+    btnAdd.addEventListener('click', async function(){
+      var brand = (root.querySelector('#admBrand')||{}).value||'';
+      var name  = (root.querySelector('#admName')||{}).value||'';
+      var tags  = (root.querySelector('#admTags')||{}).value||'';
+      var desc  = (root.querySelector('#admDesc')||{}).value||'';
+      var str10 = (root.querySelector('#admStrength')||{}).value||'';
+      if (!brand.trim() || !name.trim()){ alert('Укажите бренд и название'); return; }
+      var payload = {
+        id: (brand.trim()+'-'+name.trim()).replace(/\s+/g,'-').toLowerCase(),
+        brand: brand.trim(),
+        name: name.trim(),
+        description: desc.trim() || undefined,
+        tags: tags ? tags.split(',').map(s=>s.trim()).filter(Boolean) : undefined,
+        strength10: str10 ? Number(str10) : undefined
+      };
+      try{
+        var headers = { 'X-Admin-Token': state.adminToken || '' };
+        var r = await api('/api/flavors', { method:'POST', body: JSON.stringify(payload), headers });
+        if (!r.ok){
+          var txt = await r.text().catch(()=>String(r.status));
+          alert('Ошибка добавления: '+r.status+' '+txt);
           return;
         }
+        await loadFlavors();
+        if (!state.activeBrand) state.activeBrand = normalizeBrand(payload.brand);
+        render();
+        alert('Вкус добавлен');
+      }catch(e){
+        console.error(e); alert('Сеть/сервер: не удалось добавить');
       }
-    }catch(_){}
-    state.flavors = [];
+    });
   }
+}
 
-  async function loadGuestMixes(){
-    try{
-      const r = await api('/api/mixes');
-      if (r.ok){
-        const arr = await r.json();
-        state.guestMixes = Array.isArray(arr) ? arr : [];
-        state.guestMixes.sort((a,b)=>(b?.createdAt||0)-(a?.createdAt||0));
-      }
-    }catch(_){ state.guestMixes = []; }
-  }
-
-  async function detectLogo(){
-    async function exists(url){ try{ const r=await fetch(url,{method:'HEAD',cache:'no-store'}); return r.ok; }catch(_){ return false; } }
-    const candidates=[ './logo.jpg','./logo.jpeg','./logo.JPG','./logo.JPEG','./AKGpihYIdG2xycCNV3hAm2gVxkuF4tS5.jpg' ];
-    for(const c of candidates){ if(await exists(c)){ state.logoUrl=c; return; } }
-    state.logoUrl=null;
-  }
-
-  function LogoSVG(cls){
-    return (
-      '<svg class="'+(cls||'w-8 h-8')+'" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">\n' +
-      '  <defs>\n' +
-      '    <linearGradient id="g" x1="0" x2="1">\n' +
-      '      <stop offset="0" stop-opacity="1" stop-color="#38bdf8"/>\n' +
-      '      <stop offset="1" stop-opacity="1" stop-color="#a78bfa"/>\n' +
-      '    </linearGradient>\n' +
-      '  </defs>\n' +
-      '  <circle cx="32" cy="32" r="30" fill="url(#g)" opacity="0.2"/>\n' +
-      '  <path d="M32 10c-4 4-4 8 0 12 4 4 4 8 0 12-4 4-4 8 0 12" stroke="#c7d2fe" stroke-width="3" fill="none" stroke-linecap="round"/>\n' +
-      '  <circle cx="32" cy="50" r="3" fill="#c7d2fe"/>\n' +
-      '  </svg>'
-    );
-  }
-
-  // ========================= РЕНДЕР =========================================
-  function render(){
-    var root=document.getElementById('root');
-    if(!root) return;
-
-    if(!state.user){
-      root.innerHTML = '<div class="min-h-[100svh] flex items-center justify-center p-6 text-sm">Инициализация…</div>';
-      return;
-    }
-
-    if(state.showSplash){
-      const logoBlock = state.logoUrl ? '<img src="'+state.logoUrl+'" alt="logo" class="w-24 h-24 rounded-xl object-cover shadow"/>' : (LogoSVG('w-24 h-24'));
-      root.innerHTML = `
-        <div class="min-h-[100svh] bg-slate-950 text-slate-100 flex items-center justify-center p-6">
-          <div class="w-full max-w-sm text-center shadow rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4">
-            <div class="flex items-center justify-center">${logoBlock}</div>
-            <div class="text-lg font-bold">готовы стать кальянным миксологом</div>
-            <button id="goApp" class="inline-flex items-center justify-center rounded-xl h-10 px-4 text-[14px] bg-slate-100 text-slate-900 hover:bg-white">поехали</button>
-          </div>
-        </div>`;
-      var go=document.getElementById('goApp');
-      if(go){ go.addEventListener('click', function(){ state.showSplash=false; render(); }); }
-      return;
-    }
-
-    var brands = Array.from(new Set((state.flavors||[]).map(function(f){return normalizeBrand(f.brand);}))).filter(Boolean).sort();
-    var flavorsOfActive = (state.flavors||[]).filter(function(f){return normalizeBrand(f.brand)===state.activeBrand;});
-    var searchedFlavors = filterFlavorsByQueryAdv(state.flavors, state.search);
-    var listFlavors = state.search ? searchedFlavors : flavorsOfActive;
-    var total = percentSum(state.parts);
-
-    var mixStrength10 = (function(parts, flavors){
-      if(!Array.isArray(parts)||!Array.isArray(flavors)) return null;
-      var t=percentSum(parts); if(!parts.length||t<=0) return null;
-      var w=0; for(var i=0;i<parts.length;i++){
-        var p=parts[i]; var pr=safePercent(p && p.percent); if(pr<=0) continue;
-        var fl=flavors.find(function(x){return x && x.id===(p && p.flavorId);}); if(!fl) continue;
-        w += getStrength10(fl) * (pr/t);
-      }
-      return w? Math.round(w*10)/10 : null;
-    })(state.parts, state.flavors);
-    var mixTaste = getMixTasteLabel(state.parts, state.flavors);
-
-    var strengthBadge='';
-    if(typeof mixStrength10==='number'){
-      var c=strengthColor(mixStrength10);
-      strengthBadge=`<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border ${c.bg} ${c.text} ${c.border}">${mixStrength10.toFixed(1)}</span>`;
-    }
-
-    var brandsHTML = brands.map(function(b){
-      return `<button data-brand="${b}" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] ${state.activeBrand===b?'bg-slate-100 text-slate-900':'border border-slate-700 hover:bg-slate-800'}">${b}</button>`;
-    }).join('');
-
-    var flavorsHTML = listFlavors.map(function(f){
-      var inMix = state.parts.some(function(p){return p.flavorId===f.id;});
-      var s = getStrength10(f);
-      var c = strengthColor(s);
-      var desc = f.description ? `<div class="text-[11px] text-slate-400 truncate">${escHTML(f.description)}</div>` : '';
-      return `
-        <div class="flex items-center justify-between gap-2 text-sm">
-          <div class="min-w-0">
-            <div class="flex items-center gap-2">
-              <div class="font-medium truncate" title="${escAttr((f.brand||'')+' • '+(f.name||''))}">${escHTML(f.name)} <span class="opacity-60">(${escHTML(f.brand)})</span></div>
-              <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border ${c.bg} ${c.text} ${c.border}">${s.toFixed(1)}</span>
-            </div>
-            ${desc}
-          </div>
-          <button data-add="${f.id}" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] ${inMix?'opacity-50 cursor-not-allowed border border-slate-700':'border border-slate-700 hover:bg-slate-800'}">${inMix?'✓': '+'}</button>
-        </div>`;
-    }).join('');
-
-    var partsHTML = state.parts.map(function(p){
-      var fl = state.flavors.find(function(x){return x.id===p.flavorId;});
-      var name = (fl && fl.name) || p.flavorId;
-      return `
-        <div class="flex items-center gap-2 text-sm">
-          <span class="truncate w-36" title="${escAttr(name)}">${escHTML(name)}</span>
-          <input type="range" min="0" max="100" step="5" class="w-28" value="${safePercent(p.percent)}" data-range="${p.flavorId}"/>
-          <span class="w-10 text-right" data-percent-for="${p.flavorId}">${safePercent(p.percent)}%</span>
-          <button data-remove="${p.flavorId}" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] hover:bg-slate-800">Удалить</button>
-        </div>`;
-    }).join('');
-
-    var guestHTML = state.guestMixes.map(function(m){
-      var c = typeof m.strength10==='number' ? strengthColor(m.strength10) : strengthColor(null);
-      var sBadge = typeof m.strength10==='number' ? `<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border ${c.bg} ${c.text} ${c.border}">${m.strength10.toFixed(1)}</span>` : '';
-      var tBadge = m.taste ? `<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">${escHTML(m.taste)}</span>` : '';
-      var notes = m.notes ? `<div class="text-[12px] opacity-80 mt-1">${escHTML(m.notes)}</div>` : '';
-      var parts = (m.parts||[]).map(function(pp){
-        var fl = state.flavors.find(function(x){return x.id===pp.flavorId;});
-        return `<div class="flex items-center justify-between text-[12px]"><span class="truncate mr-2">${escHTML(fl?fl.name:pp.flavorId)}</span><span class="opacity-70">${safePercent(pp.percent)}%</span></div>`;
-      }).join('');
-      var canDelete = !!(state.user && (m.authorId && String(m.authorId)===String(state.user.id)));
-      var delBtn = canDelete ? `<button data-del="${m.id}" class="ml-auto inline-flex items-center justify-center rounded-xl h-7 px-2 text-[11px] border border-rose-700 text-rose-300 hover:bg-rose-900/40">Удалить</button>` : '';
-      return `
-        <div class="border border-slate-800 rounded-xl p-2 text-sm">
+/* ===== помощники частичного UI ===== */
+function bindAddButtons(){
+  var list = document.getElementById('flavorsList'); if(!list) return;
+  Array.prototype.forEach.call(list.querySelectorAll('[data-add]'), function(btn){
+    btn.addEventListener('click', function(){
+      var id=this.getAttribute('data-add');
+      if(!id) return; if(state.parts.some(function(p){return p.flavorId===id;})) return;
+      var def=Math.min(30, Math.max(0, 100 - percentSum(state.parts)));
+      state.parts = state.parts.concat([{ flavorId:id, percent:def }]);
+      rerenderMixBlock();
+      updateSearchUI();
+    });
+  });
+}
+function attachMixEvents(){
+  // Слайдеры
+  Array.prototype.forEach.call(document.querySelectorAll('[data-range]'), function(sl){
+    sl.addEventListener('input', function(){
+      var id=this.getAttribute('data-range');
+      var req=safePercent(this.value);
+      var newParts = state.parts.map(function(p){ return p.flavorId===id ? { flavorId:p.flavorId, percent: clampPercentForPart(state.parts, id, req) } : p; });
+      var newVal = newParts.find(function(p){return p.flavorId===id;}).percent;
+      state.parts = newParts;
+      if (newVal !== req) { this.value = newVal; }
+      updateMixStatsUI();
+      var span = document.querySelector('[data-percent-for="'+id+'"]');
+      if(span) span.textContent = newVal + '%';
+    });
+  });
+  // Удаление части
+  Array.prototype.forEach.call(document.querySelectorAll('[data-remove]'), function(btn){
+    btn.addEventListener('click', function(){ var id=this.getAttribute('data-remove'); state.parts = state.parts.filter(function(p){return p.flavorId!==id;}); rerenderMixBlock(); });
+  });
+}
+function updateMixStatsUI(){
+  var total = percentSum(state.parts);
+  var totalEl = document.getElementById('mixTotal'); if(totalEl) totalEl.textContent = String(total);
+  var t = percentSum(state.parts); var w=0; if(t>0){ for(var i=0;i<state.parts.length;i++){ var p=state.parts[i]; var pr=safePercent(p.percent); if(pr<=0) continue; var fl=state.flavors.find(function(x){return x && x.id===p.flavorId;}); if(fl) w += getStrength10(fl) * (pr/t); } }
+  var strength = w? Math.round(w*10)/10 : null;
+  var sEl = document.getElementById('mixStrength'); if(sEl){ if(typeof strength==='number'){ var c=strengthColor(strength); sEl.innerHTML = `<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border ${c.bg} ${c.text} ${c.border}">${strength.toFixed(1)}</span>`; } else { sEl.innerHTML=''; } }
+  var taste = getMixTasteLabel(state.parts, state.flavors);
+  var tEl = document.getElementById('mixTaste'); if(tEl){ tEl.innerHTML = taste ? (`<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">${escHTML(taste)}</span>`) : ''; }
+}
+function rerenderMixBlock(){
+  var container = document.getElementById('mixBlock'); if(!container) return;
+  var total = percentSum(state.parts);
+  var strength = (function(){ var t=percentSum(state.parts); if(!t) return null; var w=0; for(var i=0;i<state.parts.length;i++){ var p=state.parts[i]; var pr=safePercent(p.percent); if(pr<=0) continue; var fl=state.flavors.find(function(x){return x && x.id===p.flavorId;}); if(!fl) continue; w+=getStrength10(fl)*(pr/t);} return w?Math.round(w*10)/10:null; })();
+  var strengthBadge=''; if(typeof strength==='number'){ var c=strengthColor(strength); strengthBadge=`<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border ${c.bg} ${c.text} ${c.border}">${strength.toFixed(1)}</span>`; }
+  var mixTaste = getMixTasteLabel(state.parts, state.flavors);
+  var partsHTML = state.parts.map(function(p){ var fl = state.flavors.find(function(x){return x.id===p.flavorId;}); var name=(fl && fl.name)||p.flavorId; return `
+    <div class="flex items-center gap-2 text-sm">
+      <span class="truncate w-36" title="${escAttr(name)}">${escHTML(name)}</span>
+      <input type="range" min="0" max="100" step="5" class="w-28" value="${safePercent(p.percent)}" data-range="${p.flavorId}"/>
+      <span class="w-10 text-right" data-percent-for="${p.flavorId}">${safePercent(p.percent)}%</span>
+      <button data-remove="${p.flavorId}" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] hover:bg-slate-800">Удалить</button>
+    </div>`; }).join('');
+  var html = `
+    <div class="px-3 pt-3"><div class="text-xs font-semibold">Микс</div></div>
+    <div class="p-3 space-y-2">
+      ${state.parts.length===0?'<div class="text-[12px] text-slate-400">Добавьте вкусы из списка</div>':''}
+      ${partsHTML}
+      <div class="flex items-center justify-between text-[12px]">
+        <span>Итог: <b id="mixTotal">${total}</b>%</span>
+        <div class="flex items-center gap-2"><span id="mixStrength">${strengthBadge}</span><span id="mixTaste">${mixTaste?(`<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">${escHTML(mixTaste)}</span>`):''}</span></div>
+      </div>
+    </div>`;
+  container.innerHTML = html;
+  attachMixEvents();
+}
+function updateSearchUI(){
+  var meta = document.getElementById('flavorsMeta');
+  var list = document.getElementById('flavorsList');
+  if(!meta || !list) return;
+  var flavorsOfActive = (state.flavors||[]).filter(function(f){return normalizeBrand(f.brand)===state.activeBrand;});
+  var searchedFlavors = filterFlavorsByQueryAdv(state.flavors, state.search);
+  var listFlavors = state.search ? searchedFlavors : flavorsOfActive;
+  meta.textContent = state.search ? ('Найдено: '+listFlavors.length) : (state.activeBrand ? ('Вкусы бренда: '+state.activeBrand) : '');
+  list.innerHTML = listFlavors.map(function(f){
+    var inMix = state.parts.some(function(p){return p.flavorId===f.id;});
+    var s = getStrength10(f); var c = strengthColor(s);
+    var desc = f.description ? `<div class="text-[11px] text-slate-400 truncate">${escHTML(f.description)}</div>` : '';
+    return `
+      <div class="flex items-center justify-between gap-2 text-sm">
+        <div class="min-w-0">
           <div class="flex items-center gap-2">
-            <div class="font-semibold truncate">${escHTML(m.title)}</div>
-            ${sBadge}
-            ${tBadge}
-            ${delBtn}
+            <div class="font-medium truncate" title="${escAttr((f.brand||'')+' • '+(f.name||''))}">${escHTML(f.name)} <span class="opacity-60">(${escHTML(f.brand)})</span></div>
+            <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border ${c.bg} ${c.text} ${c.border}">${s.toFixed(1)}</span>
           </div>
-          <div class="text-[11px] text-slate-400">микс от ${escHTML(m.author||'Гость')}</div>
-          ${notes}
-          <div class="mt-1 space-y-0.5">${parts}</div>
-        </div>`;
-    }).join('');
-
-    const headerHTML = `
-      <header class="flex items-center justify-between">
-        <div class="flex items-center gap-2 min-w-0">${LogoSVG()}<h1 class="text-lg font-bold truncate">Hookah Mixes</h1></div>
-        <div class="flex items-center gap-2">
-          <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">Здравствуйте, ${escHTML(state.user && state.user.name ? state.user.name : 'Гость')}</span>
-          <button data-tab="builder" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] ${state.activeTab==='builder'?'bg-slate-100 text-slate-900':'border border-slate-700 hover:bg-slate-800'}">Конструктор</button>
-          <button data-tab="guest" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] ${state.activeTab==='guest'?'bg-slate-100 text-slate-900':'border border-slate-700 hover:bg-slate-800'}">Миксы гостей</button>
-          <button data-tab="admin" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] ${state.activeTab==='admin'?'bg-slate-100 text-slate-900':'border border-slate-700 hover:bg-slate-800'}">Админ</button>
+          ${desc}
         </div>
-      </header>`;
-
-    const brandsBlock = `
-      <div class="rounded-2xl border border-slate-800 bg-slate-900">
-        <div class="px-3 pt-3"><div class="text-xs font-semibold">Бренды</div></div>
-        <div class="p-3 space-y-2">
-          <div class="space-y-2">
-            <input id="search" placeholder="Поиск вкуса по названию…" value="${escAttr(state.search||'')}" class="h-9 w-full rounded-xl border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-400 px-3 text-sm outline-none focus:ring-2 focus:ring-slate-600" />
-            <div class="grid grid-cols-2 gap-1">${brandsHTML}${brands.length===0?'<div class="text-[12px] text-slate-400">Нет брендов (добавьте вкусы)</div>':''}</div>
-          </div>
-          <div id="flavorsMeta" class="text-[11px] text-slate-400">${state.search ? `Найдено: ${listFlavors.length}` : (state.activeBrand ? `Вкусы бренда: ${escHTML(state.activeBrand)}` : '')}</div>
-          <div id="flavorsList">${flavorsHTML}${listFlavors.length===0?`<div class="text-[12px] text-slate-400">${state.search?'Ничего не найдено':'Нет вкусов для этого бренда'}</div>`:''}</div>
-        </div>
+        <button data-add="${f.id}" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] ${inMix?'opacity-50 cursor-not-allowed border border-slate-700':'border border-slate-700 hover:bg-slate-800'}">${inMix?'✓':'+'}</button>
       </div>`;
+  }).join('') + (listFlavors.length===0?(`<div class="text-[12px] text-slate-400">${state.search?'Ничего не найдено':'Нет вкусов для этого бренда'}</div>`):'');
+  bindAddButtons();
+}
 
-    const mixBlock = `
-      <div class="rounded-2xl border border-slate-800 bg-slate-900" id="mixBlock">
-        <div class="px-3 pt-3"><div class="text-xs font-semibold">Микс</div></div>
-        <div class="p-3 space-y-2">
-          ${state.parts.length===0?'<div class="text-[12px] text-slate-400">Добавьте вкусы из списка</div>':''}
-          ${partsHTML}
-          <div class="flex items-center justify-between text-[12px]">
-            <span>Итог: <b id="mixTotal">${total}</b>%</span>
-            <div class="flex items-center gap-2">
-              <span id="mixStrength">${strengthBadge}</span>
-              <span id="mixTaste">${mixTaste?(`<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">${escHTML(mixTaste)}</span>`):''}</span>
-            </div>
-          </div>
-        </div>
-      </div>`;
+/* ========================= СТАРТ ========================= */
+(async function start(){
+  try{ initAuth(); await detectLogo(); await loadFlavors(); await loadGuestMixes(); render(); }
+  catch(e){ console.error(e); }
+})();
 
-    const titleBlock = `
-      <div class="rounded-2xl border border-slate-800 bg-slate-900">
-        <div class="px-3 pt-3"><div class="text-xs font-semibold">Название и описание</div></div>
-        <div class="p-3 space-y-2">
-          <input id="title" placeholder="Название микса" value="${escAttr(state.title||'')}" class="h-9 w-full rounded-xl border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-400 px-3 text-sm outline-none focus:ring-2 focus:ring-slate-600" />
-          <textarea id="notes" placeholder="Описание / заметки…" class="min-h-[72px] w-full rounded-xl border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-400 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-600">${escHTML(state.notes||'')}</textarea>
-          <div class="flex gap-2">
-            <button id="reset" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-slate-800">Сброс</button>
-            <button id="save" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] ${isMixValid(state.parts,state.title)?'bg-slate-100 text-slate-900':'opacity-50 cursor-not-allowed border border-slate-700'}">Сохранить</button>
-          </div>
-        </div>
-      </div>`;
-
-    const guestBlock = `
-      <div class="rounded-2
+/* ========================= SMOKE TESTS ========================= */
+;(function(){ try{
+  console.group('HookahMixes – smoke tests');
+  {var p1=[{flavorId:'a',percent:60},{flavorId:'b',percent:40}]; console.assert(percentSum(p1)===100,'sum=100');}
+  {var p2=[{flavorId:'a',percent:60},{flavorId:'b',percent:30}]; console.assert(percentSum(p2)===90,'sum=90');}
+  {var ok=isMixValid([{flavorId:'a',percent:60},{flavorId:'b',percent:40}], 'Mix'); console.assert(ok===true,'valid=100+title');}
+  {var cl=clampPercentForPart([{flavorId:'a',percent:90},{flavorId:'b',percent:0}], 'b', 20); console.assert(cl===10,'clamp remaining');}
+  {var cl2=clampPercentForPart([{flavorId:'a',percent:50}], 'a', 150); console.assert(cl2===100,'clamp max');}
+  {var r=filterFlavorsByQueryAdv([{id:'1',name:'Mango'},{id:'2',name:'Ice'},{id:'3',name:'Ice Mango'}], 'mango'); console.assert(r.length===2,'search across brands');}
+  {var t=getMixTasteLabel([],[]); console.assert(t===null,'taste null');}
+  {var cl3=clampPercentForPart([{flavorId:'a',percent:10}], 'a', -5); console.assert(cl3===0,'clamp to 0');}
+  console.groupEnd();
+}catch(e){ console.error('Smoke tests error', e); }})();
+</script>
+</body>
+</html>
