@@ -91,7 +91,7 @@
       const w=safePercent(p&&p.percent); if(w<=0)continue;
       const fl=flavors.find(f=>f&&f.id===(p&&p.flavorId)); if(!fl)continue;
       if(fl.tags) for(const t of fl.tags) add(t,w);
-      if(fl.name) for(const tk of String(fl.name).toLowerCase().split(/[^a-zа-я0-9]+/i)) add(tk=Math.max(1,w*0.6));
+      if(fl.name) for(const tk of String(fl.name).toLowerCase().split(/[^a-zа-я0-9]+/i)) add(tk,Math.max(1,w*0.6));
       if(fl.description) for(const tk of String(fl.description).toLowerCase().split(/[^a-zа-я0-9]+/i)) add(tk,Math.max(1,w*0.3));
     }
     if(!scores.size)return null;
@@ -99,6 +99,25 @@
   };
   const escAttr=(s)=>String(s).replace(/"/g,'&quot;');
   const escHTML=(s)=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  // Поиск по вкусам (имя + теги + описание) с RU/EN синонимами
+  function filterFlavorsByQueryAdv(flavors, query){
+    function normalize(s){ return String(s||'').toLowerCase().replace(/ё/g,'е').trim(); }
+    var q = normalize(query);
+    if(!q) return flavors||[];
+    var SYN = {"киви":["kiwi"],"банан":["banana"],"манго":["mango"],"лимон":["lemon","citrus"],"апельсин":["orange"],"грейпфрут":["grapefruit"],"арбуз":["watermelon"],"дыня":["melon"],"виноград":["grape"],"персик":["peach"],"яблок":["apple"],"маракуй":["passion"],"клубник":["strawberry"],"черник":["blueberry"],"мята":["mint"],"лед":["ice","freeze","frost","cold"],"ваниль":["vanilla"],"печень":["cookie","bisc"],"шоколад":["choco","chocolate"],"кисл":["sour"],"слад":["sweet"]};
+    var tokens = q.split(/\s+/).filter(Boolean);
+    function textOf(f){ return normalize([f && f.name, f && f.description, Array.isArray(f && f.tags)? (f.tags.join(' ')) : '' ].join(' ')); }
+    return (flavors||[]).filter(function(f){
+      var text = textOf(f);
+      return tokens.every(function(t){
+        var vars = new Set([t]);
+        Object.entries(SYN).forEach(function(pair){ var ru=pair[0], arr=pair[1]; if(t.indexOf(ru) !== -1){ arr.forEach(function(v){ vars.add(v); }); } });
+        var hit = false; vars.forEach(function(v){ if(text.indexOf(v) !== -1) hit = true; });
+        return hit;
+      });
+    });
+  }
 
   // Нормализация записи вкуса (для локального JSON / API с вариациями полей)
   function normalizeFlavorRecord(f){
@@ -174,12 +193,10 @@
       return false;
     };
 
-    // Порядок попыток локальных путей (учитываем разные конфигурации раздачи public/)
     if (await tryLocalPath('/hookah_flavors.json')) return;
     if (await tryLocalPath('./hookah_flavors.json')) return;
     if (await tryLocalPath('/public/hookah_flavors.json')) return;
 
-    // Фолбэк на API
     try{
       const r = await api('/api/flavors');
       if (r.ok){
@@ -227,23 +244,18 @@
 
   // ========================= УДАЛЕНИЕ ВКУСА (устойчивое) =====================
   async function deleteFlavorOnServer(id, token){
-    // 1) основной путь — DELETE /api/flavors/:id
     const try1 = await api('/api/flavors/'+encodeURIComponent(id), {
       method: 'DELETE',
       headers: { 'X-Admin-Token': token||'' }
     }).catch(()=>null);
-
     if (try1 && (try1.ok || try1.status===204)) return true;
 
-    // Если сервер вернул 404/405 или HTML-страницу об ошибке — пробуем альтернативы
-    // 2) DELETE /api/flavors?id=...
     const try2 = await api('/api/flavors?id='+encodeURIComponent(id), {
       method: 'DELETE',
       headers: { 'X-Admin-Token': token||'' }
     }).catch(()=>null);
     if (try2 && (try2.ok || try2.status===204)) return true;
 
-    // 3) POST /api/flavors/delete  {id}
     const try3 = await api('/api/flavors/delete', {
       method: 'POST',
       headers: { 'X-Admin-Token': token||'' },
@@ -251,16 +263,14 @@
     }).catch(()=>null);
     if (try3 && (try3.ok || try3.status===204)) return true;
 
-    // 4) POST /api/flavors/:id?_method=DELETE
     const try4 = await api('/api/flavors/'+encodeURIComponent(id)+'?_method=DELETE', {
       method: 'POST',
       headers: { 'X-Admin-Token': token||'' }
     }).catch(()=>null);
     if (try4 && (try4.ok || try4.status===204)) return true;
 
-    // ничего не сработало
     const text = try1 ? await try1.text().catch(()=> '') : '';
-    throw new Error('Не удалось удалить вкус. Сервер вернул: ' + (text|| (try1 && try1.status)));
+    throw new Error('Не удалось удалить вкус. Сервер ответил: ' + (text || (try1 && try1.status)));
   }
 
   // ========================= РЕНДЕР =========================================
@@ -488,7 +498,6 @@
     root.innerHTML = bodyHTML;
 
     // ===== События =====
-    // Переключение табов
     Array.prototype.forEach.call(root.querySelectorAll('[data-tab]'), function(btn){
       btn.addEventListener('click', async function(){
         state.activeTab = this.getAttribute('data-tab');
@@ -496,24 +505,18 @@
         render();
       });
     });
-    // Переключение бренда
     Array.prototype.forEach.call(root.querySelectorAll('[data-brand]'), function(btn){
       btn.addEventListener('click', function(){ state.activeBrand = this.getAttribute('data-brand'); state.search=''; render(); });
     });
-    // Поиск
     var search = root.querySelector('#search');
     if(search){ search.addEventListener('input', function(e){ state.search = e.target.value; updateSearchUI(); }); }
-    // Кнопки добавления вкусов
     bindAddButtons();
-    // Элементы микса (слайдеры/удаление)
     attachMixEvents();
 
-    // Поля формы
     var titleEl=root.querySelector('#title'); if(titleEl){ titleEl.addEventListener('input', function(e){ state.title = e.target.value; }); }
     var notesEl=root.querySelector('#notes'); if(notesEl){ notesEl.addEventListener('input', function(e){ state.notes = e.target.value; }); }
     var resetEl=root.querySelector('#reset'); if(resetEl){ resetEl.addEventListener('click', function(){ state.title=''; state.notes=''; state.parts=[]; render(); }); }
 
-    // Сохранение микса
     var saveEl=root.querySelector('#save');
     if(saveEl){
       saveEl.addEventListener('click', async function(){
@@ -544,7 +547,6 @@
       });
     }
 
-    // Удаление микса (только свой)
     root.querySelectorAll('[data-del]').forEach(function(btn){
       btn.addEventListener('click', async function(){
         const id = btn.getAttribute('data-del');
@@ -667,7 +669,6 @@
     }).join('') || '<div class="text-[12px] text-slate-400">Пока нет вкусов</div>';
     list.innerHTML = html;
 
-    // обработчики удаления вкуса
     root.querySelectorAll('[data-del-flavor]').forEach(function(btn){
       btn.addEventListener('click', async function(){
         var id = btn.getAttribute('data-del-flavor');
@@ -714,7 +715,6 @@
   }
 
   function attachMixEvents(){
-    // Слайдеры
     Array.prototype.forEach.call(document.querySelectorAll('[data-range]'), function(sl){
       sl.addEventListener('input', function(){
         var id=this.getAttribute('data-range');
@@ -728,7 +728,6 @@
         if(span) span.textContent = newVal + '%';
       });
     });
-    // Удаление части из микса
     Array.prototype.forEach.call(document.querySelectorAll('[data-remove]'), function(btn){
       btn.addEventListener('click', function(){ var id=this.getAttribute('data-remove'); state.parts = state.parts.filter(function(p){return p.flavorId!==id;}); rerenderMixBlock(); });
     });
@@ -799,7 +798,6 @@
       await loadGuestMixes();
       render();
 
-      // Поллинг миксов, чтобы видеть чужие изменения
       setInterval(async function(){
         const before = JSON.stringify(state.guestMixes?.map(function(m){return m.id;}));
         await loadGuestMixes();
