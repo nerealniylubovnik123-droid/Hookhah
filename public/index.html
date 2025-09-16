@@ -8,8 +8,9 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <style>body{background:#020617}</style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+  <!-- Ранний дружелюбный экран ошибок -->
   <script>
-    // Дружелюбный экран ошибок
     (function(){
       function showFatal(msg){
         var root = document.getElementById('root');
@@ -56,8 +57,7 @@
   };
   const uuidv4=()=>{let dt=Date.now();if(typeof performance!='undefined'&&typeof performance.now==='function')dt+=performance.now();return'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=(dt+Math.random()*16)%16|0;dt=Math.floor(dt/16);const v=c==='x'?r:(r&0x3)|0x8;return v.toString(16);});};
   const normalizeBrand=(b)=>(b||'').trim();
-  // добавил Overdose и оставил Overdos, чтобы покрыть оба варианта написания
-  const BRAND_STRENGTH10_DEFAULTS={Darkside:5,"Black Burn":6,BlackBurn:6,MustHave:5,Overdos:6,Overdose:6,Bonch:7,Starline:3};
+  const BRAND_STRENGTH10_DEFAULTS={Darkside:5,"Black Burn":6,BlackBurn:6,MustHave:5,Overdose:6,Bonch:7,Starline:3}; // Overdose
   const getStrength10=(f)=>{
     if(!f) return 5;
     if(typeof f.strength10==='number'&&Number.isFinite(f.strength10)) return Math.max(1,Math.min(10,f.strength10));
@@ -100,7 +100,7 @@
   const escAttr=(s)=>String(s).replace(/"/g,'&quot;');
   const escHTML=(s)=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-  // --- Поиск по вкусам (имя + теги + описание) с RU/EN синонимами
+  // Поиск по вкусам (имя + теги + описание) с RU/EN синонимами
   function filterFlavorsByQueryAdv(flavors, query){
     function normalize(s){ return String(s||'').toLowerCase().replace(/ё/g,'е').trim(); }
     var q = normalize(query);
@@ -120,7 +120,7 @@
   }
 
   // ========================= СОСТОЯНИЕ ======================================
-  const urlParams = new URLSearchParams(location.search);
+  const qp = new URLSearchParams(location.search);
   const state={
     flavors:[],
     activeBrand:"",
@@ -133,10 +133,11 @@
     user:null,
     showSplash:false,
     logoUrl:null,
-    adminToken: (localStorage.getItem('admin_token')||""),
-    showAdminUnlock: urlParams.get('admin') === '1' // показать панель ввода токена только по ?admin=1
+    adminToken: (localStorage.getItem('admin_token') || ""),
+    adminPrompt: qp.get('admin') === '1' // показать блок ввода токена при ?admin=1
   };
-  const isAdmin = () => !!state.adminToken;
+
+  function isAdmin(){ return !!(state.adminToken && state.adminToken.length>=6); }
 
   // ========================= ИНИЦИАЛИЗАЦИЯ ===================================
   function initAuth(){
@@ -154,72 +155,19 @@
     state.showSplash = true;
   }
 
-  // НАДЁЖНАЯ ЗАГРУЗКА ВКУСОВ: API → локальный файл → встроенный список
   async function loadFlavors(){
-    async function fetchJsonUtf8(url){
-      const res = await fetch(url, { cache:'no-store' });
-      if (!res.ok) throw new Error('HTTP '+res.status+' for '+url);
-      try {
-        const buf = await res.arrayBuffer();
-        const txt = new TextDecoder('utf-8').decode(buf);
-        return JSON.parse(txt);
-      } catch(e){
-        return await res.json();
-      }
-    }
-
-    // 1) API Render
     try{
       const r = await api('/api/flavors');
       if (r.ok){
         const data = await r.json();
-        if (Array.isArray(data) && data.length){
+        if (Array.isArray(data)){
           state.flavors = data;
           state.activeBrand = state.activeBrand || (data[0] && data[0].brand) || "";
           return;
-        } else {
-          console.warn('API /api/flavors вернул пусто или не массив — пробуем локальный файл');
-        }
-      } else {
-        console.warn('API /api/flavors статус', r.status, '— пробуем локальный файл');
-      }
-    }catch(e){
-      console.warn('API /api/flavors ошибка:', e);
-    }
-
-    // 2) Локальный hookah_flavors.json рядом с HTML
-    try{
-      const local = await fetchJsonUtf8('./hookah_flavors.json');
-      if (Array.isArray(local) && local.length){
-        state.flavors = local.map(x => ({
-          id: String(x.id || ((x.brand||'')+'-'+(x.name||''))).trim(),
-          brand: String(x.brand||'').trim(),
-          name: String(x.name||'').trim(),
-          description: x.description != null ? String(x.description) : undefined,
-          tags: Array.isArray(x.tags) ? x.tags :
-                (typeof x.tags === 'string' ? x.tags.split(/[;,|]/).map(s=>s.trim()).filter(Boolean) : undefined),
-          strength10: typeof x.strength10 === 'number' ? x.strength10 : undefined
-        })).filter(x => x.id && x.brand && x.name);
-
-        if (state.flavors.length){
-          state.activeBrand = state.activeBrand || state.flavors[0].brand;
-          console.info('Загружены вкусы из локального hookah_flavors.json:', state.flavors.length);
-          return;
         }
       }
-      console.warn('Локальный hookah_flavors.json пуст/некорректен — используем дефолт');
-    }catch(e){
-      console.warn('Ошибка чтения локального hookah_flavors.json:', e);
-    }
-
-    // 3) Минимальный встроенный набор
-    state.flavors = [
-      { id:'musthave-ice-lemon', brand:'MustHave', name:'Ice Lemon', tags:['цитрус','лед'], strength10:5 },
-      { id:'darkside-supernova', brand:'Darkside', name:'Supernova', tags:['лед','мята'], strength10:5 },
-      { id:'black-burn-mango', brand:'Black Burn', name:'Mango', tags:['фрукт','сладкий'], strength10:6 },
-    ];
-    state.activeBrand = state.activeBrand || 'MustHave';
-    console.info('Используем встроенные вкусы по умолчанию');
+    }catch(_){}
+    state.flavors = [];
   }
 
   async function loadGuestMixes(){
@@ -243,12 +191,7 @@
   function LogoSVG(cls){
     return (
       '<svg class="'+(cls||'w-8 h-8')+'" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
-      '  <defs>' +
-      '    <linearGradient id="g" x1="0" x2="1">' +
-      '      <stop offset="0" stop-opacity="1" stop-color="#38bdf8"/>' +
-      '      <stop offset="1" stop-opacity="1" stop-color="#a78bfa"/>' +
-      '    </linearGradient>' +
-      '  </defs>' +
+      '  <defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-opacity="1" stop-color="#38bdf8"/><stop offset="1" stop-opacity="1" stop-color="#a78bfa"/></linearGradient></defs>' +
       '  <circle cx="32" cy="32" r="30" fill="url(#g)" opacity="0.2"/>' +
       '  <path d="M32 10c-4 4-4 8 0 12 4 4 4 8 0 12-4 4-4 8 0 12" stroke="#c7d2fe" stroke-width="3" fill="none" stroke-linecap="round"/>' +
       '  <circle cx="32" cy="50" r="3" fill="#c7d2fe"/>' +
@@ -266,39 +209,19 @@
       return;
     }
 
+    // Приветственный экран
     if(state.showSplash){
       const logoBlock = state.logoUrl ? '<img src="'+state.logoUrl+'" alt="logo" class="w-24 h-24 rounded-xl object-cover shadow"/>' : (LogoSVG('w-24 h-24'));
-      // мини-панель разблокировки админки (видна только при ?admin=1 и если токен ещё не сохранён)
-      const adminUnlock = (!isAdmin() && state.showAdminUnlock)
-        ? ('<div class="text-left text-xs space-y-2 border-t border-slate-800 pt-3">' +
-           '  <div class="font-semibold">Разблокировать админку</div>' +
-           '  <input id="admTokenSplash" class="h-9 w-full rounded-xl border border-slate-700 bg-slate-900 text-slate-100 px-3 text-sm" placeholder="Вставьте ADMIN_TOKEN" />' +
-           '  <button id="admSaveSplash" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] bg-slate-100 text-slate-900 hover:bg-white">Сохранить токен</button>' +
-           '  <div id="admSplashMsg" class="text-[11px] text-slate-400"></div>' +
-           '</div>')
-        : '';
-
       root.innerHTML =
         '<div class="min-h-[100svh] bg-slate-950 text-slate-100 flex items-center justify-center p-6">' +
         '  <div class="w-full max-w-sm text-center shadow rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4">' +
         '    <div class="flex items-center justify-center">'+logoBlock+'</div>' +
         '    <div class="text-lg font-bold">готовы стать кальянным миксологом</div>' +
         '    <button id="goApp" class="inline-flex items-center justify-center rounded-xl h-10 px-4 text-[14px] bg-slate-100 text-slate-900 hover:bg-white">поехали</button>' +
-             adminUnlock +
         '  </div>' +
         '</div>';
       var go=document.getElementById('goApp');
       if(go){ go.addEventListener('click', function(){ state.showSplash=false; render(); }); }
-
-      var admSave=document.getElementById('admSaveSplash');
-      if(admSave){
-        admSave.addEventListener('click', function(){
-          var v=(document.getElementById('admTokenSplash')||{}).value||'';
-          try{ localStorage.setItem('admin_token', v); }catch(_){}
-          state.adminToken = v || '';
-          var m=document.getElementById('admSplashMsg'); if(m){ m.textContent='Токен сохранён. Кнопка «Админ» станет видна после входа.'; }
-        });
-      }
       return;
     }
 
@@ -337,14 +260,14 @@
       var desc = f.description ? '<div class="text-[11px] text-slate-400 truncate">'+escHTML(f.description)+'</div>' : '';
       return (
         '<div class="flex items-center justify-between gap-2 text-sm">' +
-        '  <div class="min-w-0">' +
-        '    <div class="flex items-center gap-2">' +
-        '      <div class="font-medium truncate" title="'+escAttr((f.brand||'')+' • '+(f.name||''))+'">'+escHTML(f.name)+' <span class="opacity-60">('+escHTML(f.brand)+')</span></div>' +
-        '      <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+s.toFixed(1)+'</span>' +
-        '    </div>' +
-             desc +
-        '  </div>' +
-        '  <button data-add="'+escAttr(f.id)+'" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] '+(inMix?'opacity-50 cursor-not-allowed border border-slate-700':'border border-slate-700 hover:bg-slate-800')+'">'+(inMix?'✓':'+')+'</button>' +
+          '<div class="min-w-0">' +
+            '<div class="flex items-center gap-2">' +
+              '<div class="font-medium truncate" title="'+escAttr((f.brand||'')+' • '+(f.name||''))+'">'+escHTML(f.name)+' <span class="opacity-60">('+escHTML(f.brand)+')</span></div>' +
+              '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+s.toFixed(1)+'</span>' +
+            '</div>' +
+            desc +
+          '</div>' +
+          '<button data-add="'+escAttr(f.id)+'" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] '+(inMix?'opacity-50 cursor-not-allowed border border-slate-700':'border border-slate-700 hover:bg-slate-800')+'">'+(inMix?'✓':'+')+'</button>' +
         '</div>'
       );
     }).join('');
@@ -354,19 +277,17 @@
       var name = (fl && fl.name) || p.flavorId;
       return (
         '<div class="flex items-center gap-2 text-sm">' +
-        '  <span class="truncate w-36" title="'+escAttr(name)+'">'+escHTML(name)+'</span>' +
-        '  <input type="range" min="0" max="100" step="5" class="w-28" value="'+safePercent(p.percent)+'" data-range="'+escAttr(p.flavorId)+'"/>' +
-        '  <span class="w-10 text-right" data-percent-for="'+escAttr(p.flavorId)+'">'+safePercent(p.percent)+'%</span>' +
-        '  <button data-remove="'+escAttr(p.flavorId)+'" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] hover:bg-slate-800">Удалить</button>' +
+          '<span class="truncate w-36" title="'+escAttr(name)+'">'+escHTML(name)+'</span>' +
+          '<input type="range" min="0" max="100" step="5" class="w-28" value="'+safePercent(p.percent)+'" data-range="'+escAttr(p.flavorId)+'"/>' +
+          '<span class="w-10 text-right" data-percent-for="'+escAttr(p.flavorId)+'">'+safePercent(p.percent)+'%</span>' +
+          '<button data-remove="'+escAttr(p.flavorId)+'" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] hover:bg-slate-800">Удалить</button>' +
         '</div>'
       );
     }).join('');
 
     var guestHTML = state.guestMixes.map(function(m){
       var c = typeof m.strength10==='number' ? strengthColor(m.strength10) : strengthColor(null);
-      var sBadge = (typeof m.strength10==='number')
-        ? '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+m.strength10.toFixed(1)+'</span>'
-        : '';
+      var sBadge = typeof m.strength10==='number' ? '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+m.strength10.toFixed(1)+'</span>' : '';
       var tBadge = m.taste ? '<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">'+escHTML(m.taste)+'</span>' : '';
       var notes = m.notes ? '<div class="text-[12px] opacity-80 mt-1">'+escHTML(m.notes)+'</div>' : '';
       var parts = (m.parts||[]).map(function(pp){
@@ -377,184 +298,132 @@
       var delBtn = canDelete ? '<button data-del="'+escAttr(m.id)+'" class="ml-auto inline-flex items-center justify-center rounded-xl h-7 px-2 text-[11px] border border-rose-700 text-rose-300 hover:bg-rose-900/40">Удалить</button>' : '';
       return (
         '<div class="border border-slate-800 rounded-xl p-2 text-sm">' +
-        '  <div class="flex items-center gap-2">' +
-        '    <div class="font-semibold truncate">'+escHTML(m.title)+'</div>' +
-             sBadge + tBadge + delBtn +
-        '  </div>' +
-        '  <div class="text-[11px] text-slate-400">микс от '+escHTML(m.author||'Гость')+'</div>' +
-             notes +
-        '  <div class="mt-1 space-y-0.5">'+parts+'</div>' +
+          '<div class="flex items-center gap-2">' +
+            '<div class="font-semibold truncate">'+escHTML(m.title)+'</div>' +
+            sBadge + tBadge + delBtn +
+          '</div>' +
+          '<div class="text-[11px] text-slate-400">микс от '+escHTML(m.author||'Гость')+'</div>' +
+          notes +
+          '<div class="mt-1 space-y-0.5">'+parts+'</div>' +
         '</div>'
       );
     }).join('');
 
     const headerHTML =
       '<header class="flex items-center justify-between">' +
-      '  <div class="flex items-center gap-2 min-w-0">'+LogoSVG()+'<h1 class="text-lg font-bold truncate">Hookah Mixes</h1></div>' +
-      '  <div class="flex items-center gap-2">' +
-      '    <span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">Здравствуйте, '+escHTML(state.user && state.user.name ? state.user.name : 'Гость')+'</span>' +
-      '    <button data-tab="builder" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] '+(state.activeTab==='builder'?'bg-slate-100 text-slate-900':'border border-slate-700 hover:bg-slate-800')+'">Конструктор</button>' +
-      '    <button data-tab="guest" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] '+(state.activeTab==='guest'?'bg-slate-100 text-slate-900':'border border-slate-700 hover:bg-slate-800')+'">Миксы гостей</button>' +
-           (isAdmin() ? ('<button data-tab="admin" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] '+(state.activeTab==='admin'?'bg-slate-100 text-slate-900':'border border-slate-700 hover:bg-slate-800')+'">Админ</button>') : '') +
-      '  </div>' +
+        '<div class="flex items-center gap-2 min-w-0">'+LogoSVG()+'<h1 class="text-lg font-bold truncate">Hookah Mixes</h1></div>' +
+        '<div class="flex items-center gap-2">' +
+          '<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">Здравствуйте, '+escHTML(state.user && state.user.name ? state.user.name : 'Гость')+'</span>' +
+          '<button data-tab="builder" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] '+(state.activeTab==='builder'?'bg-slate-100 text-slate-900':'border border-slate-700 hover:bg-slate-800')+'">Конструктор</button>' +
+          '<button data-tab="guest" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] '+(state.activeTab==='guest'?'bg-slate-100 text-slate-900':'border border-slate-700 hover:bg-slate-800')+'">Миксы гостей</button>' +
+          (isAdmin()?('<button data-tab="admin" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] '+(state.activeTab==='admin'?'bg-slate-100 text-slate-900':'border border-slate-700 hover:bg-slate-800')+'">Админ</button>'):'') +
+        '</div>' +
       '</header>';
 
     const brandsBlock =
       '<div class="rounded-2xl border border-slate-800 bg-slate-900">' +
-      '  <div class="px-3 pt-3"><div class="text-xs font-semibold">Бренды</div></div>' +
-      '  <div class="p-3 space-y-2">' +
-      '    <div class="space-y-2">' +
-      '      <input id="search" placeholder="Поиск вкуса по названию…" value="'+escAttr(state.search||'')+'" class="h-9 w-full rounded-xl border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-400 px-3 text-sm outline-none focus:ring-2 focus:ring-slate-600" />' +
-      '      <div class="grid grid-cols-2 gap-1">'+brandsHTML+(brands.length===0?'<div class="text-[12px] text-slate-400">Нет брендов (добавьте вкусы)</div>':'')+'</div>' +
-      '    </div>' +
-      '    <div id="flavorsMeta" class="text-[11px] text-slate-400">'+(state.search ? ('Найдено: '+listFlavors.length) : (state.activeBrand ? ('Вкусы бренда: '+escHTML(state.activeBrand)) : ''))+'</div>' +
-      '    <div id="flavorsList">'+flavorsHTML+(listFlavors.length===0?('<div class="text-[12px] text-slate-400">'+(state.search?'Ничего не найдено':'Нет вкусов для этого бренда')+'</div>'):'')+'</div>' +
-      '  </div>' +
+        '<div class="px-3 pt-3"><div class="text-xs font-semibold">Бренды</div></div>' +
+        '<div class="p-3 space-y-2">' +
+          '<div class="space-y-2">' +
+            '<input id="search" placeholder="Поиск вкуса по названию…" value="'+escAttr(state.search||'')+'" class="h-9 w-full rounded-xl border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-400 px-3 text-sm outline-none focus:ring-2 focus:ring-slate-600" />' +
+            '<div class="grid grid-cols-2 gap-1">'+brandsHTML+(brands.length===0?'<div class="text-[12px] text-slate-400">Нет брендов (добавьте вкусы)</div>':'')+'</div>' +
+          '</div>' +
+          '<div id="flavorsMeta" class="text-[11px] text-slate-400">'+(state.search ? ('Найдено: '+listFlavors.length) : (state.activeBrand ? ('Вкусы бренда: '+escHTML(state.activeBrand)) : ''))+'</div>' +
+          '<div id="flavorsList">'+flavorsHTML+(listFlavors.length===0?('<div class="text-[12px] text-slate-400">'+(state.search?'Ничего не найдено':'Нет вкусов для этого бренда')+'</div>'):'')+'</div>' +
+        '</div>' +
       '</div>';
 
     const mixBlock =
       '<div class="rounded-2xl border border-slate-800 bg-slate-900" id="mixBlock">' +
-      '  <div class="px-3 pt-3"><div class="text-xs font-semibold">Микс</div></div>' +
-      '  <div class="p-3 space-y-2">' +
-           (state.parts.length===0?'<div class="text-[12px] text-slate-400">Добавьте вкусы из списка</div>':'') +
-           partsHTML +
-      '    <div class="flex items-center justify-between text-[12px]">' +
-      '      <span>Итог: <b id="mixTotal">'+total+'</b>%</span>' +
-      '      <div class="flex items-center gap-2">' +
-      '        <span id="mixStrength">'+strengthBadge+'</span>' +
-      '        <span id="mixTaste">'+(mixTaste?('<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">'+escHTML(mixTaste)+'</span>'):'')+'</span>' +
-      '      </div>' +
-      '    </div>' +
-      '  </div>' +
+        '<div class="px-3 pt-3"><div class="text-xs font-semibold">Микс</div></div>' +
+        '<div class="p-3 space-y-2">' +
+          (state.parts.length===0?'<div class="text-[12px] text-slate-400">Добавьте вкусы из списка</div>':'') +
+          partsHTML +
+          '<div class="flex items-center justify-between text-[12px]">' +
+            '<span>Итог: <b id="mixTotal">'+total+'</b>%</span>' +
+            '<div class="flex items-center gap-2">' +
+              '<span id="mixStrength">'+strengthBadge+'</span>' +
+              '<span id="mixTaste">'+(mixTaste?('<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">'+escHTML(mixTaste)+'</span>'):'')+'</span>' +
+            '</div>' +
+          '</div>' +
+        '</div>' +
       '</div>';
 
     const titleBlock =
       '<div class="rounded-2xl border border-slate-800 bg-slate-900">' +
-      '  <div class="px-3 pt-3"><div class="text-xs font-semibold">Название и описание</div></div>' +
-      '  <div class="p-3 space-y-2">' +
-      '    <input id="title" placeholder="Название микса" value="'+escAttr(state.title||'')+'" class="h-9 w-full rounded-xl border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-400 px-3 text-sm outline-none focus:ring-2 focus:ring-slate-600" />' +
-      '    <textarea id="notes" placeholder="Описание / заметки…" class="min-h-[72px] w-full rounded-xl border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-400 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-600">'+escHTML(state.notes||'')+'</textarea>' +
-      '    <div class="flex gap-2">' +
-      '      <button id="reset" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-slate-800">Сброс</button>' +
-      '      <button id="save" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] '+(isMixValid(state.parts,state.title)?'bg-slate-100 text-slate-900':'opacity-50 cursor-not-allowed border border-slate-700')+'">Сохранить</button>' +
-      '    </div>' +
-      '  </div>' +
+        '<div class="px-3 pt-3"><div class="text-xs font-semibold">Название и описание</div></div>' +
+        '<div class="p-3 space-y-2">' +
+          '<input id="title" placeholder="Название микса" value="'+escAttr(state.title||'')+'" class="h-9 w-full rounded-xl border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-400 px-3 text-sm outline-none focus:ring-2 focus:ring-slate-600" />' +
+          '<textarea id="notes" placeholder="Описание / заметки…" class="min-h-[72px] w-full rounded-xl border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-400 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-600">'+escHTML(state.notes||'')+'</textarea>' +
+          '<div class="flex gap-2">' +
+            '<button id="reset" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-slate-800">Сброс</button>' +
+            '<button id="save" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] '+(isMixValid(state.parts,state.title)?'bg-slate-100 text-slate-900':'opacity-50 cursor-not-allowed border border-slate-700')+'">Сохранить</button>' +
+          '</div>' +
+        '</div>' +
       '</div>';
 
     const guestBlock =
       '<div class="rounded-2xl border border-slate-800 bg-slate-900">' +
-      '  <div class="px-3 pt-3"><div class="text-xs font-semibold">Миксы гостей</div></div>' +
-      '  <div class="p-3 space-y-2">' +
-           (state.guestMixes.length===0?'<div class="text-[12px] text-slate-400">Пока нет сохранённых миксов</div>':'') +
-           guestHTML +
-      '  </div>' +
+        '<div class="px-3 pt-3"><div class="text-xs font-semibold">Миксы гостей</div></div>' +
+        '<div class="p-3 space-y-2">' +
+          (state.guestMixes.length===0?'<div class="text-[12px] text-slate-400">Пока нет сохранённых миксов</div>':'') +
+          guestHTML +
+        '</div>' +
       '</div>';
 
-    // Админ-вкладка видна только если isAdmin()
-    // Админ-вкладка видна только если isAdmin()
-const adminBlock = (!isAdmin() ? '' :
-  ('<div class="rounded-2xl border border-slate-800 bg-slate-900">' +
-   '  <div class="px-3 pt-3"><div class="text-xs font-semibold">Админ</div></div>' +
-   '  <div class="p-3 space-y-4 text-sm">' +
-   '    <div class="text-[11px] text-slate-400">Токен сохранён в браузере. Можно добавлять/удалять вкусы.</div>' +
+    // Блок сохранения токена (показывается при ?admin=1, пока токен не сохранён)
+    const adminLoginBlock = (!isAdmin() && state.adminPrompt) ? (
+      '<div class="rounded-2xl border border-slate-800 bg-slate-900">' +
+        '<div class="px-3 pt-3"><div class="text-xs font-semibold">Админ-доступ</div></div>' +
+        '<div class="p-3 space-y-2">' +
+          '<input id="admToken" class="h-9 w-full rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Вставьте X-Admin-Token" />' +
+          '<div class="flex gap-2">' +
+            '<button id="admSaveToken" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] bg-slate-100 text-slate-900 hover:bg-white">Сохранить токен</button>' +
+            '<button id="admCancel" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-slate-800">Скрыть</button>' +
+          '</div>' +
+          '<div id="admMsg" class="text-[11px] text-slate-400">После сохранения появится вкладка «Админ».</div>' +
+        '</div>' +
+      '</div>'
+    ) : '';
 
-   // Форма добавления вкуса
-   '    <div class="grid grid-cols-1 gap-2">' +
-   '      <input id="admBrand" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Бренд" />' +
-   '      <input id="admName" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Название" />' +
-   '      <input id="admTags" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Теги (через запятую)" />' +
-   '      <input id="admStrength" type="number" min="1" max="10" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Крепость 1–10 (необязательно)" />' +
-   '      <textarea id="admDesc" class="min-h-[72px] rounded-xl border border-slate-700 bg-slate-900 px-3 py-2" placeholder="Описание (необязательно)"></textarea>' +
-   '    </div>' +
-   '    <div class="flex gap-2">' +
-   '      <button id="admAddFlavor" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] bg-slate-100 text-slate-900 hover:bg-white">Добавить вкус</button>' +
-   '      <button id="admReload" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-slate-800">Обновить список</button>' +
-   '      <button id="admClearToken" class="ml-auto inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-rose-700 text-rose-300 hover:bg-rose-900/40">Выйти из админки</button>' +
-   '    </div>' +
-   '    <div id="admMsg" class="text-[11px] text-slate-400"></div>' +
-
-   // Список вкусов с удалением
-   '    <div>' +
-   '      <div class="text-xs font-semibold mb-2">Все вкусы</div>' +
-   '      <div id="admFlavorList" class="space-y-1"></div>' +
-   '    </div>' +
-   '  </div>' +
-   '</div>'));
-
+    // Полная вкладка «Админ» (видна только если isAdmin() === true)
+    const adminBlock = (!isAdmin() ? '' :
+      ('<div class="rounded-2xl border border-slate-800 bg-slate-900">' +
+       '  <div class="px-3 pt-3"><div class="text-xs font-semibold">Админ</div></div>' +
+       '  <div class="p-3 space-y-4 text-sm">' +
+       '    <div class="text-[11px] text-slate-400">Токен сохранён. Можно добавлять и удалять вкусы.</div>' +
+       '    <div class="grid grid-cols-1 gap-2">' +
+       '      <input id="admBrand" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Бренд" />' +
+       '      <input id="admName" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Название" />' +
+       '      <input id="admTags" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Теги (через запятую)" />' +
+       '      <input id="admStrength" type="number" min="1" max="10" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Крепость 1–10 (необязательно)" />' +
+       '      <textarea id="admDesc" class="min-h-[72px] rounded-xl border border-slate-700 bg-slate-900 px-3 py-2" placeholder="Описание (необязательно)"></textarea>' +
+       '    </div>' +
+       '    <div class="flex gap-2">' +
+       '      <button id="admAddFlavor" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] bg-slate-100 text-slate-900 hover:bg-white">Добавить вкус</button>' +
+       '      <button id="admReload" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-slate-800">Обновить список</button>' +
+       '      <button id="admClearToken" class="ml-auto inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-rose-700 text-rose-300 hover:bg-rose-900/40">Выйти из админки</button>' +
+       '    </div>' +
+       '    <div id="admMsg" class="text-[11px] text-slate-400"></div>' +
+       '    <div>' +
+       '      <div class="text-xs font-semibold mb-2">Все вкусы</div>' +
+       '      <div id="admFlavorList" class="space-y-1"></div>' +
+       '    </div>' +
+       '  </div>' +
+       '</div>')
+    );
 
     const bodyHTML =
       '<div class="min-h-[100svh] bg-slate-950 text-slate-100 p-3">' +
-      '  <div class="mx-auto w-full max-w-md space-y-3">' +
-            headerHTML +
-            (state.activeTab==='builder' ? (brandsBlock + mixBlock + titleBlock) : '') +
-            (state.activeTab==='guest'   ? (guestBlock) : '') +
-            (state.activeTab==='admin'   ? (adminBlock) : '') +
-      '  </div>' +
+        '<div class="mx-auto w-full max-w-md space-y-3">' +
+          headerHTML +
+          (state.activeTab==='builder' ? (adminLoginBlock + brandsBlock + mixBlock + titleBlock) : '') +
+          (state.activeTab==='guest'   ? (guestBlock) : '') +
+          (state.activeTab==='admin'   ? (adminBlock) : '') +
+        '</div>' +
       '</div>';
 
     root.innerHTML = bodyHTML;
-// Заполнить список вкусов в админке
-if (isAdmin()) {
-  var list = root.querySelector('#admFlavorList');
-  if (list) {
-    // группируем по бренду
-    var byBrand = {};
-    (state.flavors||[]).forEach(function(f){
-      var b = (f.brand||'').trim() || 'Без бренда';
-      (byBrand[b]||(byBrand[b]=[])).push(f);
-    });
-    var html = Object.keys(byBrand).sort().map(function(brand){
-      var rows = byBrand[brand].sort(function(a,b){ return a.name.localeCompare(b.name, 'ru'); })
-        .map(function(f){
-          return (
-            '<div class="flex items-center justify-between gap-2 text-[12px] border border-slate-800 rounded-lg px-2 py-1">' +
-              '<div class="min-w-0 truncate"><span class="opacity-70">'+escapeHtml(brand)+'</span> • '+escapeHtml(f.name)+'</div>' +
-              '<button data-del-flavor="'+escapeAttr(f.id)+'" class="inline-flex items-center justify-center h-7 px-2 rounded-md border border-rose-700 text-rose-300 hover:bg-rose-900/40">Удалить</button>' +
-            '</div>'
-          );
-        }).join('');
-      return (
-        '<div class="space-y-1">' +
-          '<div class="text-[11px] uppercase tracking-wide text-slate-400">'+escapeHtml(brand)+'</div>' +
-          rows +
-        '</div>'
-      );
-    }).join('') || '<div class="text-[12px] text-slate-400">Пока нет вкусов</div>';
-    list.innerHTML = html;
-  }
-
-  // навесить обработчики на кнопки удаления вкусов
-  root.querySelectorAll('[data-del-flavor]').forEach(function(btn){
-    btn.addEventListener('click', async function(){
-      var id = btn.getAttribute('data-del-flavor');
-      if (!id) return;
-      if (!confirm('Удалить вкус "'+id+'"? Это действие необратимо.')) return;
-      try{
-        var r = await api('/api/flavors/'+encodeURIComponent(id), {
-          method: 'DELETE',
-          headers: { 'X-Admin-Token': state.adminToken || '' }
-        });
-        if (!r.ok) {
-          var txt = await r.text().catch(function(){return '';});
-          alert('Не удалось удалить ('+r.status+'): '+txt);
-          return;
-        }
-        await loadFlavors();
-        if (!state.flavors.some(function(f){ return normalizeBrand(f.brand)===state.activeBrand; })) {
-          state.activeBrand = (state.flavors[0] && state.flavors[0].brand) || '';
-        }
-        render();
-      } catch(e){
-        console.error(e);
-        alert('Ошибка сети при удалении вкуса');
-      }
-    });
-  });
-}
-
-// util для HTML-экранирования (если нет поблизости escHTML/escAttr)
-function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-function escapeAttr(s){ return String(s).replace(/"/g,'&quot;'); }
 
     // ===== События =====
     // Переключение табов
@@ -562,6 +431,7 @@ function escapeAttr(s){ return String(s).replace(/"/g,'&quot;'); }
       btn.addEventListener('click', async function(){
         state.activeTab = this.getAttribute('data-tab');
         if (state.activeTab === 'guest') { await loadGuestMixes(); }
+        if (state.activeTab === 'admin') { /* список построим ниже */ }
         render();
       });
     });
@@ -583,8 +453,8 @@ function escapeAttr(s){ return String(s).replace(/"/g,'&quot;'); }
     var resetEl=root.querySelector('#reset'); if(resetEl){ resetEl.addEventListener('click', function(){ state.title=''; state.notes=''; state.parts=[]; render(); }); }
 
     // Сохранение микса
-    var saveEl=root.querySelector('#save'); 
-    if(saveEl){ 
+    var saveEl=root.querySelector('#save');
+    if(saveEl){
       saveEl.addEventListener('click', async function(){
         if(!isMixValid(state.parts, state.title)) return;
         if(!state.user) return;
@@ -610,10 +480,10 @@ function escapeAttr(s){ return String(s).replace(/"/g,'&quot;'); }
         }catch(e){
           console.error(e); alert('Ошибка сети при сохранении');
         }
-      }); 
+      });
     }
 
-    // Удалить микс (только свой)
+    // Удаление микса (только свой)
     root.querySelectorAll('[data-del]').forEach(function(btn){
       btn.addEventListener('click', async function(){
         const id = btn.getAttribute('data-del');
@@ -633,68 +503,140 @@ function escapeAttr(s){ return String(s).replace(/"/g,'&quot;'); }
       });
     });
 
-    // ===== Админка =====
-    // Добавить вкус
-    var btnAdd = root.querySelector('#admAddFlavor');
-    if (btnAdd){
-      btnAdd.addEventListener('click', async function(){
-        var brand = (root.querySelector('#admBrand')||{}).value||'';
-        var name  = (root.querySelector('#admName')||{}).value||'';
-        var tags  = (root.querySelector('#admTags')||{}).value||'';
-        var desc  = (root.querySelector('#admDesc')||{}).value||'';
-        var str10 = (root.querySelector('#admStrength')||{}).value||'';
-        if (!brand.trim() || !name.trim()){ alert('Укажите бренд и название'); return; }
-        var payload = {
-          id: (brand.trim()+'-'+name.trim()).replace(/\s+/g,'-').toLowerCase(),
-          brand: brand.trim(),
-          name: name.trim(),
-          description: desc.trim() || undefined,
-          tags: tags ? tags.split(',').map(function(s){return s.trim();}).filter(Boolean) : undefined,
-          strength10: str10 ? Number(str10) : undefined
-        };
-        try{
-          var headers = { 'X-Admin-Token': state.adminToken || '' };
-          var r = await api('/api/flavors', { method:'POST', body: JSON.stringify(payload), headers });
-          if (!r.ok){
-            var txt = await r.text().catch(function(){return '';});
-            alert('Ошибка добавления вкуса ('+r.status+'): '+txt);
-            return;
-          }
-          (root.querySelector('#admBrand')||{}).value='';
-          (root.querySelector('#admName')||{}).value='';
-          (root.querySelector('#admTags')||{}).value='';
-          (root.querySelector('#admDesc')||{}).value='';
-          (root.querySelector('#admStrength')||{}).value='';
+    // ===== Админ: ввод/сохранение токена (блок входа)
+    var tokBtn = root.querySelector('#admSaveToken');
+    if (tokBtn){
+      tokBtn.addEventListener('click', function(){
+        var v = (root.querySelector('#admToken')||{}).value || '';
+        try{ localStorage.setItem('admin_token', v); }catch(_){}
+        state.adminToken = v || "";
+        state.adminPrompt = false;
+        render();
+      });
+    }
+    var tokCancel = root.querySelector('#admCancel');
+    if (tokCancel){
+      tokCancel.addEventListener('click', function(){ state.adminPrompt = false; render(); });
+    }
+
+    // ===== Админ: если вкладка активна — построить список и повесить обработчики
+    if (isAdmin() && state.activeTab === 'admin'){
+      buildAdminFlavorList(root);
+      var btnReload = root.querySelector('#admReload');
+      if (btnReload){
+        btnReload.addEventListener('click', async function(){
           await loadFlavors();
           state.activeBrand = state.activeBrand || (state.flavors[0] && state.flavors[0].brand) || '';
           render();
-        }catch(e){
-          console.error(e); alert('Сеть недоступна при добавлении вкуса');
-        }
-      });
-    }
-    // Обновить список
-    var btnReload = root.querySelector('#admReload');
-    if (btnReload){
-      btnReload.addEventListener('click', async function(){
-        await loadFlavors();
-        state.activeBrand = state.activeBrand || (state.flavors[0] && state.flavors[0].brand) || '';
-        render();
-      });
-    }
-    // Выйти из админки (стереть токен)
-    var btnClear = root.querySelector('#admClearToken');
-    if (btnClear){
-      btnClear.addEventListener('click', function(){
-        try{ localStorage.removeItem('admin_token'); }catch(_){}
-        state.adminToken = '';
-        if (state.activeTab==='admin') state.activeTab = 'builder';
-        render();
-      });
+        });
+      }
+      var btnLogout = root.querySelector('#admClearToken');
+      if (btnLogout){
+        btnLogout.addEventListener('click', function(){
+          try{ localStorage.removeItem('admin_token'); }catch(_){}
+          state.adminToken = "";
+          // скрываем вкладку и выходим на конструктор
+          state.activeTab = 'builder';
+          render();
+        });
+      }
+      var btnAdd = root.querySelector('#admAddFlavor');
+      if (btnAdd){
+        btnAdd.addEventListener('click', async function(){
+          var brand = (root.querySelector('#admBrand')||{}).value||'';
+          var name  = (root.querySelector('#admName')||{}).value||'';
+          var tags  = (root.querySelector('#admTags')||{}).value||'';
+          var desc  = (root.querySelector('#admDesc')||{}).value||'';
+          var str10 = (root.querySelector('#admStrength')||{}).value||'';
+          if (!brand.trim() || !name.trim()){ alert('Укажите бренд и название'); return; }
+          var payload = {
+            id: (brand.trim()+'-'+name.trim()).replace(/\s+/g,'-').toLowerCase(),
+            brand: brand.trim(),
+            name: name.trim(),
+            description: desc.trim() || undefined,
+            tags: tags ? tags.split(',').map(function(s){return s.trim();}).filter(Boolean) : undefined,
+            strength10: str10 ? Number(str10) : undefined
+          };
+          try{
+            var r = await api('/api/flavors', {
+              method:'POST',
+              headers: { 'X-Admin-Token': state.adminToken || '' },
+              body: JSON.stringify(payload)
+            });
+            if (!r.ok){
+              var txt = await r.text().catch(function(){return '';});
+              alert('Не удалось добавить ('+r.status+'): '+txt);
+              return;
+            }
+            await loadFlavors();
+            state.activeBrand = state.activeBrand || (state.flavors[0] && state.flavors[0].brand) || '';
+            render();
+          }catch(e){
+            console.error(e); alert('Ошибка сети при добавлении вкуса');
+          }
+        });
+      }
     }
   }
 
-  // ======= Частичные обновления UI =======
+  // Построение списка вкусов в админке + обработчики удаления
+  function buildAdminFlavorList(root){
+    var list = root.querySelector('#admFlavorList');
+    if (!list) return;
+    var byBrand = {};
+    (state.flavors||[]).forEach(function(f){
+      var b = (f.brand||'').trim() || 'Без бренда';
+      (byBrand[b]||(byBrand[b]=[])).push(f);
+    });
+    var html = Object.keys(byBrand).sort().map(function(brand){
+      var rows = byBrand[brand].sort(function(a,b){ return a.name.localeCompare(b.name, 'ru'); })
+        .map(function(f){
+          return (
+            '<div class="flex items-center justify-between gap-2 text-[12px] border border-slate-800 rounded-lg px-2 py-1">' +
+              '<div class="min-w-0 truncate"><span class="opacity-70">'+escHTML(brand)+'</span> • '+escHTML(f.name)+'</div>' +
+              '<button data-del-flavor="'+escAttr(f.id)+'" class="inline-flex items-center justify-center h-7 px-2 rounded-md border border-rose-700 text-rose-300 hover:bg-rose-900/40">Удалить</button>' +
+            '</div>'
+          );
+        }).join('');
+      return (
+        '<div class="space-y-1">' +
+          '<div class="text-[11px] uppercase tracking-wide text-slate-400">'+escHTML(brand)+'</div>' +
+          rows +
+        '</div>'
+      );
+    }).join('') || '<div class="text-[12px] text-slate-400">Пока нет вкусов</div>';
+    list.innerHTML = html;
+
+    // обработчики удаления вкуса
+    root.querySelectorAll('[data-del-flavor]').forEach(function(btn){
+      btn.addEventListener('click', async function(){
+        var id = btn.getAttribute('data-del-flavor');
+        if (!id) return;
+        if (!confirm('Удалить вкус "'+id+'"? Это действие необратимо.')) return;
+        try{
+          var r = await api('/api/flavors/'+encodeURIComponent(id), {
+            method: 'DELETE',
+            headers: { 'X-Admin-Token': state.adminToken || '' }
+          });
+          if (!r.ok) {
+            var txt = await r.text().catch(function(){return '';});
+            alert('Не удалось удалить ('+r.status+'): '+txt);
+            return;
+          }
+          await loadFlavors();
+          if (!state.flavors.some(function(f){ return normalizeBrand(f.brand)===state.activeBrand; })) {
+            state.activeBrand = (state.flavors[0] && state.flavors[0].brand) || '';
+          }
+          render();
+        } catch(e){
+          console.error(e);
+          alert('Ошибка сети при удалении вкуса');
+        }
+      });
+    });
+  }
+
+  // ======= Помощники для частичного обновления UI (без потери фокуса) =======
   function updateMixStatsUI(){
     var total = percentSum(state.parts);
     var totalEl = document.getElementById('mixTotal'); if(totalEl) totalEl.textContent = String(total);
@@ -748,21 +690,21 @@ function escapeAttr(s){ return String(s).replace(/"/g,'&quot;'); }
     var mixTaste = getMixTasteLabel(state.parts, state.flavors);
     var partsHTML = state.parts.map(function(p){ var fl = state.flavors.find(function(x){return x.id===p.flavorId;}); var name=(fl && fl.name)||p.flavorId; return (
       '<div class="flex items-center gap-2 text-sm">' +
-      '  <span class="truncate w-36" title="'+escAttr(name)+'">'+escHTML(name)+'</span>' +
-      '  <input type="range" min="0" max="100" step="5" class="w-28" value="'+safePercent(p.percent)+'" data-range="'+escAttr(p.flavorId)+'"/>' +
-      '  <span class="w-10 text-right" data-percent-for="'+escAttr(p.flavorId)+'">'+safePercent(p.percent)+'%</span>' +
-      '  <button data-remove="'+escAttr(p.flavorId)+'" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] hover:bg-slate-800">Удалить</button>' +
+        '<span class="truncate w-36" title="'+escAttr(name)+'">'+escHTML(name)+'</span>' +
+        '<input type="range" min="0" max="100" step="5" class="w-28" value="'+safePercent(p.percent)+'" data-range="'+escAttr(p.flavorId)+'"/>' +
+        '<span class="w-10 text-right" data-percent-for="'+escAttr(p.flavorId)+'">'+safePercent(p.percent)+'%</span>' +
+        '<button data-remove="'+escAttr(p.flavorId)+'" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] hover:bg-slate-800">Удалить</button>' +
       '</div>'
     ); }).join('');
     var html =
       '<div class="px-3 pt-3"><div class="text-xs font-semibold">Микс</div></div>' +
       '<div class="p-3 space-y-2">' +
-         (state.parts.length===0?'<div class="text-[12px] text-slate-400">Добавьте вкусы из списка</div>':'') +
-         partsHTML +
-      '  <div class="flex items-center justify-between text-[12px]">' +
-      '    <span>Итог: <b id="mixTotal">'+total+'</b>%</span>' +
-      '    <div class="flex items-center gap-2"><span id="mixStrength">'+strengthBadge+'</span><span id="mixTaste">'+(mixTaste?('<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">'+escHTML(mixTaste)+'</span>'):'')+'</span></div>' +
-      '  </div>' +
+        (state.parts.length===0?'<div class="text-[12px] text-slate-400">Добавьте вкусы из списка</div>':'') +
+        partsHTML +
+        '<div class="flex items-center justify-between text-[12px]">' +
+          '<span>Итог: <b id="mixTotal">'+total+'</b>%</span>' +
+          '<div class="flex items-center gap-2"><span id="mixStrength">'+strengthBadge+'</span><span id="mixTaste">'+(mixTaste?('<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">'+escHTML(mixTaste)+'</span>'):'')+'</span></div>' +
+        '</div>' +
       '</div>';
     container.innerHTML = html;
     attachMixEvents();
@@ -782,14 +724,14 @@ function escapeAttr(s){ return String(s).replace(/"/g,'&quot;'); }
       var desc = f.description ? '<div class="text-[11px] text-slate-400 truncate">'+escHTML(f.description)+'</div>' : '';
       return (
         '<div class="flex items-center justify-between gap-2 text-sm">' +
-        '  <div class="min-w-0">' +
-        '    <div class="flex items-center gap-2">' +
-        '      <div class="font-medium truncate" title="'+escAttr((f.brand||'')+' • '+(f.name||''))+'">'+escHTML(f.name)+' <span class="opacity-60">('+escHTML(f.brand)+')</span></div>' +
-        '      <span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+s.toFixed(1)+'</span>' +
-        '    </div>' +
-             desc +
-        '  </div>' +
-        '  <button data-add="'+escAttr(f.id)+'" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] '+(inMix?'opacity-50 cursor-not-allowed border border-slate-700':'border border-slate-700 hover:bg-slate-800')+'">'+(inMix?'✓':'+')+'</button>' +
+          '<div class="min-w-0">' +
+            '<div class="flex items-center gap-2">' +
+              '<div class="font-medium truncate" title="'+escAttr((f.brand||'')+' • '+(f.name||''))+'">'+escHTML(f.name)+' <span class="opacity-60">('+escHTML(f.brand)+')</span></div>' +
+              '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+s.toFixed(1)+'</span>' +
+            '</div>' +
+            desc +
+          '</div>' +
+          '<button data-add="'+escAttr(f.id)+'" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] '+(inMix?'opacity-50 cursor-not-allowed border border-slate-700':'border border-slate-700 hover:bg-slate-800')+'">'+(inMix?'✓':'+')+'</button>' +
         '</div>'
       );
     }).join('') + (listFlavors.length===0?('<div class="text-[12px] text-slate-400">'+(state.search?'Ничего не найдено':'Нет вкусов для этого бренда')+'</div>'):'');
@@ -797,23 +739,22 @@ function escapeAttr(s){ return String(s).replace(/"/g,'&quot;'); }
   }
 
   // ========================= СТАРТ ПРИЛОЖЕНИЯ ===============================
-  (async function start(){ 
-    try{ 
-      initAuth(); 
-      await detectLogo(); 
-      await loadFlavors(); 
-      await loadGuestMixes(); 
+  (async function start(){
+    try{
+      initAuth();
+      await detectLogo();
+      await loadFlavors();
+      await loadGuestMixes();
       render();
 
-      // Поллинг для обновления списка миксов без перезагрузки
+      // Поллинг миксов, чтобы видеть чужие изменения
       setInterval(async function(){
-        const before = JSON.stringify((state.guestMixes||[]).map(function(m){return m.id;}));
+        const before = JSON.stringify(state.guestMixes?.map(function(m){return m.id;}));
         await loadGuestMixes();
-        const after  = JSON.stringify((state.guestMixes||[]).map(function(m){return m.id;}));
+        const after  = JSON.stringify(state.guestMixes?.map(function(m){return m.id;}));
         if (before !== after) render();
       }, 10000);
-
-    }catch(e){ console.error(e); } 
+    }catch(e){ console.error(e); }
   })();
 
   // ========================= SMOKE TESTS ====================================
@@ -828,7 +769,7 @@ function escapeAttr(s){ return String(s).replace(/"/g,'&quot;'); }
     {var t=getMixTasteLabel([],[]); console.assert(t===null,'taste null');}
     {var cl3=clampPercentForPart([{flavorId:'a',percent:10}], 'a', -5); console.assert(cl3===0,'clamp to 0');}
     console.groupEnd();
-  }catch(e){ console.error('Smoke tests error', e); } })();
+  }catch(e){ console.error('Smoke tests error', e); }})();
   </script>
 </body>
 </html>
