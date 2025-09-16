@@ -57,7 +57,7 @@
   };
   const uuidv4=()=>{let dt=Date.now();if(typeof performance!='undefined'&&typeof performance.now==='function')dt+=performance.now();return'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=(dt+Math.random()*16)%16|0;dt=Math.floor(dt/16);const v=c==='x'?r:(r&0x3)|0x8;return v.toString(16);});};
   const normalizeBrand=(b)=>(b||'').trim();
-  const BRAND_STRENGTH10_DEFAULTS={Darkside:5,"Black Burn":6,BlackBurn:6,MustHave:5,Overdose:6,Bonch:7,Starline:3}; // Overdose
+  const BRAND_STRENGTH10_DEFAULTS={Darkside:5,"Black Burn":6,BlackBurn:6,MustHave:5,Overdose:6,Bonch:7,Starline:3};
   const getStrength10=(f)=>{
     if(!f) return 5;
     if(typeof f.strength10==='number'&&Number.isFinite(f.strength10)) return Math.max(1,Math.min(10,f.strength10));
@@ -91,7 +91,7 @@
       const w=safePercent(p&&p.percent); if(w<=0)continue;
       const fl=flavors.find(f=>f&&f.id===(p&&p.flavorId)); if(!fl)continue;
       if(fl.tags) for(const t of fl.tags) add(t,w);
-      if(fl.name) for(const tk of String(fl.name).toLowerCase().split(/[^a-zа-я0-9]+/i)) add(tk,Math.max(1,w*0.6));
+      if(fl.name) for(const tk of String(fl.name).toLowerCase().split(/[^a-zа-я0-9]+/i)) add(tk=Math.max(1,w*0.6));
       if(fl.description) for(const tk of String(fl.description).toLowerCase().split(/[^a-zа-я0-9]+/i)) add(tk,Math.max(1,w*0.3));
     }
     if(!scores.size)return null;
@@ -100,23 +100,18 @@
   const escAttr=(s)=>String(s).replace(/"/g,'&quot;');
   const escHTML=(s)=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-  // Поиск по вкусам (имя + теги + описание) с RU/EN синонимами
-  function filterFlavorsByQueryAdv(flavors, query){
-    function normalize(s){ return String(s||'').toLowerCase().replace(/ё/g,'е').trim(); }
-    var q = normalize(query);
-    if(!q) return flavors||[];
-    var SYN = {"киви":["kiwi"],"банан":["banana"],"манго":["mango"],"лимон":["lemon","citrus"],"апельсин":["orange"],"грейпфрут":["grapefruit"],"арбуз":["watermelon"],"дыня":["melon"],"виноград":["grape"],"персик":["peach"],"яблок":["apple"],"маракуй":["passion"],"клубник":["strawberry"],"черник":["blueberry"],"мята":["mint"],"лед":["ice","freeze","frost","cold"],"ваниль":["vanilla"],"печень":["cookie","bisc"],"шоколад":["choco","chocolate"],"кисл":["sour"],"слад":["sweet"]};
-    var tokens = q.split(/\s+/).filter(Boolean);
-    function textOf(f){ return normalize([f && f.name, f && f.description, Array.isArray(f && f.tags)? (f.tags.join(' ')) : '' ].join(' ')); }
-    return (flavors||[]).filter(function(f){
-      var text = textOf(f);
-      return tokens.every(function(t){
-        var vars = new Set([t]);
-        Object.entries(SYN).forEach(function(pair){ var ru=pair[0], arr=pair[1]; if(t.indexOf(ru) !== -1){ arr.forEach(function(v){ vars.add(v); }); } });
-        var hit = false; vars.forEach(function(v){ if(text.indexOf(v) !== -1) hit = true; });
-        return hit;
-      });
-    });
+  // Нормализация записи вкуса (для локального JSON / API с вариациями полей)
+  function normalizeFlavorRecord(f){
+    const brand = String(f?.brand || '').trim();
+    const name  = String(f?.name  || '').trim();
+    const id = String(f?.id || (brand+'-'+name).toLowerCase().replace(/\s+/g,'-')).trim();
+    const tags = Array.isArray(f?.tags)
+      ? f.tags
+      : (f?.tags ? String(f.tags).split(',').map(s=>s.trim()).filter(Boolean) : undefined);
+    const strength10 = (Number.isFinite(f?.strength10) ? Number(f.strength10)
+                      : Number.isFinite(f?.strength)   ? Number(f.strength) : undefined);
+    const description = f?.description ? String(f.description) : undefined;
+    return { id, brand, name, description, tags, strength10 };
   }
 
   // ========================= СОСТОЯНИЕ ======================================
@@ -134,10 +129,9 @@
     showSplash:false,
     logoUrl:null,
     adminToken: (localStorage.getItem('admin_token') || ""),
-    adminPrompt: qp.get('admin') === '1' // показать блок ввода токена при ?admin=1
+    adminPrompt: qp.get('admin') === '1'
   };
-
-  function isAdmin(){ return !!(state.adminToken && state.adminToken.length>=6); }
+  const isAdmin=()=> !!(state.adminToken && state.adminToken.length>=6);
 
   // ========================= ИНИЦИАЛИЗАЦИЯ ===================================
   function initAuth(){
@@ -150,19 +144,49 @@
         return;
       }
     }catch(_){}
-    // гостевой режим (если открыто не из Telegram)
     state.user = { id:"anon", name:"Гость" };
     state.showSplash = true;
   }
 
+  // Универсальный fetch JSON (мягкий)
+  async function fetchJSON(url, opts){
+    try{
+      const r = await fetch(url, { cache:'no-store', ...(opts||{}) });
+      if(!r.ok) return null;
+      return await r.json();
+    }catch(_){ return null; }
+  }
+
+  // Загрузка вкусов: локальный файл → API
   async function loadFlavors(){
+    const tryLocalPath = async (path)=>{
+      const data = await fetchJSON(path);
+      const arr = Array.isArray(data) ? data
+                : Array.isArray(data?.flavors) ? data.flavors : null;
+      if (Array.isArray(arr) && arr.length){
+        const norm = arr.map(normalizeFlavorRecord).filter(x=>x.brand && x.name);
+        if (norm.length){
+          state.flavors = norm;
+          state.activeBrand = state.activeBrand || (norm[0]?.brand) || "";
+          return true;
+        }
+      }
+      return false;
+    };
+
+    // Порядок попыток локальных путей (учитываем разные конфигурации раздачи public/)
+    if (await tryLocalPath('/hookah_flavors.json')) return;
+    if (await tryLocalPath('./hookah_flavors.json')) return;
+    if (await tryLocalPath('/public/hookah_flavors.json')) return;
+
+    // Фолбэк на API
     try{
       const r = await api('/api/flavors');
       if (r.ok){
         const data = await r.json();
         if (Array.isArray(data)){
-          state.flavors = data;
-          state.activeBrand = state.activeBrand || (data[0] && data[0].brand) || "";
+          state.flavors = data.map(normalizeFlavorRecord);
+          state.activeBrand = state.activeBrand || (state.flavors[0]?.brand) || "";
           return;
         }
       }
@@ -177,6 +201,8 @@
         const arr = await r.json();
         state.guestMixes = Array.isArray(arr) ? arr : [];
         state.guestMixes.sort((a,b)=>(b?.createdAt||0)-(a?.createdAt||0));
+      } else {
+        state.guestMixes = [];
       }
     }catch(_){ state.guestMixes = []; }
   }
@@ -197,6 +223,44 @@
       '  <circle cx="32" cy="50" r="3" fill="#c7d2fe"/>' +
       '</svg>'
     );
+  }
+
+  // ========================= УДАЛЕНИЕ ВКУСА (устойчивое) =====================
+  async function deleteFlavorOnServer(id, token){
+    // 1) основной путь — DELETE /api/flavors/:id
+    const try1 = await api('/api/flavors/'+encodeURIComponent(id), {
+      method: 'DELETE',
+      headers: { 'X-Admin-Token': token||'' }
+    }).catch(()=>null);
+
+    if (try1 && (try1.ok || try1.status===204)) return true;
+
+    // Если сервер вернул 404/405 или HTML-страницу об ошибке — пробуем альтернативы
+    // 2) DELETE /api/flavors?id=...
+    const try2 = await api('/api/flavors?id='+encodeURIComponent(id), {
+      method: 'DELETE',
+      headers: { 'X-Admin-Token': token||'' }
+    }).catch(()=>null);
+    if (try2 && (try2.ok || try2.status===204)) return true;
+
+    // 3) POST /api/flavors/delete  {id}
+    const try3 = await api('/api/flavors/delete', {
+      method: 'POST',
+      headers: { 'X-Admin-Token': token||'' },
+      body: JSON.stringify({ id })
+    }).catch(()=>null);
+    if (try3 && (try3.ok || try3.status===204)) return true;
+
+    // 4) POST /api/flavors/:id?_method=DELETE
+    const try4 = await api('/api/flavors/'+encodeURIComponent(id)+'?_method=DELETE', {
+      method: 'POST',
+      headers: { 'X-Admin-Token': token||'' }
+    }).catch(()=>null);
+    if (try4 && (try4.ok || try4.status===204)) return true;
+
+    // ничего не сработало
+    const text = try1 ? await try1.text().catch(()=> '') : '';
+    throw new Error('Не удалось удалить вкус. Сервер вернул: ' + (text|| (try1 && try1.status)));
   }
 
   // ========================= РЕНДЕР =========================================
@@ -371,7 +435,6 @@
         '</div>' +
       '</div>';
 
-    // Блок сохранения токена (показывается при ?admin=1, пока токен не сохранён)
     const adminLoginBlock = (!isAdmin() && state.adminPrompt) ? (
       '<div class="rounded-2xl border border-slate-800 bg-slate-900">' +
         '<div class="px-3 pt-3"><div class="text-xs font-semibold">Админ-доступ</div></div>' +
@@ -386,7 +449,6 @@
       '</div>'
     ) : '';
 
-    // Полная вкладка «Админ» (видна только если isAdmin() === true)
     const adminBlock = (!isAdmin() ? '' :
       ('<div class="rounded-2xl border border-slate-800 bg-slate-900">' +
        '  <div class="px-3 pt-3"><div class="text-xs font-semibold">Админ</div></div>' +
@@ -431,7 +493,6 @@
       btn.addEventListener('click', async function(){
         state.activeTab = this.getAttribute('data-tab');
         if (state.activeTab === 'guest') { await loadGuestMixes(); }
-        if (state.activeTab === 'admin') { /* список построим ниже */ }
         render();
       });
     });
@@ -503,7 +564,7 @@
       });
     });
 
-    // ===== Админ: ввод/сохранение токена (блок входа)
+    // ===== Админ: блок входа
     var tokBtn = root.querySelector('#admSaveToken');
     if (tokBtn){
       tokBtn.addEventListener('click', function(){
@@ -519,7 +580,7 @@
       tokCancel.addEventListener('click', function(){ state.adminPrompt = false; render(); });
     }
 
-    // ===== Админ: если вкладка активна — построить список и повесить обработчики
+    // ===== Админ: если вкладка активна — построить список и обработчики
     if (isAdmin() && state.activeTab === 'admin'){
       buildAdminFlavorList(root);
       var btnReload = root.querySelector('#admReload');
@@ -535,7 +596,6 @@
         btnLogout.addEventListener('click', function(){
           try{ localStorage.removeItem('admin_token'); }catch(_){}
           state.adminToken = "";
-          // скрываем вкладку и выходим на конструктор
           state.activeTab = 'builder';
           render();
         });
@@ -614,15 +674,7 @@
         if (!id) return;
         if (!confirm('Удалить вкус "'+id+'"? Это действие необратимо.')) return;
         try{
-          var r = await api('/api/flavors/'+encodeURIComponent(id), {
-            method: 'DELETE',
-            headers: { 'X-Admin-Token': state.adminToken || '' }
-          });
-          if (!r.ok) {
-            var txt = await r.text().catch(function(){return '';});
-            alert('Не удалось удалить ('+r.status+'): '+txt);
-            return;
-          }
+          await deleteFlavorOnServer(id, state.adminToken || '');
           await loadFlavors();
           if (!state.flavors.some(function(f){ return normalizeBrand(f.brand)===state.activeBrand; })) {
             state.activeBrand = (state.flavors[0] && state.flavors[0].brand) || '';
@@ -630,13 +682,13 @@
           render();
         } catch(e){
           console.error(e);
-          alert('Ошибка сети при удалении вкуса');
+          alert('Не удалось удалить вкус. ' + (e && e.message ? e.message : ''));
         }
       });
     });
   }
 
-  // ======= Помощники для частичного обновления UI (без потери фокуса) =======
+  // ======= Частичные обновления UI =======
   function updateMixStatsUI(){
     var total = percentSum(state.parts);
     var totalEl = document.getElementById('mixTotal'); if(totalEl) totalEl.textContent = String(total);
