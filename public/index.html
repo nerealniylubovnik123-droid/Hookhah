@@ -257,7 +257,7 @@
   }
 
   // ========================= РЕНДЕР =========================================
-  function render(){
+  function render(root.innerHTML = bodyHTML){
     var root=document.getElementById('root');
     if(!root) return;
 
@@ -451,26 +451,36 @@
       '</div>';
 
     // Админ-вкладка видна только если isAdmin()
-    const adminBlock = (!isAdmin() ? '' :
-      ('<div class="rounded-2xl border border-slate-800 bg-slate-900">' +
-       '  <div class="px-3 pt-3"><div class="text-xs font-semibold">Админ</div></div>' +
-       '  <div class="p-3 space-y-2 text-sm">' +
-       '    <div class="text-[11px] text-slate-400">Токен сохранён в браузере. Можно добавлять вкусы.</div>' +
-       '    <div class="grid grid-cols-1 gap-2">' +
-       '      <input id="admBrand" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Бренд" />' +
-       '      <input id="admName" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Название" />' +
-       '      <input id="admTags" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Теги (через запятую)" />' +
-       '      <input id="admStrength" type="number" min="1" max="10" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Крепость 1–10 (необязательно)" />' +
-       '      <textarea id="admDesc" class="min-h-[72px] rounded-xl border border-slate-700 bg-slate-900 px-3 py-2" placeholder="Описание (необязательно)"></textarea>' +
-       '    </div>' +
-       '    <div class="flex gap-2">' +
-       '      <button id="admAddFlavor" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] bg-slate-100 text-slate-900 hover:bg-white">Добавить вкус</button>' +
-       '      <button id="admReload" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-slate-800">Обновить список</button>' +
-       '      <button id="admClearToken" class="ml-auto inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-rose-700 text-rose-300 hover:bg-rose-900/40">Выйти из админки</button>' +
-       '    </div>' +
-       '    <div id="admMsg" class="text-[11px] text-slate-400"></div>' +
-       '  </div>' +
-       '</div>'));
+    // Админ-вкладка видна только если isAdmin()
+const adminBlock = (!isAdmin() ? '' :
+  ('<div class="rounded-2xl border border-slate-800 bg-slate-900">' +
+   '  <div class="px-3 pt-3"><div class="text-xs font-semibold">Админ</div></div>' +
+   '  <div class="p-3 space-y-4 text-sm">' +
+   '    <div class="text-[11px] text-slate-400">Токен сохранён в браузере. Можно добавлять/удалять вкусы.</div>' +
+
+   // Форма добавления вкуса
+   '    <div class="grid grid-cols-1 gap-2">' +
+   '      <input id="admBrand" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Бренд" />' +
+   '      <input id="admName" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Название" />' +
+   '      <input id="admTags" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Теги (через запятую)" />' +
+   '      <input id="admStrength" type="number" min="1" max="10" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Крепость 1–10 (необязательно)" />' +
+   '      <textarea id="admDesc" class="min-h-[72px] rounded-xl border border-slate-700 bg-slate-900 px-3 py-2" placeholder="Описание (необязательно)"></textarea>' +
+   '    </div>' +
+   '    <div class="flex gap-2">' +
+   '      <button id="admAddFlavor" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] bg-slate-100 text-slate-900 hover:bg-white">Добавить вкус</button>' +
+   '      <button id="admReload" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-slate-800">Обновить список</button>' +
+   '      <button id="admClearToken" class="ml-auto inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-rose-700 text-rose-300 hover:bg-rose-900/40">Выйти из админки</button>' +
+   '    </div>' +
+   '    <div id="admMsg" class="text-[11px] text-slate-400"></div>' +
+
+   // Список вкусов с удалением
+   '    <div>' +
+   '      <div class="text-xs font-semibold mb-2">Все вкусы</div>' +
+   '      <div id="admFlavorList" class="space-y-1"></div>' +
+   '    </div>' +
+   '  </div>' +
+   '</div>'));
+
 
     const bodyHTML =
       '<div class="min-h-[100svh] bg-slate-950 text-slate-100 p-3">' +
@@ -483,6 +493,68 @@
       '</div>';
 
     root.innerHTML = bodyHTML;
+// Заполнить список вкусов в админке
+if (isAdmin()) {
+  var list = root.querySelector('#admFlavorList');
+  if (list) {
+    // группируем по бренду
+    var byBrand = {};
+    (state.flavors||[]).forEach(function(f){
+      var b = (f.brand||'').trim() || 'Без бренда';
+      (byBrand[b]||(byBrand[b]=[])).push(f);
+    });
+    var html = Object.keys(byBrand).sort().map(function(brand){
+      var rows = byBrand[brand].sort(function(a,b){ return a.name.localeCompare(b.name, 'ru'); })
+        .map(function(f){
+          return (
+            '<div class="flex items-center justify-between gap-2 text-[12px] border border-slate-800 rounded-lg px-2 py-1">' +
+              '<div class="min-w-0 truncate"><span class="opacity-70">'+escapeHtml(brand)+'</span> • '+escapeHtml(f.name)+'</div>' +
+              '<button data-del-flavor="'+escapeAttr(f.id)+'" class="inline-flex items-center justify-center h-7 px-2 rounded-md border border-rose-700 text-rose-300 hover:bg-rose-900/40">Удалить</button>' +
+            '</div>'
+          );
+        }).join('');
+      return (
+        '<div class="space-y-1">' +
+          '<div class="text-[11px] uppercase tracking-wide text-slate-400">'+escapeHtml(brand)+'</div>' +
+          rows +
+        '</div>'
+      );
+    }).join('') || '<div class="text-[12px] text-slate-400">Пока нет вкусов</div>';
+    list.innerHTML = html;
+  }
+
+  // навесить обработчики на кнопки удаления вкусов
+  root.querySelectorAll('[data-del-flavor]').forEach(function(btn){
+    btn.addEventListener('click', async function(){
+      var id = btn.getAttribute('data-del-flavor');
+      if (!id) return;
+      if (!confirm('Удалить вкус "'+id+'"? Это действие необратимо.')) return;
+      try{
+        var r = await api('/api/flavors/'+encodeURIComponent(id), {
+          method: 'DELETE',
+          headers: { 'X-Admin-Token': state.adminToken || '' }
+        });
+        if (!r.ok) {
+          var txt = await r.text().catch(function(){return '';});
+          alert('Не удалось удалить ('+r.status+'): '+txt);
+          return;
+        }
+        await loadFlavors();
+        if (!state.flavors.some(function(f){ return normalizeBrand(f.brand)===state.activeBrand; })) {
+          state.activeBrand = (state.flavors[0] && state.flavors[0].brand) || '';
+        }
+        render();
+      } catch(e){
+        console.error(e);
+        alert('Ошибка сети при удалении вкуса');
+      }
+    });
+  });
+}
+
+// util для HTML-экранирования (если нет поблизости escHTML/escAttr)
+function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function escapeAttr(s){ return String(s).replace(/"/g,'&quot;'); }
 
     // ===== События =====
     // Переключение табов
