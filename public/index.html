@@ -148,13 +148,9 @@
     showSplash:false,
     logoUrl:null,
     adminToken: (localStorage.getItem('admin_token') || ""),
-    adminPrompt: qp.get('admin') === '1',
-    // источник вкусов
-    flavorsSource: "auto",             // "local" | "api" | "auto" (намерение пользователя)
-    flavorsSourceResolved: "local"     // "local" | "api" (по факту загрузки)
+    adminPrompt: qp.get('admin') === '1'
   };
   const isAdmin=()=> !!(state.adminToken && state.adminToken.length>=6);
-  function setFlavorsSource(src){ state.flavorsSource = src; }
 
   // ========================= ИНИЦИАЛИЗАЦИЯ ===================================
   function initAuth(){
@@ -180,52 +176,8 @@
     }catch(_){ return null; }
   }
 
-  // Загрузка вкусов: локальный файл → API, с учётом выбранного источника
+  // Загрузка вкусов: ТОЛЬКО из API
   async function loadFlavors(){
-    const tryLocalPath = async (path)=>{
-      try{
-        const r = await fetch(path, { cache:'no-store' });
-        if(!r.ok) return false;
-        const data = await r.json();
-        const arr = Array.isArray(data) ? data : (Array.isArray(data?.flavors) ? data.flavors : null);
-        if(Array.isArray(arr) && arr.length){
-          const norm = arr.map(normalizeFlavorRecord).filter(x=>x.brand && x.name);
-          if (norm.length){
-            state.flavors = norm;
-            state.activeBrand = state.activeBrand || (norm[0]?.brand) || "";
-            state.flavorsSourceResolved = "local";
-            return true;
-          }
-        }
-        return false;
-      }catch(_){ return false; }
-    };
-
-    // Если пользователь явно выбрал API — читаем только API
-    if (state.flavorsSource === "api"){
-      try{
-        const r = await api('/api/flavors');
-        if (r.ok){
-          const data = await r.json();
-          if (Array.isArray(data)){
-            state.flavors = data.map(normalizeFlavorRecord);
-            state.activeBrand = state.activeBrand || (state.flavors[0]?.brand) || "";
-            state.flavorsSourceResolved = "api";
-            return;
-          }
-        }
-      }catch(_){}
-      state.flavors = [];
-      state.flavorsSourceResolved = "api";
-      return;
-    }
-
-    // auto / local: сначала локальные пути
-    if (await tryLocalPath('/hookah_flavors.json')) return;
-    if (await tryLocalPath('./hookah_flavors.json')) return;
-    if (await tryLocalPath('/public/hookah_flavors.json')) return;
-
-    // если локалку не нашли — пробуем API и фиксируем источник
     try{
       const r = await api('/api/flavors');
       if (r.ok){
@@ -233,14 +185,11 @@
         if (Array.isArray(data)){
           state.flavors = data.map(normalizeFlavorRecord);
           state.activeBrand = state.activeBrand || (state.flavors[0]?.brand) || "";
-          state.flavorsSourceResolved = "api";
           return;
         }
       }
     }catch(_){}
-
     state.flavors = [];
-    state.flavorsSourceResolved = "local";
   }
 
   async function loadGuestMixes(){
@@ -450,20 +399,10 @@
         '</div>' +
       '</header>';
 
-    // ===== Админ-информер источника
-    const adminSourceInfo =
-      '    <div class="flex items-center gap-2 text-[11px] text-slate-400">' +
-      '      <span>Источник вкусов: <b>'+ (state.flavorsSourceResolved==='api' ? 'API' : 'Локальный JSON') +'</b></span>' +
-      ( state.flavorsSourceResolved!=='api'
-        ? '      <button id="switchToApi" class="ml-2 inline-flex items-center justify-center rounded-md h-7 px-2 border border-slate-700 hover:bg-slate-800 text-[11px]">Переключить на API</button>'
-        : '' ) +
-      '    </div>';
-
     const brandsBlock =
       '<div class="rounded-2xl border border-slate-800 bg-slate-900">' +
         '<div class="px-3 pt-3"><div class="text-xs font-semibold">Бренды</div></div>' +
         '<div class="p-3 space-y-2">' +
-          adminSourceInfo +
           '<div class="space-y-2">' +
             '<input id="search" placeholder="Поиск вкуса по названию…" value="'+escAttr(state.search||'')+'" class="h-9 w-full rounded-xl border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-400 px-3 text-sm outline-none focus:ring-2 focus:ring-slate-600" />' +
             '<div class="grid grid-cols-2 gap-1">'+brandsHTML+(brands.length===0?'<div class="text-[12px] text-slate-400">Нет брендов (добавьте вкусы)</div>':'')+'</div>' +
@@ -502,38 +441,24 @@
         '</div>' +
       '</div>';
 
-    // ===== Админка (доступна только с токеном)
-    const canEditFlavors = state.flavorsSourceResolved === 'api';
+    // ===== Админка (удаление/добавление всегда доступны; источник — API)
     const adminBlock = (!isAdmin() ? '' :
       ('<div class="rounded-2xl border border-slate-800 bg-slate-900">' +
        '  <div class="px-3 pt-3"><div class="text-xs font-semibold">Админ</div></div>' +
        '  <div class="p-3 space-y-4 text-sm">' +
-       '    <div class="text-[11px] text-slate-400">Токен сохранён. Можно добавлять и удалять вкусы (если источник — API).</div>' +
-            adminSourceInfo +
-       ( canEditFlavors
-         ? ('    <div class="grid grid-cols-1 gap-2">' +
-            '      <input id="admBrand" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Бренд" />' +
-            '      <input id="admName" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Название" />' +
-            '      <input id="admTags" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Теги (через запятую)" />' +
-            '      <input id="admStrength" type="number" min="1" max="10" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Крепость 1–10 (необязательно)" />' +
-            '      <textarea id="admDesc" class="min-h-[72px] rounded-xl border border-slate-700 bg-slate-900 px-3 py-2" placeholder="Описание (необязательно)"></textarea>' +
-            '    </div>' +
-            '    <div class="flex gap-2">' +
-            '      <button id="admAddFlavor" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] bg-slate-100 text-slate-900 hover:bg-white">Добавить вкус</button>' +
-            '      <button id="admReload" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-slate-800">Обновить список</button>' +
-            '      <button id="admClearToken" class="ml-auto inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-rose-700 text-rose-300 hover:bg-rose-900/40">Выйти из админки</button>' +
-            '    </div>'
-           )
-         : ('    <div class="p-3 rounded-lg border border-amber-700 bg-amber-900/20 text-amber-200 text-[12px]">' +
-            '      Сейчас используется локальный JSON. Редактирование вкусов недоступно. ' +
-            '      Нажмите «Переключить на API», чтобы включить добавление и удаление.' +
-            '    </div>' +
-            '    <div class="flex gap-2">' +
-            '      <button id="admReload" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-slate-800">Обновить список</button>' +
-            '      <button id="admClearToken" class="ml-auto inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-rose-700 text-rose-300 hover:bg-rose-900/40">Выйти из админки</button>' +
-            '    </div>'
-           )
-       ) +
+       '    <div class="text-[11px] text-slate-400">Токен сохранён. Можно добавлять и удалять вкусы.</div>' +
+       '    <div class="grid grid-cols-1 gap-2">' +
+       '      <input id="admBrand" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Бренд" />' +
+       '      <input id="admName" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Название" />' +
+       '      <input id="admTags" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Теги (через запятую)" />' +
+       '      <input id="admStrength" type="number" min="1" max="10" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Крепость 1–10 (необязательно)" />' +
+       '      <textarea id="admDesc" class="min-h-[72px] rounded-xl border border-slate-700 bg-slate-900 px-3 py-2" placeholder="Описание (необязательно)"></textarea>' +
+       '    </div>' +
+       '    <div class="flex gap-2">' +
+       '      <button id="admAddFlavor" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] bg-slate-100 text-slate-900 hover:bg-white">Добавить вкус</button>' +
+       '      <button id="admReload" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-slate-800">Обновить список</button>' +
+       '      <button id="admClearToken" class="ml-auto inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-rose-700 text-rose-300 hover:bg-rose-900/40">Выйти из админки</button>' +
+       '    </div>' +
        '    <div id="admMsg" class="text-[11px] text-slate-400"></div>' +
        '    <div>' +
        '      <div class="text-xs font-semibold mb-2">Все вкусы</div>' +
@@ -593,16 +518,6 @@
     if(search){ search.addEventListener('input', function(e){ state.search = e.target.value; updateSearchUI(); }); }
     bindAddButtons();
     attachMixEvents();
-
-    // Кнопка «Переключить на API»
-    var btnSwitchToApi = root.querySelector('#switchToApi');
-    if (btnSwitchToApi){
-      btnSwitchToApi.addEventListener('click', async function(){
-        setFlavorsSource('api');
-        await loadFlavors();
-        render();
-      });
-    }
 
     // Поля формы
     var titleEl=root.querySelector('#title'); if(titleEl){ titleEl.addEventListener('input', function(e){ state.title = e.target.value; }); }
@@ -731,7 +646,7 @@
     }
   }
 
-  // Построение списка вкусов в админке + обработчики удаления (если API)
+  // Построение списка вкусов в админке + обработчики удаления
   function buildAdminFlavorList(root){
     var list = root.querySelector('#admFlavorList');
     if (!list) return;
@@ -740,7 +655,6 @@
       var b = (f.brand||'').trim() || 'Без бренда';
       (byBrand[b]||(byBrand[b]=[])).push(f);
     });
-    var canEditFlavors = state.flavorsSourceResolved === 'api';
 
     var html = Object.keys(byBrand).sort().map(function(brand){
       var rows = byBrand[brand].sort(function(a,b){ return a.name.localeCompare(b.name, 'ru'); })
@@ -748,7 +662,7 @@
           return (
             '<div class="flex items-center justify-between gap-2 text-[12px] border border-slate-800 rounded-lg px-2 py-1">' +
               '<div class="min-w-0 truncate"><span class="opacity-70">'+escHTML(brand)+'</span> • '+escHTML(f.name)+'</div>' +
-              '<button '+(canEditFlavors?'':'disabled ')+'data-del-flavor="'+escAttr(f.id)+'" class="inline-flex items-center justify-center h-7 px-2 rounded-md border '+(canEditFlavors?'border-rose-700 text-rose-300 hover:bg-rose-900/40':'border-slate-700 text-slate-500 cursor-not-allowed')+'">Удалить</button>' +
+              '<button data-del-flavor="'+escAttr(f.id)+'" class="inline-flex items-center justify-center h-7 px-2 rounded-md border border-rose-700 text-rose-300 hover:bg-rose-900/40">Удалить</button>' +
             '</div>'
           );
         }).join('');
@@ -761,8 +675,7 @@
     }).join('') || '<div class="text-[12px] text-slate-400">Пока нет вкусов</div>';
     list.innerHTML = html;
 
-    if (!canEditFlavors) return; // не вешаем обработчики, если редактирование запрещено
-
+    // Обработчики удаления вкусов
     root.querySelectorAll('[data-del-flavor]').forEach(function(btn){
       btn.addEventListener('click', async function(){
         var id = btn.getAttribute('data-del-flavor');
