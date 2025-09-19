@@ -42,7 +42,7 @@
   const API_BASE = "https://hookhah.onrender.com";
   const api = (path, opts = {}) => {
     const headers = { Accept: "application/json", ...(opts.headers || {}) };
-    // Content-Type добавляем только если реально шлём body (многие бэки ругаются на DELETE/GET с CT)
+    // Content-Type добавляем только если есть body (некоторые бэки падают на DELETE/GET c CT)
     if (opts.body && !headers["Content-Type"] && !(opts.body instanceof FormData)) {
       headers["Content-Type"] = "application/json; charset=UTF-8";
     }
@@ -122,12 +122,12 @@
     });
   }
 
-  // Нормализация записи вкуса + сохранение serverId (_id/id) на случай, если бэкенд требует его
+  // Нормализация записи вкуса (сохраняем возможный serverId)
   function normalizeFlavorRecord(f){
     const brand = String(f?.brand || '').trim();
     const name  = String(f?.name  || '').trim();
     const serverId = (f && (f._id || f.id)) || (brand+'-'+name).toLowerCase().replace(/\s+/g,'-');
-    const id = String(serverId).trim(); // используем везде один ключ
+    const id = String(serverId).trim();
     const tags = Array.isArray(f?.tags)
       ? f.tags
       : (f?.tags ? String(f.tags).split(',').map(s=>s.trim()).filter(Boolean) : undefined);
@@ -218,25 +218,47 @@
   }
 
   // ========================= СЕРВЕРНЫЕ УДАЛЕНИЯ ==============================
-  // Удаление вкуса: пробуем популярные варианты роутинга
+  // Удаление вкуса: бэкенд, судя по ошибке, ждёт brand+name
   async function deleteFlavorOnServer(id, token){
-    const sid = String(id || '').trim();
+    const fl = state.flavors.find(f => f.id === id) || state.flavors.find(f => f._serverId === id);
+    const brand = fl && fl.brand ? String(fl.brand).trim() : null;
+    const name  = fl && fl.name  ? String(fl.name).trim()  : null;
+    const sid   = String(id || '').trim();
+
+    if (!brand || !name){
+      throw new Error('Не удалось найти brand/name для выбранного вкуса (id: '+sid+'). Обновите список и попробуйте снова.');
+    }
+
     const auth = (extra={}) => ({
       "X-Admin-Token": token || "",
       "Authorization": token ? `Bearer ${token}` : "",
       ...extra
     });
 
+    const q = `brand=${encodeURIComponent(brand)}&name=${encodeURIComponent(name)}`;
+
+    // Популярные контракты: сначала по brand+name
     const attempts = [
-      { path:`/api/flavors/delete?id=${encodeURIComponent(sid)}`, method:'POST', headers:auth() },
-      { path:`/api/flavors/delete`, method:'POST', headers:auth({"Content-Type":"application/json; charset=UTF-8"}), body: JSON.stringify({ id: sid }) },
+      // DELETE с query
+      { path:`/api/flavors?${q}`, method:'DELETE', headers:auth() },
+
+      // POST delete endpoints (query и JSON)
+      { path:`/api/flavors/delete?${q}`, method:'POST', headers:auth() },
+      { path:`/api/flavors/delete`, method:'POST', headers:auth({"Content-Type":"application/json; charset=UTF-8"}), body: JSON.stringify({ brand, name }) },
+
+      { path:`/api/flavors/remove?${q}`, method:'POST', headers:auth() },
+      { path:`/api/flavors/remove`, method:'POST', headers:auth({"Content-Type":"application/json; charset=UTF-8"}), body: JSON.stringify({ brand, name }) },
+
+      { path:`/api/delete-flavor?${q}`, method:'POST', headers:auth() },
+      { path:`/api/delete-flavor`, method:'POST', headers:auth({"Content-Type":"application/json; charset=UTF-8"}), body: JSON.stringify({ brand, name }) },
+
+      // POST /api/flavors с action=delete (часто так делают)
+      { path:`/api/flavors`, method:'POST', headers:auth({"Content-Type":"application/json; charset=UTF-8"}), body: JSON.stringify({ brand, name, action: 'delete' }) },
+
+      // На всякий случай — по id (если бэк это всё-таки поддерживает)
+      { path:`/api/flavors/${encodeURIComponent(sid)}`, method:'DELETE', headers:auth() },
       { path:`/api/flavors?id=${encodeURIComponent(sid)}`, method:'DELETE', headers:auth() },
       { path:`/api/flavors/${encodeURIComponent(sid)}?_method=DELETE`, method:'POST', headers:auth() },
-      { path:`/api/flavors/${encodeURIComponent(sid)}/delete`, method:'POST', headers:auth() },
-      { path:`/api/delete-flavor?id=${encodeURIComponent(sid)}`, method:'POST', headers:auth() },
-      { path:`/api/delete/flavor?id=${encodeURIComponent(sid)}`, method:'POST', headers:auth() },
-      { path:`/api/flavor/delete?id=${encodeURIComponent(sid)}`, method:'POST', headers:auth() },
-      { path:`/api/flavors`, method:'POST', headers:auth({"Content-Type":"application/json; charset=UTF-8","X-HTTP-Method-Override":"DELETE"}), body: JSON.stringify({ id: sid }) },
     ];
 
     let lastText = "", lastStatus = 0, lastPath = "";
