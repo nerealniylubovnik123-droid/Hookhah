@@ -4,12 +4,12 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#020617" />
-  <title>Hookah Mixes (Single HTML)</title>
+  <title>Hookah Mixes</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>body{background:#020617}</style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
-  <!-- Ранний дружелюбный экран ошибок -->
+  <!-- Дружелюбный экран ошибок -->
   <script>
     (function(){
       function showFatal(msg){
@@ -23,12 +23,12 @@
           '  </div>' +
           '</div>';
       }
-      window.addEventListener('error', function(e){
-        var m = (e && (e.message || (e.error && e.error.message))) || 'Script error';
+      window.addEventListener('error', e=>{
+        const m = (e && (e.message || (e.error && e.error.message))) || 'Script error';
         showFatal(m);
       });
-      window.addEventListener('unhandledrejection', function(e){
-        var m = (e && (e.reason && (e.reason.message || e.reason))) || 'Unhandled rejection';
+      window.addEventListener('unhandledrejection', e=>{
+        const m = (e && (e.reason && (e.reason.message || e.reason))) || 'Unhandled rejection';
         showFatal(m);
       });
     })();
@@ -38,22 +38,18 @@
   <div id="root" class="min-h-[100svh]"></div>
 
   <script>
- // ========================= API BASE ========================================
-const API_BASE = "https://hookhah.onrender.com";
-const api = (path, opts = {}) => {
-  const headers = { ...(opts.headers || {}), Accept: "application/json" };
-  // Добавляем Content-Type только если реально есть body
-  if (opts.body && !headers["Content-Type"]) {
-    headers["Content-Type"] = "application/json; charset=UTF-8";
-  }
-  return fetch(API_BASE + path, {
-    cache: "no-store",
-    ...opts,
-    headers
-  });
-};
+  // ========================= API ============================================
+  const API_BASE = "https://hookhah.onrender.com";
+  const api = (path, opts = {}) => {
+    const headers = { Accept: "application/json", ...(opts.headers || {}) };
+    // Content-Type добавляем только если реально шлём body (многие бэки ругаются на DELETE/GET с CT)
+    if (opts.body && !headers["Content-Type"] && !(opts.body instanceof FormData)) {
+      headers["Content-Type"] = "application/json; charset=UTF-8";
+    }
+    return fetch(API_BASE + path, { cache: "no-store", ...opts, headers });
+  };
 
-  // ========================= УТИЛИТЫ =========================================
+  // ========================= УТИЛИТЫ ========================================
   const safeNum = (v, d=0) => { const n = Number(v); return Number.isFinite(n)?n:d; };
   const safePercent = (v) => Math.max(0, Math.min(100, safeNum(v, 0)));
   const percentSum = (parts=[]) => (Array.isArray(parts)?parts.reduce((a,b)=>a+safePercent(b && b.percent),0):0);
@@ -126,18 +122,19 @@ const api = (path, opts = {}) => {
     });
   }
 
-  // Нормализация записи вкуса
+  // Нормализация записи вкуса + сохранение serverId (_id/id) на случай, если бэкенд требует его
   function normalizeFlavorRecord(f){
     const brand = String(f?.brand || '').trim();
     const name  = String(f?.name  || '').trim();
-    const id = String(f?.id || (brand+'-'+name).toLowerCase().replace(/\s+/g,'-')).trim();
+    const serverId = (f && (f._id || f.id)) || (brand+'-'+name).toLowerCase().replace(/\s+/g,'-');
+    const id = String(serverId).trim(); // используем везде один ключ
     const tags = Array.isArray(f?.tags)
       ? f.tags
       : (f?.tags ? String(f.tags).split(',').map(s=>s.trim()).filter(Boolean) : undefined);
     const strength10 = (Number.isFinite(f?.strength10) ? Number(f.strength10)
                       : Number.isFinite(f?.strength)   ? Number(f.strength) : undefined);
     const description = f?.description ? String(f.description) : undefined;
-    return { id, brand, name, description, tags, strength10 };
+    return { id, brand, name, description, tags, strength10, _serverId: serverId };
   }
 
   // ========================= СОСТОЯНИЕ ======================================
@@ -174,16 +171,6 @@ const api = (path, opts = {}) => {
     state.showSplash = true;
   }
 
-  // Универсальный fetch JSON (мягкий)
-  async function fetchJSON(url, opts){
-    try{
-      const r = await fetch(url, { cache:'no-store', ...(opts||{}) });
-      if(!r.ok) return null;
-      return await r.json();
-    }catch(_){ return null; }
-  }
-
-  // Загрузка вкусов: ТОЛЬКО из API
   async function loadFlavors(){
     try{
       const r = await api('/api/flavors');
@@ -222,7 +209,7 @@ const api = (path, opts = {}) => {
   function LogoSVG(cls){
     return (
       '<svg class="'+(cls||'w-8 h-8')+'" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
-      '  <defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-opacity="1" stop-color="#38bdf8"/><stop offset="1" stop-opacity="1" stop-color="#a78bfa"/></linearGradient></defs>' +
+      '  <defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#38bdf8"/><stop offset="1" stop-color="#a78bfa"/></linearGradient></defs>' +
       '  <circle cx="32" cy="32" r="30" fill="url(#g)" opacity="0.2"/>' +
       '  <path d="M32 10c-4 4-4 8 0 12 4 4 4 8 0 12-4 4-4 8 0 12" stroke="#c7d2fe" stroke-width="3" fill="none" stroke-linecap="round"/>' +
       '  <circle cx="32" cy="50" r="3" fill="#c7d2fe"/>' +
@@ -230,99 +217,79 @@ const api = (path, opts = {}) => {
     );
   }
 
-  // ========================= УДАЛЕНИЕ ВКУСА (устойчивое) =====================
+  // ========================= СЕРВЕРНЫЕ УДАЛЕНИЯ ==============================
+  // Удаление вкуса: пробуем популярные варианты роутинга
   async function deleteFlavorOnServer(id, token){
-    const try1 = await api('/api/flavors/'+encodeURIComponent(id), {
-      method: 'DELETE',
-      headers: { 'X-Admin-Token': token||'' }
-    }).catch(()=>null);
-    if (try1 && (try1.ok || try1.status===204)) return true;
+    const sid = String(id || '').trim();
+    const auth = (extra={}) => ({
+      "X-Admin-Token": token || "",
+      "Authorization": token ? `Bearer ${token}` : "",
+      ...extra
+    });
 
-    const try2 = await api('/api/flavors?id='+encodeURIComponent(id), {
-      method: 'DELETE',
-      headers: { 'X-Admin-Token': token||'' }
-    }).catch(()=>null);
-    if (try2 && (try2.ok || try2.status===204)) return true;
+    const attempts = [
+      { path:`/api/flavors/delete?id=${encodeURIComponent(sid)}`, method:'POST', headers:auth() },
+      { path:`/api/flavors/delete`, method:'POST', headers:auth({"Content-Type":"application/json; charset=UTF-8"}), body: JSON.stringify({ id: sid }) },
+      { path:`/api/flavors?id=${encodeURIComponent(sid)}`, method:'DELETE', headers:auth() },
+      { path:`/api/flavors/${encodeURIComponent(sid)}?_method=DELETE`, method:'POST', headers:auth() },
+      { path:`/api/flavors/${encodeURIComponent(sid)}/delete`, method:'POST', headers:auth() },
+      { path:`/api/delete-flavor?id=${encodeURIComponent(sid)}`, method:'POST', headers:auth() },
+      { path:`/api/delete/flavor?id=${encodeURIComponent(sid)}`, method:'POST', headers:auth() },
+      { path:`/api/flavor/delete?id=${encodeURIComponent(sid)}`, method:'POST', headers:auth() },
+      { path:`/api/flavors`, method:'POST', headers:auth({"Content-Type":"application/json; charset=UTF-8","X-HTTP-Method-Override":"DELETE"}), body: JSON.stringify({ id: sid }) },
+    ];
 
-    const try3 = await api('/api/flavors/delete', {
-      method: 'POST',
-      headers: { 'X-Admin-Token': token||'', 'Content-Type': 'application/json; charset=UTF-8' },
-      body: JSON.stringify({ id })
-    }).catch(()=>null);
-    if (try3 && (try3.ok || try3.status===204)) return true;
-
-    const try4 = await api('/api/flavors/'+encodeURIComponent(id)+'?_method=DELETE', {
-      method: 'POST',
-      headers: { 'X-Admin-Token': token||'' }
-    }).catch(()=>null);
-    if (try4 && (try4.ok || try4.status===204)) return true;
-
-    const text = try1 ? await try1.text().catch(()=> '') : '';
-    throw new Error('Не удалось удалить вкус. Сервер ответил: ' + (text || (try1 && try1.status)));
-  }
-
-  // ========================= УДАЛЕНИЕ ВКУСА (устойчивое) =====================
-async function deleteFlavorOnServer(id, token) {
-  const authHeaders = (extra = {}) => ({
-    "X-Admin-Token": token || "",
-    "Authorization": token ? `Bearer ${token}` : "",
-    ...extra,
-  });
-
-  // Набор вероятных контрактов бэка — пробуем по очереди
-  const attempts = [
-    // Часто встречается — POST с id в query
-    { path: `/api/flavors/delete?id=${encodeURIComponent(id)}`, method: "POST", headers: authHeaders() },
-
-    // POST JSON { id }
-    { path: `/api/flavors/delete`, method: "POST", headers: authHeaders({ "Content-Type": "application/json; charset=UTF-8" }), body: JSON.stringify({ id }) },
-
-    // Иногда route называется /remove
-    { path: `/api/flavors/remove?id=${encodeURIComponent(id)}`, method: "POST", headers: authHeaders() },
-    { path: `/api/flavors/remove`, method: "POST", headers: authHeaders({ "Content-Type": "application/json; charset=UTF-8" }), body: JSON.stringify({ id }) },
-
-    // DELETE c id в query
-    { path: `/api/flavors?id=${encodeURIComponent(id)}`, method: "DELETE", headers: authHeaders() },
-
-    // Метод-оверрайд — backend на Express часто поддерживает
-    { path: `/api/flavors/${encodeURIComponent(id)}?_method=DELETE`, method: "POST", headers: authHeaders() },
-    { path: `/api/flavors`, method: "POST", headers: authHeaders({ "Content-Type": "application/json; charset=UTF-8", "X-HTTP-Method-Override": "DELETE" }), body: JSON.stringify({ id }) },
-
-    // Админские пути (если так настроено на бэке)
-    { path: `/api/admin/flavors/${encodeURIComponent(id)}`, method: "DELETE", headers: authHeaders() },
-    { path: `/api/admin/flavors/delete?id=${encodeURIComponent(id)}`, method: "POST", headers: authHeaders() },
-  ];
-
-  let lastText = "";
-  let lastStatus = 0;
-  let lastPath = "";
-
-  for (const a of attempts) {
-    try {
-      const r = await api(a.path, { method: a.method, headers: a.headers, body: a.body });
-      lastStatus = r.status;
-      lastPath = a.path;
-      if (r.ok || r.status === 204) return true;
-
-      // если сервер вернул JSON с success, учитываем
-      const ct = r.headers.get("content-type") || "";
-      if (ct.includes("application/json")) {
-        const j = await r.json().catch(() => null);
-        if (j && (j.ok === true || j.success === true)) return true;
-        lastText = j ? JSON.stringify(j) : (await r.text().catch(() => ""));
-      } else {
-        lastText = await r.text().catch(() => "");
-      }
-    } catch (_) {
-      // просто идём к следующей попытке
+    let lastText = "", lastStatus = 0, lastPath = "";
+    for (const a of attempts){
+      try{
+        const r = await api(a.path, { method:a.method, headers:a.headers, body:a.body });
+        lastStatus = r.status; lastPath = a.path;
+        if (r.ok || r.status===204) return true;
+        const ct = r.headers.get("content-type") || "";
+        if (ct.includes("application/json")){
+          const j = await r.json().catch(()=>null);
+          if (j && (j.ok===true || j.success===true)) return true;
+          lastText = j ? JSON.stringify(j) : (await r.text().catch(()=> ""));
+        } else {
+          lastText = await r.text().catch(()=> "");
+        }
+      }catch(_){}
     }
+    throw new Error(`Не удалось удалить вкус. Последняя попытка: ${lastPath} [${lastStatus}] — ${String(lastText).slice(0,300)}`);
   }
 
-  throw new Error(
-    `Не удалось удалить вкус. Последняя попытка: ${lastPath} [${lastStatus}]` +
-    (lastText ? ` — ${String(lastText).slice(0, 300)}` : "")
-  );
-}
+  // Удаление микса (по автору)
+  async function deleteMixOnServer(id, user){
+    const uid = String(user && user.id || '');
+    const headers = { 'X-Author-Id': uid, 'X-User-Id': uid };
+
+    const tries = [
+      { path:`/api/mixes/${encodeURIComponent(id)}`, method:'DELETE', headers },
+      { path:`/api/mixes/${encodeURIComponent(id)}?authorId=${encodeURIComponent(uid)}`, method:'DELETE', headers },
+      { path:`/api/mixes/delete`, method:'POST', headers:{...headers,"Content-Type":"application/json; charset=UTF-8"}, body: JSON.stringify({ id, authorId: uid }) },
+      { path:`/api/mixes/${encodeURIComponent(id)}?_method=DELETE`, method:'POST', headers:{...headers,"Content-Type":"application/json; charset=UTF-8"}, body: JSON.stringify({ authorId: uid }) },
+      { path:`/api/mixes/${encodeURIComponent(id)}`, method:'DELETE', headers:{...headers,"Content-Type":"application/json; charset=UTF-8"}, body: JSON.stringify({ authorId: uid }) },
+    ];
+
+    let lastText="", lastStatus=0, lastPath="";
+    for (const t of tries){
+      try{
+        const r = await api(t.path, { method:t.method, headers:t.headers, body:t.body });
+        lastStatus = r.status; lastPath = t.path;
+        if (r.ok || r.status===204) return true;
+        const ct = r.headers.get("content-type") || "";
+        if (ct.includes("application/json")){
+          const j = await r.json().catch(()=>null);
+          if (j && (j.ok===true || j.success===true)) return true;
+          lastText = j ? JSON.stringify(j) : (await r.text().catch(()=> ""));
+        } else {
+          lastText = await r.text().catch(()=> "");
+        }
+      }catch(_){}
+    }
+    throw new Error(`Не удалось удалить микс. Последняя попытка: ${lastPath} [${lastStatus}] — ${String(lastText).slice(0,300)}`);
+  }
+
   // ========================= РЕНДЕР =========================================
   function render(){
     var root=document.getElementById('root');
@@ -486,7 +453,7 @@ async function deleteFlavorOnServer(id, token) {
         '</div>' +
       '</div>';
 
-    // ===== Админка (удаление/добавление всегда доступны; источник — API)
+    // ===== Админ
     const adminBlock = (!isAdmin() ? '' :
       ('<div class="rounded-2xl border border-slate-800 bg-slate-900">' +
        '  <div class="px-3 pt-3"><div class="text-xs font-semibold">Админ</div></div>' +
@@ -504,7 +471,6 @@ async function deleteFlavorOnServer(id, token) {
        '      <button id="admReload" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-slate-800">Обновить список</button>' +
        '      <button id="admClearToken" class="ml-auto inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-rose-700 text-rose-300 hover:bg-rose-900/40">Выйти из админки</button>' +
        '    </div>' +
-       '    <div id="admMsg" class="text-[11px] text-slate-400"></div>' +
        '    <div>' +
        '      <div class="text-xs font-semibold mb-2">Все вкусы</div>' +
        '      <div id="admFlavorList" class="space-y-1"></div>' +
@@ -616,7 +582,7 @@ async function deleteFlavorOnServer(id, token) {
       });
     });
 
-    // ===== Админ: блок входа
+    // ===== Админ: логин
     var tokBtn = root.querySelector('#admSaveToken');
     if (tokBtn){
       tokBtn.addEventListener('click', function(){
@@ -632,7 +598,7 @@ async function deleteFlavorOnServer(id, token) {
       tokCancel.addEventListener('click', function(){ state.adminPrompt = false; render(); });
     }
 
-    // ===== Админ: если вкладка активна — построить список и обработчики
+    // ===== Админ: список вкусов и обработчики
     if (isAdmin() && state.activeTab === 'admin'){
       buildAdminFlavorList(root);
       var btnReload = root.querySelector('#admReload');
@@ -665,15 +631,15 @@ async function deleteFlavorOnServer(id, token) {
             id: (brand.trim()+'-'+name.trim()).replace(/\s+/g,'-').toLowerCase(),
             brand: brand.trim(),
             name: name.trim(),
-            description: desc.trim() || undefined,
+            description: (desc||'').trim() || undefined,
             tags: tags ? tags.split(',').map(function(s){return s.trim();}).filter(Boolean) : undefined,
             strength10: str10 ? Number(str10) : undefined
           };
           try{
             var r = await api('/api/flavors', {
               method:'POST',
-              headers: { 'X-Admin-Token': state.adminToken || '' },
-              body: JSON.stringify(payload)
+              body: JSON.stringify(payload),
+              headers: { 'X-Admin-Token': state.adminToken || '', 'Authorization': state.adminToken ? ('Bearer '+state.adminToken) : '' }
             });
             if (!r.ok){
               var txt = await r.text().catch(function(){return '';});
@@ -691,7 +657,7 @@ async function deleteFlavorOnServer(id, token) {
     }
   }
 
-  // Построение списка вкусов в админке + обработчики удаления
+  // Построение списка вкусов в админке + удаление
   function buildAdminFlavorList(root){
     var list = root.querySelector('#admFlavorList');
     if (!list) return;
@@ -720,7 +686,6 @@ async function deleteFlavorOnServer(id, token) {
     }).join('') || '<div class="text-[12px] text-slate-400">Пока нет вкусов</div>';
     list.innerHTML = html;
 
-    // Обработчики удаления вкусов
     root.querySelectorAll('[data-del-flavor]').forEach(function(btn){
       btn.addEventListener('click', async function(){
         var id = btn.getAttribute('data-del-flavor');
@@ -841,7 +806,7 @@ async function deleteFlavorOnServer(id, token) {
     bindAddButtons();
   }
 
-  // ========================= СТАРТ ПРИЛОЖЕНИЯ ===============================
+  // ========================= СТАРТ ==========================================
   (async function start(){
     try{
       initAuth();
@@ -850,7 +815,7 @@ async function deleteFlavorOnServer(id, token) {
       await loadGuestMixes();
       render();
 
-      // Поллинг миксов, чтобы видеть чужие изменения
+      // Поллинг миксов каждые 10с
       setInterval(async function(){
         const before = JSON.stringify(state.guestMixes?.map(function(m){return m.id;}));
         await loadGuestMixes();
