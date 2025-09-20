@@ -192,43 +192,45 @@
     );
   }
 
-  // ========================= УДАЛЕНИЕ ВКУСА (устойчиво, без 409) ============
-  // 1) сначала пробуем POST /api/flavors?action=delete  {brand,name}
-  // 2) если нет — POST /api/flavors  {action:'delete', brand,name}
-  // !!! важно: НЕ отправляем id в теле (иначе бэк может подумать, что это создание → 409)
+  // ========================= FLAVORS API HELPERS =============================
+  const flavorsApi = {
+    async create(payload, token){
+      const r = await api('/api/flavors', {
+        method: 'POST',
+        headers: { 'X-Admin-Token': token || '' },
+        body: JSON.stringify(payload)
+      });
+      if (!r.ok) throw new Error('Не удалось добавить вкус: '+(await r.text().catch(()=>r.status)));
+      return true;
+    },
+    async removeByBrandName(brand, name, token){
+      // Вариант 1: action=delete в query
+      let r = await api('/api/flavors?action=delete', {
+        method: 'POST',
+        headers: { 'X-Admin-Token': token || '' },
+        body: JSON.stringify({ brand, name })
+      }).catch(()=>null);
+      if (r && (r.ok || r.status===204)) return true;
+
+      // Вариант 2: action в body
+      r = await api('/api/flavors', {
+        method: 'POST',
+        headers: { 'X-Admin-Token': token || '' },
+        body: JSON.stringify({ action:'delete', brand, name })
+      }).catch(()=>null);
+      if (r && (r.ok || r.status===204)) return true;
+
+      const txt = r ? await r.text().catch(()=> String(r.status)) : 'нет ответа';
+      throw new Error('Удаление вкуса не удалось: ' + txt);
+    }
+  };
+
+  // ========================= УДАЛЕНИЕ ВКУСА (использует helpers) ============
   async function deleteFlavorOnServer(flavorId, token){
-    // найдём точные brand+name по id
     let fl = (state.flavors || []).find(f => f && f.id === flavorId);
     if (!fl) { await loadFlavors(); fl = (state.flavors || []).find(f => f && f.id === flavorId); }
-    if (!fl || !fl.brand || !fl.name) throw new Error('Не удалось определить brand/name для вкуса "'+flavorId+'". Обновите список вкусов и попробуйте ещё раз.');
-
-    const brand = String(fl.brand).trim();
-    const name  = String(fl.name).trim();
-
-    // ВАРИАНТ 1
-    let r = await api('/api/flavors?action=delete', {
-      method: 'POST',
-      headers: { 'X-Admin-Token': token || '' },
-      body: JSON.stringify({ brand, name })
-    }).catch(()=>null);
-    if (r && (r.ok || r.status===204)) return true;
-
-    // ВАРИАНТ 2
-    r = await api('/api/flavors', {
-      method: 'POST',
-      headers: { 'X-Admin-Token': token || '' },
-      body: JSON.stringify({ action:'delete', brand, name })
-    }).catch(()=>null);
-    if (r && (r.ok || r.status===204)) return true;
-
-    // Ошибка
-    let status = r ? r.status : 'нет ответа';
-    let body = '';
-    try {
-      const ct = r && r.headers ? (r.headers.get('content-type')||'') : '';
-      body = r ? (ct.includes('json') ? JSON.stringify(await r.json()) : await r.text()) : '';
-    } catch(_) {}
-    throw new Error('Удаление вкуса не удалось: ' + status + (body ? ' — ' + body : ''));
+    if (!fl || !fl.brand || !fl.name) throw new Error('Не удалось определить brand/name для вкуса "'+flavorId+'". Обновите список вкусов.');
+    return flavorsApi.removeByBrandName(String(fl.brand).trim(), String(fl.name).trim(), token);
   }
 
   // ========================= УДАЛЕНИЕ МИКСА (без создания) ===================
@@ -252,7 +254,7 @@
     t = await api('/api/mixes/'+encodeURIComponent(id)+'?_method=DELETE', { method:'POST', headers, body: JSON.stringify({ authorId: uid }) }).catch(()=>null);
     if (t && (t.ok || t.status===204)) return true;
 
-    // 5) DELETE с body (иногда бек принимает)
+    // 5) DELETE с body
     t = await api('/api/mixes/'+encodeURIComponent(id), { method:'DELETE', headers, body: JSON.stringify({ authorId: uid }) }).catch(()=>null);
     if (t && (t.ok || t.status===204)) return true;
 
@@ -828,7 +830,7 @@
     {var cl2=clampPercentForPart([{flavorId:'a',percent:50}], 'a', 150); console.assert(cl2===100,'clamp max');}
     {var r=filterFlavorsByQueryAdv([{id:'1',name:'Mango'},{id:'2',name:'Ice'},{id:'3',name:'Ice Mango'}], 'mango'); console.assert(r.length===2,'search across brands');}
     {var t=getMixTasteLabel([],[]); console.assert(t===null,'taste null');}
-    {var cl3=clampPercentForPart([{flavorId:'a',percent:10}], 'a', -5); console.assert(cl3===0,'clamp to 0');}
+    {var cl3=clampPercentForPart([{flavorId:'a',percent:10}], 'a', -5); console.assert(cl3===0,'clамп to 0');}
     console.groupEnd();
   }catch(e){ console.error('Smoke tests error', e); }})();
   </script>
