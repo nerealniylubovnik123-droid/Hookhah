@@ -42,6 +42,7 @@
   const API_BASE = "https://hookhah.onrender.com";
   function api(path, opts={}) {
     const headers = { Accept: "application/json", ...(opts.headers||{}) };
+    // Авто-Content-Type для JSON body
     if (opts.body && !headers["Content-Type"] && !(opts.body instanceof FormData)) {
       headers["Content-Type"] = "application/json; charset=UTF-8";
     }
@@ -198,104 +199,30 @@
       const r = await api('/api/flavors', {
         method: 'POST',
         headers: { 'X-Admin-Token': token || '' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload) // {brand,name,tags?,strength10?,description?}
       });
       if (!r.ok) throw new Error('Не удалось добавить вкус: '+(await r.text().catch(()=>r.status)));
       return true;
     },
     async removeByBrandName(brand, name, token){
-      // Вариант 1: action=delete в query
-      let r = await api('/api/flavors?action=delete', {
+      // Единственный рабочий маршрут по твоему тесту: POST /api/flavors { action:'delete', brand, name }
+      const r = await api('/api/flavors', {
         method: 'POST',
         headers: { 'X-Admin-Token': token || '' },
-        body: JSON.stringify({ brand, name })
-      }).catch(()=>null);
-      if (r && (r.ok || r.status===204)) return true;
-
-      // Вариант 2: action в body
-      r = await api('/api/flavors', {
-        method: 'POST',
-        headers: { 'X-Admin-Token': token || '' },
-        body: JSON.stringify({ action:'delete', brand, name })
-      }).catch(()=>null);
-      if (r && (r.ok || r.status===204)) return true;
-
-      const txt = r ? await r.text().catch(()=> String(r.status)) : 'нет ответа';
-      throw new Error('Удаление вкуса не удалось: ' + txt);
+        body: JSON.stringify({ action:'delete', brand: String(brand).trim(), name: String(name).trim() })
+      });
+      if (!r.ok) throw new Error('Удаление вкуса не удалось: '+(await r.text().catch(()=>r.status)));
+      return true;
     }
   };
 
-  // ========================= УДАЛЕНИЕ ВКУСА (устойчиво; form сначала) =========
-async function deleteFlavorOnServer(flavorId, token){
-  // 1) найдём точные brand+name по id
-  let fl = (state.flavors || []).find(f => f && f.id === flavorId);
-  if (!fl) { await loadFlavors(); fl = (state.flavors || []).find(f => f && f.id === flavorId); }
-  if (!fl || !fl.brand || !fl.name) {
-    throw new Error('Не удалось определить brand/name для вкуса "'+flavorId+'". Обновите список вкусов.');
+  // ========================= УДАЛЕНИЕ ВКУСА (использует helpers) ============
+  async function deleteFlavorOnServer(flavorId, token){
+    let fl = (state.flavors || []).find(f => f && f.id === flavorId);
+    if (!fl) { await loadFlavors(); fl = (state.flavors || []).find(f => f && f.id === flavorId); }
+    if (!fl || !fl.brand || !fl.name) throw new Error('Не удалось определить brand/name для вкуса "'+flavorId+'". Обновите список вкусов.');
+    return flavorsApi.removeByBrandName(String(fl.brand).trim(), String(fl.name).trim(), token);
   }
-
-  const brand = String(fl.brand).trim();
-  const name  = String(fl.name).trim();
-  const id    = String(fl.id).trim();
-  const baseHeaders = { 'X-Admin-Token': token || '' };
-
-  async function tryReq(url, opts){
-    try{
-      const r = await api(url, opts);
-      const ct = r.headers.get('content-type') || '';
-      const body = ct.includes('json') ? await r.json().catch(()=>null) : await r.text().catch(()=> '');
-      return { ok: (r.ok || r.status === 204), status: r.status, body };
-    }catch(e){ return { ok:false, status:'net', body:String(e) }; }
-  }
-
-  // ВАРИАНТ 1: form-urlencoded + action в query (макс. совместимость)
-  let form = new URLSearchParams();
-  form.set('action','delete');
-  form.set('brand',brand);
-  form.set('name',name);
-  let res = await tryReq('/api/flavors?action=delete', {
-    method:'POST',
-    headers:{ ...baseHeaders, 'Accept':'application/json', 'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8' },
-    body: form.toString()
-  });
-  if (res.ok) return true;
-
-  // ВАРИАНТ 2: form-urlencoded без query (action в body)
-  res = await tryReq('/api/flavors', {
-    method:'POST',
-    headers:{ ...baseHeaders, 'Accept':'application/json', 'Content-Type':'application/x-www-form-urlencoded; charset=UTF-8' },
-    body: form.toString()
-  });
-  if (res.ok) return true;
-
-  // ВАРИАНТ 3: JSON body {action:'delete', brand, name}
-  res = await tryReq('/api/flavors', {
-    method:'POST',
-    headers:{ ...baseHeaders, 'Accept':'application/json', 'Content-Type':'application/json; charset=UTF-8' },
-    body: JSON.stringify({ action:'delete', brand, name })
-  });
-  if (res.ok) return true;
-
-  // ВАРИАНТ 4: multipart/form-data (иногда бэки парсят только его)
-  const fd = new FormData();
-  fd.append('action','delete');
-  fd.append('brand',brand);
-  fd.append('name',name);
-  res = await tryReq('/api/flavors', { method:'POST', headers:{ ...baseHeaders }, body: fd });
-  if (res.ok) return true;
-
-  // ВАРИАНТ 5 (на всякий случай): JSON с id тоже
-  res = await tryReq('/api/flavors', {
-    method:'POST',
-    headers:{ ...baseHeaders, 'Accept':'application/json', 'Content-Type':'application/json; charset=UTF-8' },
-    body: JSON.stringify({ action:'delete', id, brand, name })
-  });
-  if (res.ok) return true;
-
-  // Диагностика: если бэк продолжает «создавать», вернётся 409/id exists
-  const tail = typeof res.body === 'string' ? res.body : JSON.stringify(res.body||{});
-  throw new Error('Не удалось удалить вкус. Последний ответ: '+res.status+' — '+tail.slice(0,300));
-}
 
   // ========================= УДАЛЕНИЕ МИКСА (без создания) ===================
   async function deleteMixOnServer(id, user){
@@ -894,7 +821,7 @@ async function deleteFlavorOnServer(flavorId, token){
     {var cl2=clampPercentForPart([{flavorId:'a',percent:50}], 'a', 150); console.assert(cl2===100,'clamp max');}
     {var r=filterFlavorsByQueryAdv([{id:'1',name:'Mango'},{id:'2',name:'Ice'},{id:'3',name:'Ice Mango'}], 'mango'); console.assert(r.length===2,'search across brands');}
     {var t=getMixTasteLabel([],[]); console.assert(t===null,'taste null');}
-    {var cl3=clampPercentForPart([{flavorId:'a',percent:10}], 'a', -5); console.assert(cl3===0,'clамп to 0');}
+    {var cl3=clampPercentForPart([{flavorId:'a',percent:10}], 'a', -5); console.assert(cl3===0,'clamp to 0');}
     console.groupEnd();
   }catch(e){ console.error('Smoke tests error', e); }})();
   </script>
