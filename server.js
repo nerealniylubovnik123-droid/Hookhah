@@ -1,6 +1,6 @@
-// server.js — API для миксов и вкусов (файловое хранилище)
-// Запуск: node server.js
-// Среда:  ADMIN_TOKEN=<секрет>, DATA_DIR=/var/data (для Render Persistent Disk)
+// server.js — API + раздача статики из /public
+// ENV: ADMIN_TOKEN=<секрет>
+//      DATA_DIR (необязательно; если не задан, пишем в ./data)
 
 const express = require('express');
 const path = require('path');
@@ -12,14 +12,10 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // ---------- базовые миддлвары ----------
-app.use(express.json()); // обязательно ДО роутов
-// CORS (на всякий случай — если фронт на другом домене)
+app.use(express.json());
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader(
-    'Access-Control-Allow-Headers',
-    'Content-Type, X-Admin-Token, X-Author-Id, X-User-Id'
-  );
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Admin-Token, X-Author-Id, X-User-Id');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS');
   if (req.method === 'OPTIONS') return res.sendStatus(204);
   next();
@@ -35,20 +31,14 @@ function randomId() {
     ? crypto.randomUUID()
     : ('id-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2));
 }
-
 function slugifyId(brand, name) {
   return (String(brand || '').trim() + '-' + String(name || '').trim())
     .toLowerCase()
     .replace(/\s+/g, '-');
 }
-
 async function ensureDir(p) {
-  if (!fs.existsSync(p)) {
-    await fsp.mkdir(p, { recursive: true });
-  }
+  if (!fs.existsSync(p)) await fsp.mkdir(p, { recursive: true });
 }
-
-// безопасная файловая запись: сначала .tmp, потом rename
 async function writeJsonAtomic(filePath, data) {
   const tmp = filePath + '.tmp';
   const json = JSON.stringify(data, null, 2);
@@ -56,25 +46,19 @@ async function writeJsonAtomic(filePath, data) {
   await fsp.writeFile(tmp, json, 'utf8');
   await fsp.rename(tmp, filePath);
 }
-
 async function readJsonSafe(filePath, fallback) {
   try {
     const txt = await fsp.readFile(filePath, 'utf8');
-    const parsed = JSON.parse(txt);
-    return parsed;
+    return JSON.parse(txt);
   } catch (_) {
     return fallback;
   }
 }
-
 function requireAdmin(req, res, next) {
   const token = req.get('X-Admin-Token') || '';
-  if (!ADMIN_TOKEN || token !== ADMIN_TOKEN) {
-    return res.status(403).json({ error: 'forbidden' });
-  }
+  if (!ADMIN_TOKEN || token !== ADMIN_TOKEN) return res.status(403).json({ error: 'forbidden' });
   next();
 }
-
 function getAuthorIdFromReq(req) {
   return (
     String(req.get('X-Author-Id') || '').trim() ||
@@ -83,189 +67,123 @@ function getAuthorIdFromReq(req) {
     String((req.query && req.query.authorId) || '').trim()
   );
 }
-
-// ---------- универсальное файловое хранилище ----------
 function createStore(fileName) {
   const filePath = path.join(DATA_DIR, fileName);
-
   return {
     async getAll() {
       await ensureDir(DATA_DIR);
-      if (!fs.existsSync(filePath)) {
-        await writeJsonAtomic(filePath, []);
-      }
+      if (!fs.existsSync(filePath)) await writeJsonAtomic(filePath, []);
       const list = await readJsonSafe(filePath, []);
       return Array.isArray(list) ? list : [];
     },
-
     async setAll(list) {
       await writeJsonAtomic(filePath, Array.isArray(list) ? list : []);
     },
-
     filePath,
   };
 }
 
 const flavorsStore = createStore('flavors.json');
-const mixesStore = createStore('mixes.json');
+const mixesStore   = createStore('mixes.json');
 
 // ===================== FLAVORS =====================
-
-// GET /api/flavors — список (публично)
 app.get('/api/flavors', async (req, res) => {
-  try {
-    const list = await flavorsStore.getAll();
-    res.json(list);
-  } catch (e) {
-    console.error('GET /api/flavors error', e);
-    res.status(500).json({ error: 'server error' });
-  }
+  try { res.json(await flavorsStore.getAll()); }
+  catch (e) { console.error(e); res.status(500).json({ error:'server error' }); }
 });
-
-// POST /api/flavors — создать (ТОЛЬКО админ)
 app.post('/api/flavors', requireAdmin, async (req, res) => {
   try {
-    const { brand = '', name = '', description = '', tags = [], strength10 } = req.body || {};
-    const b = String(brand).trim();
-    const n = String(name).trim();
-    if (!b || !n) return res.status(400).json({ error: 'brand and name required' });
-
+    const { brand='', name='', description='', tags=[], strength10 } = req.body || {};
+    const b = String(brand).trim(), n = String(name).trim();
+    if (!b || !n) return res.status(400).json({ error:'brand and name required' });
     const id = slugifyId(b, n);
     const list = await flavorsStore.getAll();
-    if (list.some((f) => f && f.id === id)) {
-      return res.status(409).json({ error: 'id already exists' });
-    }
-
+    if (list.some(f => f?.id === id)) return res.status(409).json({ error:'id already exists' });
     const rec = {
-      id,
-      brand: b,
-      name: n,
-      description: String(description || ''),
-      tags: Array.isArray(tags) ? tags.filter(Boolean) : [],
+      id, brand:b, name:n,
+      description:String(description||''),
+      tags:Array.isArray(tags)?tags.filter(Boolean):[],
       strength10: Number.isFinite(strength10) ? Number(strength10) : undefined,
     };
-
-    list.push(rec);
-    await flavorsStore.setAll(list);
-    res.status(201).json({ ok: true, id: rec.id });
-  } catch (e) {
-    console.error('POST /api/flavors error', e);
-    res.status(500).json({ error: 'server error' });
-  }
+    list.push(rec); await flavorsStore.setAll(list);
+    res.status(201).json({ ok:true, id:rec.id });
+  } catch (e) { console.error(e); res.status(500).json({ error:'server error' }); }
 });
-
-// DELETE /api/flavors/:id — удалить (ТОЛЬКО админ)
 app.delete('/api/flavors/:id', requireAdmin, async (req, res) => {
   try {
-    const id = String(req.params.id || '').trim();
-    if (!id) return res.status(400).json({ error: 'id required' });
-
+    const id = String(req.params.id||'').trim();
+    if (!id) return res.status(400).json({ error:'id required' });
     const list = await flavorsStore.getAll();
-    const next = list.filter((f) => f && f.id !== id);
-
-    if (next.length === list.length) {
-      return res.status(404).json({ error: 'not found' });
-    }
-
+    const next = list.filter(f => f?.id !== id);
+    if (next.length === list.length) return res.status(404).json({ error:'not found' });
     await flavorsStore.setAll(next);
     res.status(204).end();
-  } catch (e) {
-    console.error('DELETE /api/flavors/:id error', e);
-    res.status(500).json({ error: 'server error' });
-  }
+  } catch (e) { console.error(e); res.status(500).json({ error:'server error' }); }
 });
 
 // ===================== MIXES =====================
-
-// GET /api/mixes — список (публично)
 app.get('/api/mixes', async (req, res) => {
   try {
     const list = await mixesStore.getAll();
-    // по желанию: сортировать по дате создания (новые сверху)
-    list.sort((a, b) => (Number(b?.createdAt || 0) - Number(a?.createdAt || 0)));
+    list.sort((a,b)=>Number(b?.createdAt||0)-Number(a?.createdAt||0));
     res.json(list);
-  } catch (e) {
-    console.error('GET /api/mixes error', e);
-    res.status(500).json({ error: 'server error' });
-  }
+  } catch (e) { console.error(e); res.status(500).json({ error:'server error' }); }
 });
-
-// POST /api/mixes — создать (гость/любой)
 app.post('/api/mixes', async (req, res) => {
   try {
     const body = req.body || {};
     const list = await mixesStore.getAll();
-
-    let id = String(body.id || '').trim();
-    if (!id) id = randomId();
-
-    if (list.some((m) => m && m.id === id)) {
-      return res.status(409).json({ error: 'id already exists' });
-    }
-
+    let id = String(body.id||'').trim(); if (!id) id = crypto.randomUUID?.() || ('id-'+Date.now());
+    if (list.some(m=>m?.id===id)) return res.status(409).json({ error:'id already exists' });
     const now = Date.now();
     const rec = {
       id,
-      title: String(body.title || '').trim(),
-      parts: Array.isArray(body.parts) ? body.parts : [],
-      notes: String(body.notes || ''),
-      author: String(body.author || 'Гость'),
-      authorId: String(body.authorId || getAuthorIdFromReq(req) || 'anon'),
-      createdAt: Number(body.createdAt || now),
+      title:String(body.title||'').trim(),
+      parts:Array.isArray(body.parts)?body.parts:[],
+      notes:String(body.notes||''),
+      author:String(body.author||'Гость'),
+      authorId:String(body.authorId||getAuthorIdFromReq(req)||'anon'),
+      createdAt:Number(body.createdAt||now),
       taste: body.taste ?? null,
       strength10: Number.isFinite(body.strength10) ? Number(body.strength10) : null,
     };
-
-    list.push(rec);
-    await mixesStore.setAll(list);
-    res.status(201).json({ ok: true, id: rec.id });
-  } catch (e) {
-    console.error('POST /api/mixes error', e);
-    res.status(500).json({ error: 'server error' });
-  }
+    list.push(rec); await mixesStore.setAll(list);
+    res.status(201).json({ ok:true, id:rec.id });
+  } catch (e) { console.error(e); res.status(500).json({ error:'server error' }); }
 });
-
-// DELETE /api/mixes/:id — удалить (автор или админ)
 app.delete('/api/mixes/:id', async (req, res) => {
   try {
-    const id = String(req.params.id || '').trim();
-    if (!id) return res.status(400).json({ error: 'id required' });
-
+    const id = String(req.params.id||'').trim();
+    if (!id) return res.status(400).json({ error:'id required' });
     const list = await mixesStore.getAll();
-    const target = list.find((m) => m && m.id === id);
-    if (!target) return res.status(404).json({ error: 'not found' });
-
+    const target = list.find(m=>m?.id===id);
+    if (!target) return res.status(404).json({ error:'not found' });
     const reqAuthor = getAuthorIdFromReq(req);
     const isAdmin = ADMIN_TOKEN && (req.get('X-Admin-Token') === ADMIN_TOKEN);
-    const isAuthor = reqAuthor && String(reqAuthor) === String(target.authorId || '');
-
-    if (!isAdmin && !isAuthor) {
-      return res.status(403).json({ error: 'forbidden' });
-    }
-
-    const next = list.filter((m) => m && m.id !== id);
+    const isAuthor = reqAuthor && String(reqAuthor) === String(target.authorId||'');
+    if (!isAdmin && !isAuthor) return res.status(403).json({ error:'forbidden' });
+    const next = list.filter(m=>m?.id!==id);
     await mixesStore.setAll(next);
     res.status(204).end();
-  } catch (e) {
-    console.error('DELETE /api/mixes/:id error', e);
-    res.status(500).json({ error: 'server error' });
-  }
+  } catch (e) { console.error(e); res.status(500).json({ error:'server error' }); }
 });
 
-// ---------- healthcheck ----------
-app.get('/', (req, res) => {
-  res.type('text').send('Hookah API is running');
+// ===================== СТАТИКА (фронт) =====================
+// Папка с фронтом: /public (index.html)
+const PUBLIC_DIR = path.join(__dirname, 'public');
+app.use(express.static(PUBLIC_DIR, { maxAge: '1h' }));
+
+// SPA-фолбэк: все НЕ /api/* маршруты отдать index.html
+app.get(/^(?!\/api\/).*/, (req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, 'index.html'));
 });
 
-// ---------- 404 для прочих ----------
-app.use((req, res) => {
-  res.status(404).json({ error: 'not found' });
-});
+// ---------- 404 для прочих (на всякий случай) ----------
+app.use((req, res) => res.status(404).json({ error: 'not found' }));
 
 // ---------- старт ----------
 app.listen(PORT, async () => {
   await ensureDir(DATA_DIR);
-  // убедимся, что файлы существуют
   if (!fs.existsSync(path.join(DATA_DIR, 'flavors.json'))) {
     await writeJsonAtomic(path.join(DATA_DIR, 'flavors.json'), []);
   }
