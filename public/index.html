@@ -192,49 +192,77 @@
     );
   }
 
-  // ========================= УДАЛЕНИЕ ВКУСА (ТОЧНОЕ) ========================
-  // Контракт твоего бэка: POST /api/flavors  { action:'delete', brand, name } + X-Admin-Token
+  // ========================= УДАЛЕНИЕ ВКУСА (устойчиво, без 409) ============
+  // 1) сначала пробуем POST /api/flavors?action=delete  {brand,name}
+  // 2) если нет — POST /api/flavors  {action:'delete', brand,name}
+  // !!! важно: НЕ отправляем id в теле (иначе бэк может подумать, что это создание → 409)
   async function deleteFlavorOnServer(flavorId, token){
-    // найдём бренд/название по id
-    let fl = state.flavors.find(f => f.id === flavorId);
-    if (!fl) {
-      // на случай расхождений — обновим список и попробуем ещё раз
-      await loadFlavors();
-      fl = state.flavors.find(f => f.id === flavorId);
-    }
-    if (!fl || !fl.brand || !fl.name) {
-      throw new Error('Не удалось определить brand/name для вкуса "'+flavorId+'". Обновите список вкусов и попробуйте ещё раз.');
-    }
+    // найдём точные brand+name по id
+    let fl = (state.flavors || []).find(f => f && f.id === flavorId);
+    if (!fl) { await loadFlavors(); fl = (state.flavors || []).find(f => f && f.id === flavorId); }
+    if (!fl || !fl.brand || !fl.name) throw new Error('Не удалось определить brand/name для вкуса "'+flavorId+'". Обновите список вкусов и попробуйте ещё раз.');
 
-    const r = await api('/api/flavors', {
+    const brand = String(fl.brand).trim();
+    const name  = String(fl.name).trim();
+
+    // ВАРИАНТ 1
+    let r = await api('/api/flavors?action=delete', {
       method: 'POST',
-      headers: {
-        'X-Admin-Token': token || '',
-        'Content-Type': 'application/json; charset=UTF-8'
-      },
-      body: JSON.stringify({ action:'delete', brand: String(fl.brand).trim(), name: String(fl.name).trim() })
-    });
+      headers: { 'X-Admin-Token': token || '' },
+      body: JSON.stringify({ brand, name })
+    }).catch(()=>null);
+    if (r && (r.ok || r.status===204)) return true;
 
-    if (r.ok) return true;
-    const ct = r.headers.get('content-type') || '';
+    // ВАРИАНТ 2
+    r = await api('/api/flavors', {
+      method: 'POST',
+      headers: { 'X-Admin-Token': token || '' },
+      body: JSON.stringify({ action:'delete', brand, name })
+    }).catch(()=>null);
+    if (r && (r.ok || r.status===204)) return true;
+
+    // Ошибка
+    let status = r ? r.status : 'нет ответа';
     let body = '';
-    try{ body = ct.includes('json') ? JSON.stringify(await r.json()) : await r.text(); }catch(_){}
-    throw new Error('Удаление вкуса не удалось: ' + r.status + (body ? ' — ' + body : ''));
+    try {
+      const ct = r && r.headers ? (r.headers.get('content-type')||'') : '';
+      body = r ? (ct.includes('json') ? JSON.stringify(await r.json()) : await r.text()) : '';
+    } catch(_) {}
+    throw new Error('Удаление вкуса не удалось: ' + status + (body ? ' — ' + body : ''));
   }
 
-  // ========================= УДАЛЕНИЕ МИКСА (единый контракт) ================
-  // Применим симметричный подход: POST /api/mixes  { action:'delete', id, authorId }
+  // ========================= УДАЛЕНИЕ МИКСА (без создания) ===================
   async function deleteMixOnServer(id, user){
-    const payload = { action:'delete', id: String(id), authorId: String(user && user.id || '') };
-    const r = await api('/api/mixes', {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    });
-    if (r.ok || r.status === 204) return true;
-    const ct = r.headers.get('content-type') || '';
+    const uid = String(user && user.id || '');
+    const headers = { 'X-Author-Id': uid, 'X-User-Id': uid };
+
+    // 1) DELETE /api/mixes/:id
+    let t = await api('/api/mixes/'+encodeURIComponent(id), { method:'DELETE', headers }).catch(()=>null);
+    if (t && (t.ok || t.status===204)) return true;
+
+    // 2) DELETE /api/mixes/:id?authorId=...
+    t = await api('/api/mixes/'+encodeURIComponent(id)+'?authorId='+encodeURIComponent(uid), { method:'DELETE', headers }).catch(()=>null);
+    if (t && (t.ok || t.status===204)) return true;
+
+    // 3) POST /api/mixes/delete { id, authorId }
+    t = await api('/api/mixes/delete', { method:'POST', headers, body: JSON.stringify({ id, authorId: uid }) }).catch(()=>null);
+    if (t && (t.ok || t.status===204)) return true;
+
+    // 4) POST override
+    t = await api('/api/mixes/'+encodeURIComponent(id)+'?_method=DELETE', { method:'POST', headers, body: JSON.stringify({ authorId: uid }) }).catch(()=>null);
+    if (t && (t.ok || t.status===204)) return true;
+
+    // 5) DELETE с body (иногда бек принимает)
+    t = await api('/api/mixes/'+encodeURIComponent(id), { method:'DELETE', headers, body: JSON.stringify({ authorId: uid }) }).catch(()=>null);
+    if (t && (t.ok || t.status===204)) return true;
+
+    let status = t ? t.status : 'нет ответа';
     let body = '';
-    try{ body = ct.includes('json') ? JSON.stringify(await r.json()) : await r.text(); }catch(_){}
-    throw new Error('Удаление микса не удалось: ' + r.status + (body ? ' — ' + body : ''));
+    try {
+      const ct = t && t.headers ? (t.headers.get('content-type')||'') : '';
+      body = t ? (ct.includes('json') ? JSON.stringify(await t.json()) : await t.text()) : '';
+    } catch(_) {}
+    throw new Error('Удаление микса не удалось: ' + status + (body ? ' — ' + body : ''));
   }
 
   // ========================= ПОИСК ==========================================
@@ -780,7 +808,7 @@
       await loadGuestMixes();
       render();
 
-      // Поллинг миксов, чтобы видеть чужие изменения
+      // Поллинг миксов
       setInterval(async function(){
         const before = JSON.stringify(state.guestMixes?.map(function(m){return m.id;}));
         await loadGuestMixes();
