@@ -38,9 +38,8 @@ async function readAll() {
 async function writeAll(list) {
   await ensureDirAndFile();
   const json = JSON.stringify(list, null, 2);
-  // атомарная запись: сначала во временный, потом rename поверх основного
-  await fs.writeFile(TMP_PATH, json, 'utf8');
-  await fs.rename(TMP_PATH, FILE_PATH);
+  await fs.writeFile(TMP_PATH, json, 'utf8'); // пишем во временный
+  await fs.rename(TMP_PATH, FILE_PATH);       // атомарно заменяем основной
 }
 
 async function getAll() {
@@ -88,11 +87,4 @@ async function remove(id) {
   return true;
 }
 
-module.exports = {
-  getAll,
-  create,
-  remove,
-  makeId,
-  FILE_PATH,
-  DATA_DIR,
-};
+module.exports = { getAll, create, remove, makeId, FILE_PATH, DATA_DIR };
