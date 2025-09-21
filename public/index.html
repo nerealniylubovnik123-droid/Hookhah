@@ -13,7 +13,7 @@
   <script>
   (function(){
     function showFatal(msg){
-      var root = document.getElementById('root');
+      const root = document.getElementById('root');
       if (!root) return;
       root.innerHTML =
         '<div class="min-h-[100svh] flex items-center justify-center p-6">' +
@@ -39,7 +39,7 @@
 
   <script>
   // ========================= API ============================================
-  const API_BASE = 'https://hookhah.onrender.com';
+  const API_BASE = location.origin; // тот же домен
   const api = (path, opts={}) => fetch(API_BASE + path, {
     cache: 'no-store',
     ...opts,
@@ -49,13 +49,10 @@
   // ========================= УТИЛИТЫ ========================================
   const escAttr = s => String(s).replace(/"/g,'&quot;');
   const escHTML = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-
   const safeNum = (v,d=0)=>{const n=Number(v);return Number.isFinite(n)?n:d;};
   const safePercent = v => Math.max(0, Math.min(100, safeNum(v,0)));
   const percentSum = parts => Array.isArray(parts) ? parts.reduce((a,b)=>a+safePercent(b&&b.percent),0) : 0;
-
   const isMixValid = (parts,title)=>(Array.isArray(parts) && parts.length>0 && percentSum(parts)===100 && String(title||'').trim().length>=3);
-
   const uuidv4 = ()=>{let dt=Date.now(); if(typeof performance!='undefined'&&performance.now) dt+=performance.now(); return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=(dt+Math.random()*16)%16|0;dt=Math.floor(dt/16);return (c==='x'?r:(r&0x3|0x8)).toString(16);});};
 
   const BRAND_STRENGTH10_DEFAULTS={Darkside:5,"Black Burn":6,BlackBurn:6,MustHave:5,Overdose:6,Bonch:7,Starline:3};
@@ -71,29 +68,25 @@
     if(v<7)  return {bg:'bg-amber-950',text:'text-amber-300',border:'border-amber-800'};
     return     {bg:'bg-rose-950',text:'text-rose-300',border:'border-rose-800'};
   };
-
   function clampPercentForPart(parts,targetId,newVal){
     const other=percentSum(parts.filter(x=>x&&x.flavorId!==targetId));
     return Math.max(0,Math.min(safePercent(newVal),100-other));
   }
-
   function filterFlavorsByQueryAdv(flavors, query){
     function normalize(s){ return String(s||'').toLowerCase().replace(/ё/g,'е').trim(); }
-    var q = normalize(query); if(!q) return flavors||[];
-    var SYN = {"киви":["kiwi"],"банан":["banana"],"манго":["mango"],"лимон":["lemon","citrus"],"апельсин":["orange"],"грейпфрут":["grapefruit"],"арбуз":["watermelon"],"дыня":["melon"],"виноград":["grape"],"персик":["peach"],"яблок":["apple"],"маракуй":["passion"],"клубник":["strawberry"],"черник":["blueberry"],"мята":["mint"],"лед":["ice","freeze","frost","cold"],"ваниль":["vanilla"],"печень":["cookie","bisc"],"шоколад":["choco","chocolate"],"кисл":["sour"],"слад":["sweet"]};
-    var tokens = q.split(/\s+/).filter(Boolean);
+    const q = normalize(query); if(!q) return flavors||[];
+    const SYN = {"киви":["kiwi"],"банан":["banana"],"манго":["mango"],"лимон":["lemon","citrus"],"апельсин":["orange"],"грейпфрут":["grapefruit"],"арбуз":["watermelon"],"дыня":["melon"],"виноград":["grape"],"персик":["peach"],"яблок":["apple"],"маракуй":["passion"],"клубник":["strawberry"],"черник":["blueberry"],"мята":["mint"],"лед":["ice","freeze","frost","cold"],"ваниль":["vanilla"],"печень":["cookie","bisc"],"шоколад":["choco","chocolate"],"кисл":["sour"],"слад":["sweet"]};
+    const tokens = q.split(/\s+/).filter(Boolean);
     function textOf(f){ return normalize([f?.name, f?.description, Array.isArray(f?.tags)?f.tags.join(' '):''].join(' ')); }
-    return (flavors||[]).filter(function(f){
-      var text = textOf(f);
-      return tokens.every(function(t){
-        var vars = new Set([t]);
-        Object.entries(SYN).forEach(function([ru, arr]){ if(t.indexOf(ru)!==-1) arr.forEach(v=>vars.add(v)); });
-        var hit=false; vars.forEach(v=>{ if(text.indexOf(v)!==-1) hit=true; });
-        return hit;
+    return (flavors||[]).filter(f=>{
+      const text = textOf(f);
+      return tokens.every(t=>{
+        const vars = new Set([t]);
+        Object.entries(SYN).forEach(([ru, arr])=>{ if(t.indexOf(ru)!==-1) arr.forEach(v=>vars.add(v)); });
+        let hit=false; vars.forEach(v=>{ if(text.indexOf(v)!==-1) hit=true; }); return hit;
       });
     });
   }
-
   function tasteWordFromTag(tag){
     if(tag==null) return null; const t=String(tag).toLowerCase().trim(); if(!t) return null;
     const rules=[
@@ -107,7 +100,6 @@
     for (const [re,w] of rules){ if(re.test(t)) return w; }
     return null;
   }
-
   function getMixTasteLabel(parts,flavors){
     if(!Array.isArray(parts)||!Array.isArray(flavors)||parts.length===0) return null;
     const total=percentSum(parts); if(total<=0) return null;
@@ -138,7 +130,12 @@
     activeTab: 'builder',
     adminToken: localStorage.getItem('admin_token') || '',
     adminPrompt: qp.get('admin')==='1',
-    logoUrl: null
+    logoUrl: null,
+
+    // Рекомендатор
+    recTaste: null,
+    recStrength: 5,
+    recList: []
   };
   const isAdmin = ()=> !!(state.adminToken && state.adminToken.length>=6);
 
@@ -154,7 +151,6 @@
     }catch(_){}
     state.user={ id:'anon', name:'Гость' };
   }
-
   async function detectLogo(){
     async function exists(url){ try{ const r=await fetch(url,{method:'HEAD',cache:'no-store'}); return r.ok; }catch(_){ return false; } }
     const cand=['./logo.jpg','./logo.jpeg','./AKGpihYIdG2xycCNV3hAm2gVxkuF4tS5.jpg'];
@@ -171,12 +167,8 @@
       state.flavors = Array.isArray(data) ? data : [];
       const brands = Array.from(new Set(state.flavors.map(f=>normalizeBrand(f.brand))).values()).filter(Boolean).sort();
       if (!brands.includes(state.activeBrand)) state.activeBrand = brands[0] || '';
-    }catch(e){
-      console.error('loadFlavors',e);
-      state.flavors = [];
-    }
+    }catch(e){ console.error('loadFlavors',e); state.flavors = []; }
   }
-
   async function loadGuestMixes(){
     try{
       const r = await api('/api/mixes');
@@ -184,31 +176,23 @@
       state.guestMixes.sort((a,b)=>(b?.createdAt||0)-(a?.createdAt||0));
     }catch(_){ state.guestMixes=[]; }
   }
-
-  // ---- create mix
   async function saveMixOnServer(mix){
     const r = await api('/api/mixes', { method:'POST', body: JSON.stringify(mix) });
     if(!r.ok) throw new Error('save mix '+r.status+': '+await r.text().catch(()=>'')); 
     return true;
   }
-
-  // ---- delete mix (author or admin)
   async function deleteMixOnServer(id, user){
     const uid = String(user && user.id || '');
-    const headers = { 'X-Author-Id': uid, 'X-User-Id': uid, 'Content-Type':'application/json; charset=UTF-8' };
+    const headers = { 'X-User-Id': uid, 'X-Author-Id': uid, 'Content-Type':'application/json; charset=UTF-8' };
     const r = await api('/api/mixes/'+encodeURIComponent(id), { method:'DELETE', headers });
     if (r.ok || r.status===204) return true;
     throw new Error('Не удалось удалить микс: '+r.status+' — '+await r.text().catch(()=>'')); 
   }
-
-  // ---- create flavor (admin)
   async function createFlavorOnServer(payload, token){
     const r = await api('/api/flavors', { method:'POST', headers:{ 'X-Admin-Token': token||'' }, body: JSON.stringify(payload) });
     if(!r.ok) throw new Error('Не удалось добавить вкус: '+r.status+' — '+await r.text().catch(()=>'')); 
     return true;
   }
-
-  // ---- delete flavor (admin) — ВАЖНО: только этот путь!
   async function deleteFlavorOnServer(id, token){
     const r = await fetch(API_BASE + '/api/flavors/' + encodeURIComponent(id), {
       method: 'DELETE',
@@ -217,6 +201,28 @@
     const txt = r ? (await r.text().catch(()=>'')) : '';
     if (r && r.status===204) return true;
     throw new Error('Удаление вкуса не удалось: ' + (txt || (r && r.status)));
+  }
+  // Лайки
+  async function likeMixOnServer(id){
+    const uid = String(state.user?.id || 'anon');
+    const r = await api('/api/mixes/'+encodeURIComponent(id)+'/like', { method:'POST', headers:{ 'X-User-Id': uid } });
+    if(!r.ok) throw new Error('like '+r.status);
+    return await r.json();
+  }
+  async function unlikeMixOnServer(id){
+    const uid = String(state.user?.id || 'anon');
+    const r = await api('/api/mixes/'+encodeURIComponent(id)+'/like', { method:'DELETE', headers:{ 'X-User-Id': uid } });
+    if(!r.ok) throw new Error('unlike '+r.status);
+    return await r.json();
+  }
+  // Рекомендатор
+  async function fetchRecommendations(){
+    const q = new URLSearchParams();
+    if (state.recTaste) q.set('taste', state.recTaste);
+    if (Number.isFinite(state.recStrength)) q.set('strength', String(state.recStrength));
+    q.set('limit','10');
+    const r = await api('/api/mixes/recommend?'+q.toString());
+    state.recList = r.ok ? (await r.json()) : [];
   }
 
   // ========================= РЕНДЕР =========================================
@@ -251,6 +257,7 @@
       return w? Math.round(w*10)/10 : null;
     })(state.parts,state.flavors);
     const mixTaste = getMixTasteLabel(state.parts,state.flavors);
+
     const strengthBadge = (function(){
       if(typeof mixStrength10!=='number') return '';
       const c=strengthColor(mixStrength10);
@@ -303,11 +310,17 @@
       }).join('');
       const canDelete = !!(state.user && (m.authorId && String(m.authorId)===String(state.user.id)));
       const delBtn = canDelete ? '<button data-del="'+escAttr(m.id)+'" class="ml-auto inline-flex items-center justify-center rounded-xl h-7 px-2 text-[11px] border border-rose-700 text-rose-300 hover:bg-rose-900/40">Удалить</button>' : '';
+      const likes = Array.isArray(m.likers) ? m.likers.length : 0;
+      const iLiked = Array.isArray(m.likers) && state.user && m.likers.includes(String(state.user.id));
+      const likeBtn =
+        '<button data-like="'+escAttr(m.id)+'" class="inline-flex items-center gap-1 rounded-xl h-7 px-2 text-[11px] border '+(iLiked?'border-pink-500 text-pink-300 bg-pink-900/30':'border-slate-700 hover:bg-slate-800')+'">'+
+        (iLiked?'❤':'♡')+' <span class="tabular-nums">'+likes+'</span></button>';
+
       return (
         '<div class="border border-slate-800 rounded-xl p-2 text-sm">' +
           '<div class="flex items-center gap-2">' +
             '<div class="font-semibold truncate">'+escHTML(m.title)+'</div>' +
-            sBadge + tBadge + delBtn +
+            sBadge + tBadge + delBtn + likeBtn +
           '</div>' +
           '<div class="text-[11px] text-slate-400">микс от '+escHTML(m.author||'Гость')+'</div>' +
           notes +
@@ -353,6 +366,7 @@
               '<span id="mixTaste">'+(mixTaste?('<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">'+escHTML(mixTaste)+'</span>'):'')+'</span>' +
             '</div>' +
           '</div>' +
+          (state.parts.length===2 ? '<button id="autoThird" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-slate-800 w-full">Подобрать 3-й компонент</button>' : '') +
         '</div>' +
       '</div>';
 
@@ -369,25 +383,42 @@
         '</div>' +
       '</div>';
 
-    const adminLoginBlock = (!isAdmin() && state.adminPrompt) ? (
+    // Блок рекомендаций
+    const tasteChips = ['фруктовый','ледяной','сладкий','пряный','десертный','кислый'].map(t =>
+      '<button data-taste="'+t+'" class="inline-flex items-center rounded-full h-8 px-3 text-[12px] '+(state.recTaste===t?'bg-slate-100 text-slate-900':'border border-slate-700 hover:bg-slate-800')+'">'+t+'</button>'
+    ).join(' ');
+    const recItems = (state.recList||[]).map(m=>{
+      const likes = Array.isArray(m.likers) ? m.likers.length : 0;
+      const c = typeof m.strength10==='number' ? strengthColor(m.strength10) : strengthColor(null);
+      const sBadge = typeof m.strength10==='number' ? '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+m.strength10.toFixed(1)+'</span>' : '';
+      const tBadge = m.taste ? '<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">'+escHTML(m.taste)+'</span>' : '';
+      return '<div class="flex items-center justify-between gap-2 text-sm border border-slate-800 rounded-lg px-2 py-1">'+
+        '<div class="min-w-0"><div class="truncate font-medium">'+escHTML(m.title)+'</div><div class="text-[11px] opacity-70">❤ '+likes+'</div></div>'+
+        '<div class="flex items-center gap-2">'+sBadge+tBadge+'<button data-apply="'+escAttr(m.id)+'" class="inline-flex items-center rounded-xl h-8 px-2 text-[12px] border border-slate-700 hover:bg-slate-800">Загрузить</button></div>'+
+      '</div>';
+    }).join('');
+    const recBlock =
       '<div class="rounded-2xl border border-slate-800 bg-slate-900">' +
-        '<div class="px-3 pt-3"><div class="text-xs font-semibold">Админ-доступ</div></div>' +
+        '<div class="px-3 pt-3"><div class="text-xs font-semibold">Рекомендации</div></div>' +
         '<div class="p-3 space-y-2">' +
-          '<input id="admToken" class="h-9 w-full rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Вставьте X-Admin-Token" />' +
-          '<div class="flex gap-2">' +
-            '<button id="admSaveToken" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] bg-slate-100 text-slate-900 hover:bg-white">Сохранить токен</button>' +
-            '<button id="admCancel" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-slate-800">Скрыть</button>' +
+          '<div class="text-[12px] text-slate-400">Подбери вкус и целевую крепость — покажем подходящие миксы.</div>' +
+          '<div class="flex flex-wrap gap-2">'+tasteChips+'</div>' +
+          '<div class="flex items-center gap-2">' +
+            '<span class="text-[12px] opacity-80">Крепость:</span>' +
+            '<input id="recStrength" type="range" min="1" max="10" step="1" value="'+(state.recStrength||5)+'" class="w-full" />' +
+            '<span class="text-[12px] w-6 text-right">'+(state.recStrength||5)+'</span>' +
           '</div>' +
-          '<div class="text-[11px] text-slate-400">После сохранения появится вкладка «Админ».</div>' +
+          '<button id="recFetch" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-slate-800 w-full">Показать рекомендации</button>' +
+          '<div id="recList" class="space-y-1">'+(recItems||'')+'</div>' +
         '</div>' +
-      '</div>'
-    ) : '';
+      '</div>';
 
+    // Админка
     const adminBlock = (!isAdmin() ? '' :
       ('<div class="rounded-2xl border border-slate-800 bg-slate-900">' +
        '  <div class="px-3 pt-3"><div class="text-xs font-semibold">Админ</div></div>' +
        '  <div class="p-3 space-y-4 text-sm">' +
-       '    <div class="text-[11px] text-slate-400">Токен сохранён. Можно добавлять и удалять вкусы.</div>' +
+       '    <div class="text-[11px] text-slate-400">Токен сохранён. Можно добавлять и удалять вкусы. Ниже — статистика использования вкусов.</div>' +
        '    <div class="grid grid-cols-1 gap-2">' +
        '      <input id="admBrand" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Бренд" />' +
        '      <input id="admName" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Название" />' +
@@ -404,9 +435,28 @@
        '      <div class="text-xs font-semibold mb-2">Все вкусы</div>' +
        '      <div id="admFlavorList" class="space-y-1"></div>' +
        '    </div>' +
+       '    <div class="pt-2 border-t border-slate-800">' +
+       '      <div class="text-xs font-semibold mb-2">Статистика использования вкусов</div>' +
+       '      <button id="admLoadStats" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-slate-800">Показать статистику</button>' +
+       '      <div id="admStats" class="mt-2 space-y-1"></div>' +
+       '    </div>' +
        '  </div>' +
        '</div>')
     );
+
+    const adminLoginBlock = (!isAdmin() && state.adminPrompt) ? (
+      '<div class="rounded-2xl border border-slate-800 bg-slate-900">' +
+        '<div class="px-3 pt-3"><div class="text-xs font-semibold">Админ-доступ</div></div>' +
+        '<div class="p-3 space-y-2">' +
+          '<input id="admToken" class="h-9 w-full rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Вставьте X-Admin-Token" />' +
+          '<div class="flex gap-2">' +
+            '<button id="admSaveToken" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] bg-slate-100 text-slate-900 hover:bg-white">Сохранить токен</button>' +
+            '<button id="admCancel" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-slate-800">Скрыть</button>' +
+          '</div>' +
+          '<div class="text-[11px] text-slate-400">После сохранения появится вкладка «Админ».</div>' +
+        '</div>' +
+      '</div>'
+    ) : '';
 
     const guestBlock =
       '<div class="rounded-2xl border border-slate-800 bg-slate-900">' +
@@ -421,9 +471,10 @@
       '<div class="min-h-[100svh] bg-slate-950 text-slate-100 p-3">' +
         '<div class="mx-auto w-full max-w-md space-y-3">' +
           headerHTML +
-          (state.activeTab==='builder' ? (adminLoginBlock + brandsBlock + mixBlock + titleBlock) : '') +
+          (state.activeTab==='builder' ? (brandsBlock + mixBlock + titleBlock + recBlock) : '') +
           (state.activeTab==='guest'   ? (guestBlock) : '') +
           (state.activeTab==='admin'   ? (adminBlock) : '') +
+          (state.activeTab==='builder' && (!isAdmin() && state.adminPrompt) ? adminLoginBlock : '') +
         '</div>' +
       '</div>';
 
@@ -465,7 +516,8 @@
           authorId: state.user.id || null,
           createdAt: Date.now(),
           taste: getMixTasteLabel(state.parts, state.flavors) || null,
-          strength10: (function(){ const t=percentSum(state.parts); if(!t) return null; let w=0; for(const p of state.parts){ const pr=safePercent(p.percent); if(pr<=0) continue; const fl=state.flavors.find(x=>x&&x.id===p.flavorId); if(!fl) continue; w+=getStrength10(fl)*(pr/t);} return w?Math.round(w*10)/10:null; })()
+          strength10: (function(){ const t=percentSum(state.parts); if(!t) return null; let w=0; for(const p of state.parts){ const pr=safePercent(p.percent); if(pr<=0) continue; const fl=state.flavors.find(x=>x&&x.id===p.flavorId); if(!fl) continue; w+=getStrength10(fl)*(pr/t);} return w?Math.round(w*10)/10:null; })(),
+          likers: []
         };
         try{
           await saveMixOnServer(mix);
@@ -488,6 +540,66 @@
         }catch(e){ alert(e.message||'Ошибка удаления'); }
       });
     });
+
+    // Лайки
+    root.querySelectorAll('[data-like]').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const id = btn.getAttribute('data-like');
+        const mix = state.guestMixes.find(m=>m.id===id);
+        const liked = Array.isArray(mix?.likers) && state.user && mix.likers.includes(String(state.user.id));
+        try{
+          if (liked) await unlikeMixOnServer(id);
+          else        await likeMixOnServer(id);
+          await loadGuestMixes();
+          render();
+        }catch(e){ alert('Не удалось обновить лайк'); }
+      });
+    });
+
+    // Рекомендатор
+    const rs = root.querySelector('#recStrength');
+    if (rs) rs.addEventListener('input', e=>{ state.recStrength = Number(e.target.value)||5; render(); });
+    root.querySelectorAll('[data-taste]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const t = btn.getAttribute('data-taste');
+        state.recTaste = (state.recTaste===t) ? null : t;
+        render();
+      });
+    });
+    const recBtn = root.querySelector('#recFetch');
+    if (recBtn){
+      recBtn.addEventListener('click', async ()=>{
+        await fetchRecommendations();
+        render();
+      });
+    }
+    root.querySelectorAll('[data-apply]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const id = btn.getAttribute('data-apply');
+        const m = state.guestMixes.find(x=>x.id===id) || state.recList.find(x=>x.id===id);
+        if (!m) return;
+        state.title = m.title + ' (копия)';
+        state.notes = m.notes || '';
+        state.parts = Array.isArray(m.parts) ? m.parts.map(p=>({ flavorId:p.flavorId, percent:safePercent(p.percent) })) : [];
+        state.activeTab = 'builder';
+        render();
+      });
+    });
+
+    // автоподбор 3-го компонента
+    const autoBtn = root.querySelector('#autoThird');
+    if (autoBtn){
+      autoBtn.addEventListener('click', ()=>{
+        const targetTaste = state.recTaste || getMixTasteLabel(state.parts, state.flavors) || null;
+        const targetStrength = Number.isFinite(mixStrength10) ? mixStrength10 : (state.recStrength||5);
+        const suggestion = suggestThirdFlavor(state.parts, state.flavors, targetTaste, targetStrength);
+        if (!suggestion) { alert('Не удалось подобрать компонент'); return; }
+        const left = Math.max(0, 100 - percentSum(state.parts));
+        const addPct = Math.min(30, left||20);
+        state.parts = state.parts.concat([{ flavorId:suggestion.id, percent:addPct }]);
+        render();
+      });
+    }
 
     // админ-доступ
     const tokBtn=root.querySelector('#admSaveToken'); if(tokBtn){ tokBtn.addEventListener('click', ()=>{ const v=(root.querySelector('#admToken')||{}).value||''; try{localStorage.setItem('admin_token',v);}catch(_){ } state.adminToken=v||''; state.adminPrompt=false; render(); }); }
@@ -519,6 +631,26 @@
           }catch(e){ alert(e.message||'Не удалось добавить вкус'); }
         });
       }
+      // Статистика
+      const btnStats = root.querySelector('#admLoadStats');
+      if (btnStats){
+        btnStats.addEventListener('click', async ()=>{
+          const r = await api('/api/stats/flavor-usage', { headers:{ 'X-Admin-Token': state.adminToken||'' }});
+          if (!r.ok){ alert('Не удалось получить статистику'); return; }
+          const rows = await r.json();
+          const el = root.querySelector('#admStats'); if(!el) return;
+          el.innerHTML =
+            '<div class="text-[11px] text-slate-400 mb-1">Всего позиций: '+rows.length+'</div>' +
+            rows.slice(0,200).map(x=>
+              '<div class="grid grid-cols-[auto_1fr_auto_auto] gap-2 text-[12px] items-center border border-slate-800 rounded-md px-2 py-1">'+
+                '<span class="opacity-60 truncate">'+escHTML(x.brand)+'</span>'+
+                '<span class="truncate">'+escHTML(x.name)+'</span>'+
+                '<span class="opacity-80">миксов: <b>'+x.countMixes+'</b></span>'+
+                '<span class="opacity-80">сумма %: <b>'+x.totalPercent+'</b></span>'+
+              '</div>'
+            ).join('');
+        });
+      }
     }
   }
 
@@ -538,7 +670,6 @@
     }).join('') || '<div class="text-[12px] text-slate-400">Пока нет вкусов</div>';
     list.innerHTML = html;
 
-    // обработчики удаления вкуса (ТОЛЬКО DELETE /api/flavors/:id)
     root.querySelectorAll('[data-del-flavor]').forEach(btn=>{
       btn.addEventListener('click', async ()=>{
         const id = btn.getAttribute('data-del-flavor'); if(!id) return;
@@ -567,7 +698,6 @@
       });
     });
   }
-
   function attachMixEvents(){
     document.querySelectorAll('[data-range]').forEach(sl=>{
       sl.addEventListener('input', function(){
@@ -585,7 +715,6 @@
       btn.addEventListener('click', ()=>{ const id=btn.getAttribute('data-remove'); state.parts=state.parts.filter(p=>p.flavorId!==id); rerenderMixBlock(); });
     });
   }
-
   function updateMixStatsUI(){
     const total = percentSum(state.parts);
     const totalEl=document.getElementById('mixTotal'); if(totalEl) totalEl.textContent=String(total);
@@ -594,7 +723,6 @@
     const taste=getMixTasteLabel(state.parts,state.flavors);
     const tEl=document.getElementById('mixTaste'); if(tEl){ tEl.innerHTML = taste ? ('<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">'+escHTML(taste)+'</span>') : ''; }
   }
-
   function rerenderMixBlock(){
     const container=document.getElementById('mixBlock'); if(!container) return;
     const total=percentSum(state.parts);
@@ -618,11 +746,22 @@
           '<span>Итог: <b id="mixTotal">'+total+'</b>%</span>' +
           '<div class="flex items-center gap-2"><span id="mixStrength">'+strengthBadge+'</span><span id="mixTaste">'+(mixTaste?('<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">'+escHTML(mixTaste)+'</span>'):'')+'</span></div>' +
         '</div>' +
+        (state.parts.length===2 ? '<button id="autoThird" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-slate-800 w-full">Подобрать 3-й компонент</button>' : '') +
       '</div>';
     container.innerHTML=html;
     attachMixEvents();
+    const autoBtn = document.getElementById('autoThird');
+    if (autoBtn) autoBtn.addEventListener('click', ()=>{
+      const targetTaste = state.recTaste || getMixTasteLabel(state.parts, state.flavors) || null;
+      const targetStrength = Number.isFinite(strength) ? strength : (state.recStrength||5);
+      const suggestion = suggestThirdFlavor(state.parts, state.flavors, targetTaste, targetStrength);
+      if (!suggestion) { alert('Не удалось подобрать компонент'); return; }
+      const left = Math.max(0, 100 - percentSum(state.parts));
+      const addPct = Math.min(30, left||20);
+      state.parts = state.parts.concat([{ flavorId:suggestion.id, percent:addPct }]);
+      render();
+    });
   }
-
   function updateSearchUI(){
     const meta=document.getElementById('flavorsMeta');
     const list=document.getElementById('flavorsList');
@@ -651,12 +790,78 @@
     bindAddButtons();
   }
 
+  // ====== Подбор 3-го компонента (простая эвристика) ======
+  function flavorTasteLabel(f){
+    if (!f) return null;
+    const pool = []
+      .concat(Array.isArray(f.tags)?f.tags:[])
+      .concat(String(f.name||'').split(/\s+/));
+    for (const t of pool){
+      const w = tasteWordFromTag(t);
+      if (w) return w;
+    }
+    return null;
+  }
+  function suggestThirdFlavor(parts, flavors, targetTaste, targetStrength){
+    if (!Array.isArray(flavors) || !flavors.length) return null;
+    const used = new Set((parts||[]).map(p=>p.flavorId));
+    const candidates = flavors.filter(f=>!used.has(f.id));
+
+    let best = null, bestScore = -1e9;
+    for (const f of candidates){
+      const s = getStrength10(f);
+      const taste = flavorTasteLabel(f);
+      let score = 0;
+
+      // вкус — сильный бонус
+      if (targetTaste && taste){
+        if (taste === targetTaste) score += 2.0;
+        // комплементарность: фруктовый ↔ ледяной/сладкий; десертный ↔ фруктовый
+        const comp = {
+          'фруктовый': ['ледяной','сладкий','пряный'],
+          'десертный': ['фруктовый','сладкий'],
+          'ледяной':   ['фруктовый','сладкий'],
+          'пряный':    ['фруктовый'],
+          'кислый':    ['сладкий','фруктовый'],
+          'сладкий':   ['кислый','фруктовый','ледяной']
+        };
+        if ((comp[targetTaste]||[]).includes(taste)) score += 1.0;
+      }
+
+      // близость по крепости
+      if (Number.isFinite(targetStrength)){
+        score += (10 - Math.abs(targetStrength - s)) / 10; // 0..1
+      }
+
+      // лёгкий штраф если тот же бренд встречается уже 2 раза (для разнообразия)
+      const brandCount = parts.reduce((acc,p)=>{
+        const fl = flavors.find(x=>x.id===p.flavorId);
+        return acc + (fl && normalizeBrand(fl.brand)===normalizeBrand(f.brand) ? 1 : 0);
+      }, 0);
+      if (brandCount>=2) score -= 0.5;
+
+      if (score>bestScore){ bestScore=score; best=f; }
+    }
+    return best;
+  }
+
   // ========================= СТАРТ ==========================================
   (async function start(){
     initAuth();
     await detectLogo();
     await loadFlavors();
     await loadGuestMixes();
+
+    // дефолты для рекомендаций — из текущего микса
+    const ms = (function(parts,flavors){
+      if(!parts.length) return null; const t=percentSum(parts); if(t<=0) return null; let w=0;
+      for(const p of parts){ const pr=safePercent(p?.percent); if(pr<=0) continue; const fl=flavors.find(x=>x&&x.id===(p&&p.flavorId)); if(!fl) continue; w+=getStrength10(fl)*(pr/t); }
+      return w? Math.round(w*10)/10 : null;
+    })(state.parts,state.flavors);
+    const mt = getMixTasteLabel(state.parts,state.flavors);
+    if (ms) state.recStrength = ms;
+    if (mt) state.recTaste = mt;
+
     render();
 
     // Поллинг миксов (видеть чужие изменения)
