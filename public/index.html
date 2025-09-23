@@ -7,35 +7,48 @@
   <title>Hookah Mixes</title>
   <script src="https://cdn.tailwindcss.com"></script>
 
-  <!-- Тёплая тема + анимации -->
+  <!-- ВИЗУАЛ ТОЛЬКО: тёплая тёмная тема + анимации (логика НЕ менялась) -->
   <style id="anim-pack">
     :root{
       --bg:#0a0b0d; --card:#111216; --ring:rgba(245,158,11,.55);
-      --warm1:#F59E0B; --warm2:#FDBA74; --warm3:#FCA5A5;
+      --warm1:#F59E0B; --warm2:#FDBA74; --warm3:#FCA5A5; --soft:#1a1b1f;
     }
+    /* -------------------- БАЗА -------------------- */
+    html,body{ height:100%; }
     body{
       background:
         radial-gradient(900px 600px at 10% -10%, rgba(245,158,11,.12), transparent 60%),
         radial-gradient(700px 500px at 95% 0%, rgba(253,186,116,.07), transparent 55%),
         var(--bg);
       color: #e5e7eb;
+      -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
     }
-    /* мягкий шум */
+    /* Мягкий шум */
     body::after{
       content:""; position:fixed; inset:0; pointer-events:none; opacity:.07;
       background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.7' numOctaves='2'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      mix-blend-mode:soft-light;
+    }
+    /* Водяной знак-лого (не перекрывает контент) */
+    body::before{
+      content:""; position:fixed; inset:0; pointer-events:none; opacity:.065;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' x2='1'%3E%3Cstop offset='0' stop-color='%23F59E0B'/%3E%3Cstop offset='1' stop-color='%23FDBA74'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='256' cy='256' r='230' fill='url(%23g)' opacity='.35'/%3E%3Cpath d='M256 60c-34 34-34 68 0 102s34 68 0 102-34 68 0 102' stroke='%23fde68a' stroke-width='28' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='256' cy='420' r='22' fill='%23fde68a'/%3E%3C/svg%3E");
+      background-repeat:no-repeat; background-position:center 30%; background-size:min(70vmin,560px);
+      filter: blur(0.2px);
     }
 
-    /* карточки */
+    /* -------------------- КАРТОЧКИ -------------------- */
     .ui-card{
       border-radius: 1rem;
       background:rgba(17,18,22,.82);
       border:1px solid rgba(148,163,184,.18);
       box-shadow:0 10px 25px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.03);
       backdrop-filter:blur(6px);
+      transition: transform .25s cubic-bezier(.2,.6,.2,1), box-shadow .25s cubic-bezier(.2,.6,.2,1);
     }
+    .ui-card:hover{ transform:translateY(-1px); box-shadow:0 14px 30px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.03); }
 
-    /* тёплое «дыхание» логотипа */
+    /* -------------------- ЛОГО (дыхание) -------------------- */
     header svg{
       filter: drop-shadow(0 0 12px rgba(245,158,11,.25));
       animation: glowPulse .9s ease-out 1, breath 10s ease-in-out infinite 1.2s;
@@ -44,36 +57,48 @@
     @keyframes glowPulse{0%{transform:scale(.92);filter:drop-shadow(0 0 0 rgba(245,158,11,0))}100%{transform:scale(1);filter:drop-shadow(0 0 18px rgba(245,158,11,.5))}}
     @keyframes breath{0%,100%{filter:drop-shadow(0 0 10px rgba(245,158,11,.25))}50%{filter:drop-shadow(0 0 16px rgba(245,158,11,.44))}}
 
-    /* чипсы брендов */
+    /* -------------------- БРЕНД-ЧИПСЫ -------------------- */
     .brand-chip{
-      white-space:nowrap; transition:.18s cubic-bezier(.2,.6,.2,1);
+      white-space:nowrap; transition:transform .18s cubic-bezier(.2,.6,.2,1), box-shadow .18s cubic-bezier(.2,.6,.2,1), border-color .18s;
       border:1px solid rgba(148,163,184,.2);
       padding:0 .75rem; height:2.25rem; display:inline-flex; align-items:center; border-radius:.9rem;
       background: rgba(15,16,19,.75);
+      will-change:transform;
     }
     .brand-chip:hover{ transform:translateY(-1px); box-shadow:0 0 0 2px rgba(245,158,11,.18) inset; }
     .brand-chip.active{ box-shadow:0 0 0 2px rgba(245,158,11,.35) inset; border-color:rgba(245,158,11,.45); }
+    .brand-chip:active{ transform:translateY(0); }
 
-    /* плавные появления (stagger) */
+    /* -------------------- ПОЯВЛЕНИЯ (stagger) -------------------- */
     .reveal{ opacity:0; transform:translateY(8px); }
     .reveal.in{ opacity:1; transform:none; transition:opacity .22s cubic-bezier(.3,.7,.2,1) var(--d,0ms), transform .22s cubic-bezier(.3,.7,.2,1) var(--d,0ms); }
     .reveal-up{ opacity:0; transform:translateY(10px); }
     .reveal-up.in{ opacity:1; transform:none; transition:opacity .22s cubic-bezier(.3,.7,.2,1) var(--d,0ms), transform .22s cubic-bezier(.3,.7,.2,1) var(--d,0ms); }
 
-    /* тонкие слайдеры */
+    /* -------------------- ИНПУТЫ/СЛАЙДЕРЫ -------------------- */
+    input[type=text], input[type=number], textarea{
+      transition: box-shadow .18s, border-color .18s, background-color .18s;
+    }
+    input[type=text]:focus, input[type=number]:focus, textarea:focus{
+      outline: none; box-shadow: 0 0 0 2px var(--ring); border-color: rgba(245,158,11,.35);
+    }
     input[type=range]{ background:linear-gradient(90deg, rgba(245,158,11,.35), rgba(253,186,116,.35)); height:6px; border-radius:999px; }
-    input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:#fff; border:3px solid #cbd5e1; box-shadow:0 2px 8px rgba(0,0,0,.45); }
+    input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:#fff; border:3px solid #cbd5e1; box-shadow:0 2px 8px rgba(0,0,0,.45); transition: transform .12s ease; }
+    input[type=range]:active::-webkit-slider-thumb{ transform: scale(1.08); }
     input[type=range]:active{ box-shadow:0 0 0 6px rgba(245,158,11,.12); }
 
-    /* полоса микса — плавный пересчёт ширины */
+    /* -------------------- ПОЛОСА МИКСА -------------------- */
     .mix-seg{ transition:width .25s cubic-bezier(.2,.6,.2,1); }
 
-    /* тёплая primary-кнопка + shimmer */
+    /* -------------------- КНОПКИ -------------------- */
     .btn-primary{
       position:relative; color:#0b0b0b;
       background:linear-gradient(90deg,var(--warm1),var(--warm2));
       box-shadow:0 0 0 1px rgba(245,158,11,.35) inset, 0 8px 20px rgba(245,158,11,.15);
+      transition: transform .18s cubic-bezier(.2,.6,.2,1), box-shadow .18s cubic-bezier(.2,.6,.2,1);
     }
+    .btn-primary:hover{ transform: translateY(-1px); box-shadow:0 0 0 1px rgba(245,158,11,.45) inset, 0 12px 28px rgba(245,158,11,.22); }
+    .btn-primary:active{ transform: translateY(0); }
     .btn-primary.shimmer::before{
       content:""; position:absolute; inset:0;
       background:linear-gradient(120deg,transparent,rgba(255,255,255,.18),transparent);
@@ -82,7 +107,8 @@
     @keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
 
     /* Ripple на клике */
-    .tap{ position:relative; overflow:hidden; }
+    .tap{ position:relative; overflow:hidden; transition: transform .06s ease; }
+    .tap:active{ transform: translateY(0.5px) scale(.997); }
     .tap::after{
       content:""; position:absolute; left:var(--rx,50%); top:var(--ry,50%); width:0; height:0; border-radius:999px;
       transform:translate(-50%,-50%); background:radial-gradient(circle, rgba(253,186,116,.35) 0, rgba(253,186,116,0) 60%); opacity:0; pointer-events:none;
@@ -90,7 +116,10 @@
     .tap.rippling::after{ animation:ripple .6s ease-out; }
     @keyframes ripple{0%{opacity:.35; width:0; height:0}100%{opacity:0; width:220px; height:220px}}
 
-    /* уважение к reduced motion */
+    /* -------------------- ДОСТУПНОСТЬ -------------------- */
+    :focus-visible{ outline:2px solid transparent; box-shadow:0 0 0 2px var(--ring); border-color:rgba(245,158,11,.45)!important; }
+
+    /* Уважение к reduced motion */
     @media (prefers-reduced-motion:reduce){
       *{animation:none!important; transition:none!important}
     }
@@ -105,7 +134,7 @@
         if (!root) return;
         root.innerHTML =
           '<div class="min-h-[100svh] flex items-center justify-center p-6">' +
-          '  <div class="max-w-md w-full rounded-xl border border-rose-800 bg-rose-950 p-4 text-sm">' +
+          '  <div class="max-w-md w	full rounded-xl border border-rose-800 bg-rose-950 p-4 text-sm">' +
           '    <div class="font-bold mb-2 text-rose-200">Произошла ошибка</div>' +
           '    <div class="text-rose-100/90 whitespace-pre-wrap break-words">' + String(msg || 'Unknown error') + '</div>' +
           '  </div>' +
@@ -373,7 +402,7 @@
             desc +
           '</div>' +
           '<button data-add="'+escAttr(f.id)+'" class="tap inline-flex items-center justify-center rounded-xl h-8 px-3 text-[12px] '+(inMix?'opacity-50 cursor-not-allowed border border-slate-700':'border border-slate-700 hover:bg-white/10')+'">'+(inMix?'✓':'+')+'</button>' +
-        '</div>'
+        '</div>"
       );
     }).join('');
 
