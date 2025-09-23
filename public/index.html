@@ -7,41 +7,1098 @@
   <title>Hookah Mixes</title>
   <script src="https://cdn.tailwindcss.com"></script>
 
+  <!-- ВИЗУАЛ ТОЛЬКО: тёплая тёмная тема + анимации (логика НЕ менялась) -->
   <style id="anim-pack">
-    :root{--bg:#0a0b0d;--warm1:#F59E0B;--warm2:#FDBA74;}
+    :root{
+      --bg:#0a0b0d; --card:#111216; --ring:rgba(245,158,11,.55);
+      --warm1:#F59E0B; --warm2:#FDBA74; --warm3:#FCA5A5; --soft:#1a1b1f;
+    }
+    /* -------------------- БАЗА -------------------- */
+    html,body{ height:100%; }
     body{
       background:
         radial-gradient(900px 600px at 10% -10%, rgba(245,158,11,.12), transparent 60%),
         radial-gradient(700px 500px at 95% 0%, rgba(253,186,116,.07), transparent 55%),
         var(--bg);
-      color:#e5e7eb;
+      color: #e5e7eb;
+      -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
     }
-    .ui-card{border-radius:1rem;background:rgba(17,18,22,.82);border:1px solid rgba(148,163,184,.18);
-      box-shadow:0 10px 25px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.03);backdrop-filter:blur(6px);}
-    .btn-primary{position:relative;color:#0b0b0b;background:linear-gradient(90deg,var(--warm1),var(--warm2));}
-    .btn-primary.shimmer::before{content:"";position:absolute;inset:0;
+    /* Мягкий шум */
+    body::after{
+      content:""; position:fixed; inset:0; pointer-events:none; opacity:.07;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.7' numOctaves='2'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      mix-blend-mode:soft-light;
+    }
+    /* Водяной знак-лого (не перекрывает контент) */
+    .wm{position:fixed;inset:0;pointer-events:none;opacity:.08;background-repeat:no-repeat;background-position:center 30%;background-size:min(70vmin,560px);filter:blur(.2px);}
+    body::before{
+      content:""; position:fixed; inset:0; pointer-events:none; opacity:.065;
+      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' x2='1'%3E%3Cstop offset='0' stop-color='%23F59E0B'/%3E%3Cstop offset='1' stop-color='%23FDBA74'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='256' cy='256' r='230' fill='url(%23g)' opacity='.35'/%3E%3Cpath d='M256 60c-34 34-34 68 0 102s34 68 0 102-34 68 0 102' stroke='%23fde68a' stroke-width='28' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='256' cy='420' r='22' fill='%23fde68a'/%3E%3C/svg%3E");
+      background-repeat:no-repeat; background-position:center 30%; background-size:min(70vmin,560px);
+      filter: blur(0.2px);
+    }
+
+    /* -------------------- КАРТОЧКИ -------------------- */
+    .ui-card{
+      border-radius: 1rem;
+      background:rgba(17,18,22,.82);
+      border:1px solid rgba(148,163,184,.18);
+      box-shadow:0 10px 25px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.03);
+      backdrop-filter:blur(6px);
+      transition: transform .25s cubic-bezier(.2,.6,.2,1), box-shadow .25s cubic-bezier(.2,.6,.2,1);
+    }
+    .ui-card:hover{ transform:translateY(-1px); box-shadow:0 14px 30px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.03); }
+
+    /* -------------------- ЛОГО (дыхание) -------------------- */
+    header svg{
+      filter: drop-shadow(0 0 12px rgba(245,158,11,.25));
+      animation: glowPulse .9s ease-out 1, breath 10s ease-in-out infinite 1.2s;
+      transform-origin:center;
+    }
+    @keyframes glowPulse{0%{transform:scale(.92);filter:drop-shadow(0 0 0 rgba(245,158,11,0))}100%{transform:scale(1);filter:drop-shadow(0 0 18px rgba(245,158,11,.5))}}
+    @keyframes breath{0%,100%{filter:drop-shadow(0 0 10px rgba(245,158,11,.25))}50%{filter:drop-shadow(0 0 16px rgba(245,158,11,.44))}}
+
+    /* -------------------- БРЕНД-ЧИПСЫ -------------------- */
+    .brand-chip{
+      white-space:nowrap; transition:transform .18s cubic-bezier(.2,.6,.2,1), box-shadow .18s cubic-bezier(.2,.6,.2,1), border-color .18s;
+      border:1px solid rgba(148,163,184,.2);
+      padding:0 .75rem; height:2.25rem; display:inline-flex; align-items:center; border-radius:.9rem;
+      background: rgba(15,16,19,.75);
+      will-change:transform;
+    }
+    .brand-chip:hover{ transform:translateY(-1px); box-shadow:0 0 0 2px rgba(245,158,11,.18) inset; }
+    .brand-chip.active{ box-shadow:0 0 0 2px rgba(245,158,11,.35) inset; border-color:rgba(245,158,11,.45); }
+    .brand-chip:active{ transform:translateY(0); }
+
+    /* -------------------- ПОЯВЛЕНИЯ (stagger) -------------------- */
+    .reveal{ opacity:0; transform:translateY(8px); }
+    .reveal.in{ opacity:1; transform:none; transition:opacity .22s cubic-bezier(.3,.7,.2,1) var(--d,0ms), transform .22s cubic-bezier(.3,.7,.2,1) var(--d,0ms); }
+    .reveal-up{ opacity:0; transform:translateY(10px); }
+    .reveal-up.in{ opacity:1; transform:none; transition:opacity .22s cubic-bezier(.3,.7,.2,1) var(--d,0ms), transform .22s cubic-bezier(.3,.7,.2,1) var(--d,0ms); }
+
+    /* -------------------- ИНПУТЫ/СЛАЙДЕРЫ -------------------- */
+    input[type=text], input[type=number], textarea{
+      transition: box-shadow .18s, border-color .18s, background-color .18s;
+    }
+    input[type=text]:focus, input[type=number]:focus, textarea:focus{
+      outline: none; box-shadow: 0 0 0 2px var(--ring); border-color: rgba(245,158,11,.35);
+    }
+    input[type=range]{ background:linear-gradient(90deg, rgba(245,158,11,.35), rgba(253,186,116,.35)); height:6px; border-radius:999px; }
+    input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:#fff; border:3px solid #cbd5e1; box-shadow:0 2px 8px rgba(0,0,0,.45); transition: transform .12s ease; }
+    input[type=range]:active::-webkit-slider-thumb{ transform: scale(1.08); }
+    input[type=range]:active{ box-shadow:0 0 0 6px rgba(245,158,11,.12); }
+
+    /* -------------------- ПОЛОСА МИКСА -------------------- */
+    .mix-seg{ transition:width .25s cubic-bezier(.2,.6,.2,1); }
+
+    /* -------------------- КНОПКИ -------------------- */
+    .btn-primary{
+      position:relative; color:#0b0b0b;
+      background:linear-gradient(90deg,var(--warm1),var(--warm2));
+      box-shadow:0 0 0 1px rgba(245,158,11,.35) inset, 0 8px 20px rgba(245,158,11,.15);
+      transition: transform .18s cubic-bezier(.2,.6,.2,1), box-shadow .18s cubic-bezier(.2,.6,.2,1);
+    }
+    .btn-primary:hover{ transform: translateY(-1px); box-shadow:0 0 0 1px rgba(245,158,11,.45) inset, 0 12px 28px rgba(245,158,11,.22); }
+    .btn-primary:active{ transform: translateY(0); }
+    .btn-primary.shimmer::before{
+      content:""; position:absolute; inset:0;
       background:linear-gradient(120deg,transparent,rgba(255,255,255,.18),transparent);
-      transform:translateX(-100%);animation:shimmer 3s linear infinite;}
+      transform:translateX(-100%); animation:shimmer 3s linear infinite;
+    }
     @keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
+
+    /* Ripple на клике */
+    .tap{ position:relative; overflow:hidden; transition: transform .06s ease; }
+    .tap:active{ transform: translateY(0.5px) scale(.997); }
+    .tap::after{
+      content:""; position:absolute; left:var(--rx,50%); top:var(--ry,50%); width:0; height:0; border-radius:999px;
+      transform:translate(-50%,-50%); background:radial-gradient(circle, rgba(253,186,116,.35) 0, rgba(253,186,116,0) 60%); opacity:0; pointer-events:none;
+    }
+    .tap.rippling::after{ animation:ripple .6s ease-out; }
+    @keyframes ripple{0%{opacity:.35; width:0; height:0}100%{opacity:0; width:220px; height:220px}}
+
+    /* -------------------- ДОСТУПНОСТЬ -------------------- */
+    :focus-visible{ outline:2px solid transparent; box-shadow:0 0 0 2px var(--ring); border-color:rgba(245,158,11,.45)!important; }
+
+    /* Уважение к reduced motion */
+    @media (prefers-reduced-motion:reduce){
+      *{animation:none!important; transition:none!important}
+    }
   </style>
+
+  <!-- Ранний дружелюбный экран ошибок -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script>
+    (function(){
+      function showFatal(msg){
+        var root = document.getElementById('root');
+        if (!root) return;
+        root.innerHTML =
+          '<div class="min-h-[100svh] flex items-center justify-center p-6">' +
+          '  <div class="max-w-md w-full rounded-xl border border-rose-800 bg-rose-950 p-4 text-sm">' +
+          '    <div class="font-bold mb-2 text-rose-200">Произошла ошибка</div>' +
+          '    <div class="text-rose-100/90 whitespace-pre-wrap break-words">' + String(msg || 'Unknown error') + '</div>' +
+          '  </div>' +
+          '</div>';
+      }
+      window.addEventListener('error', function(e){
+        var m = (e && (e.message || (e.error && e.error.message))) || 'Script error';
+        showFatal(m);
+      });
+      window.addEventListener('unhandledrejection', function(e){
+        var m = (e && (e.reason && (e.reason.message || e.reason))) || 'Unhandled rejection';
+        showFatal(m);
+      });
+    })();
+  </script>
 </head>
 <body class="text-slate-100">
   <div id="root" class="min-h-[100svh]"></div>
 
   <script>
-    const root=document.getElementById('root');
-    root.innerHTML=`
-      <div class="min-h-[100svh] p-3">
-        <header class="flex items-center gap-2 mb-4">
-          <img src="logo.png" alt="logo" class="w-8 h-8 rounded-md"/>
-          <h1 class="text-lg font-bold">Hookah Mixes</h1>
-        </header>
-        <div class="ui-card p-4 space-y-2">
-          <input id="title" placeholder="Название микса" class="h-9 w-full rounded-xl border border-slate-700 bg-slate-900 px-3" />
-          <button class="btn-primary shimmer rounded-xl h-9 px-3">Сохранить</button>
-        </div>
-      </div>
-    `;
+  // ========================= API ============================================
+  const API_BASE = location.origin;
+  const api = (path, opts={}) => fetch(API_BASE + path, {
+    cache: 'no-store',
+    ...opts,
+    headers: { 'Content-Type':'application/json; charset=UTF-8', ...(opts.headers||{}) }
+  });
+
+  // ========================= УТИЛИТЫ ========================================
+  const escAttr = s => String(s).replace(/"/g,'&quot;');
+  const escHTML = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const safeNum = (v,d=0)=>{const n=Number(v);return Number.isFinite(n)?n:d;};
+  const safePercent = v => Math.max(0, Math.min(100, safeNum(v,0)));
+  const percentSum = parts => Array.isArray(parts) ? parts.reduce((a,b)=>a+safePercent(b&&b.percent),0) : 0;
+  const isMixValid = (parts,title)=>(Array.isArray(parts) && parts.length>0 && percentSum(parts)===100 && String(title||'').trim().length>=3);
+  const uuidv4 = ()=>{let dt=Date.now(); if(typeof performance!='undefined'&&performance.now) dt+=performance.now(); return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=(dt+Math.random()*16)%16|0;dt=Math.floor(dt/16);return (c==='x'?r:(r&0x3|0x8)).toString(16);});};
+
+  const BRAND_STRENGTH10_DEFAULTS={Darkside:5,"Black Burn":6,BlackBurn:6,MustHave:5,Overdose:6,Bonch:7,Starline:3};
+  const normalizeBrand=b=>(b||'').trim();
+  const getStrength10=f=>{
+    if(!f) return 5;
+    if(typeof f.strength10==='number'&&Number.isFinite(f.strength10)) return Math.max(1,Math.min(10,f.strength10));
+    return BRAND_STRENGTH10_DEFAULTS[ normalizeBrand(f.brand) ] ?? 5;
+  };
+  const strengthColor=v=>{
+    if(v==null) return {bg:'bg-slate-800',text:'text-slate-200',border:'border-slate-700'};
+    if(v<4)  return {bg:'bg-emerald-950',text:'text-emerald-300',border:'border-emerald-800'};
+    if(v<7)  return {bg:'bg-amber-950',text:'text-amber-300',border:'border-amber-800'};
+    return     {bg:'bg-rose-950',text:'text-rose-300',border:'border-rose-800'};
+  };
+  function clampPercentForPart(parts,targetId,newVal){
+    const other=percentSum(parts.filter(x=>x&&x.flavorId!==targetId));
+    return Math.max(0,Math.min(safePercent(newVal),100-other));
+  }
+  function filterFlavorsByQueryAdv(flavors, query){
+    function normalize(s){ return String(s||'').toLowerCase().replace(/ё/g,'е').trim(); }
+    const q = normalize(query); if(!q) return flavors||[];
+    const SYN = {"киви":["kiwi"],"банан":["banana"],"манго":["mango"],"лимон":["lemon","citrus"],"апельсин":["orange"],"грейпфрут":["grapefruit"],"арбуз":["watermelon"],"дыня":["melon"],"виноград":["grape"],"персик":["peach"],"яблок":["apple"],"маракуй":["passion"],"клубник":["strawberry"],"черник":["blueberry"],"мята":["mint"],"лед":["ice","freeze","frost","cold"],"ваниль":["vanilla"],"печень":["cookie","bisc"],"шоколад":["choco","chocolate"],"кисл":["sour"],"слад":["sweet"]};
+    const tokens = q.split(/\s+/).filter(Boolean);
+    function textOf(f){ return normalize([f?.name, f?.description, Array.isArray(f?.tags)?f.tags.join(' '):''].join(' ')); }
+    return (flavors||[]).filter(f=>{
+      const text = textOf(f);
+      return tokens.every(t=>{
+        const vars = new Set([t]);
+        Object.entries(SYN).forEach(([ru, arr])=>{ if(t.indexOf(ru)!==-1) arr.forEach(v=>vars.add(v)); });
+        let hit=false; vars.forEach(v=>{ if(text.indexOf(v)!==-1) hit=true; }); return hit;
+      });
+    });
+  }
+  function tasteWordFromTag(tag){
+    if(tag==null) return null; const t=String(tag).toLowerCase().trim(); if(!t) return null;
+    const rules=[
+      [/(кисл|sour|лимон|lime|грейпфрут)/,"кислый"],
+      [/(сладк|sweet|sugar|мед|honey)/,"сладкий"],
+      [/(прян|spice|ginger|имбир)/,"пряный"],
+      [/(лед|ice|cold|frost|мят)/,"ледяной"],
+      [/(фрукт|fruit|яблок|banana|mango|pineapple|grape|orange|pear|melon|berry)/,"фруктовый"],
+      [/(десерт|dessert|cake|pie|cookie|choco|cream|vanilla|waffle)/,"десертный"]
+    ];
+    for (const [re,w] of rules){ if(re.test(t)) return w; }
+    return null;
+  }
+  function getMixTasteLabel(parts,flavors){
+    if(!Array.isArray(parts)||!Array.isArray(flavors)||parts.length===0) return null;
+    const total=percentSum(parts); if(total<=0) return null;
+    const scores=new Map();
+    const add=(raw,w)=>{ const word=tasteWordFromTag(raw); if(word) scores.set(word,(scores.get(word)||0)+w); };
+    for (const p of parts){
+      const w=safePercent(p?.percent); if(w<=0) continue;
+      const fl=flavors.find(f=>f&&f.id===(p&&p.flavorId)); if(!fl) continue;
+      if(fl.tags) for(const t of fl.tags) add(t,w);
+      if(fl.name) for(const tk of String(fl.name).toLowerCase().split(/[^a-zа-я0-9]+/i)) add(tk,Math.max(1,w*0.6));
+      if(fl.description) for(const tk of String(fl.description).toLowerCase().split(/[^a-zа-я0-9]+/i)) add(tk,Math.max(1,w*0.3));
+    }
+    if(!scores.size) return null;
+    return Array.from(scores.entries()).sort((a,b)=>b[1]-a[1])[0][0]||null;
+  }
+
+  // ========================= СОСТОЯНИЕ ======================================
+  const qp = new URLSearchParams(location.search);
+  const state = {
+    user: null,
+    flavors: [],
+    guestMixes: [],
+    activeBrand: '',
+    search: '',
+    parts: [],
+    title: '',
+    notes: '',
+    activeTab: 'builder',
+    adminToken: localStorage.getItem('admin_token') || '',
+    adminPrompt: qp.get('admin')==='1',
+    logoUrl: null,
+
+    recTaste: null,
+    recStrength: 5,
+    recList: []
+  };
+  const isAdmin = ()=> !!(state.adminToken && state.adminToken.length>=6);
+
+  // ========================= AUTH / INIT =====================================
+  function initAuth(){
+    try{
+      const u = window?.Telegram?.WebApp?.initDataUnsafe?.user;
+      if(u){
+        const name=[u.first_name,u.last_name].filter(Boolean).join(' ')||u.username||('User '+u.id);
+        state.user={ id:String(u.id), name, username:u.username };
+        return;
+      }
+    }catch(_){}
+    state.user={ id:'anon', name:'Гость' };
+  }
+  async function detectLogo(){
+    async function exists(url){ try{ const r=await fetch(url,{method:'HEAD',cache:'no-store'}); return r.ok; }catch(_){ return false; } }
+    const cand=['./logo.png','logo.png','/logo.png','./logo.jpg','logo.jpg','/logo.jpg','./logo.jpeg','logo.jpeg','/logo.jpeg','./AKGpihYIdG2xycCNV3hAm2gVxkuF4tS5.jpg'];
+    for(const c of cand){ if(await exists(c)){ state.logoUrl=c; return; } }
+    state.logoUrl=null;
+  }
+
+  // ========================= API CALLS =======================================
+  async function loadFlavors(){
+    try{
+      const r = await api('/api/flavors');
+      if(!r.ok) throw new Error('flavors '+r.status);
+      const data = await r.json();
+      state.flavors = Array.isArray(data) ? data : [];
+      const brands = Array.from(new Set(state.flavors.map(f=>normalizeBrand(f.brand))).values()).filter(Boolean).sort();
+      if (!brands.includes(state.activeBrand)) state.activeBrand = brands[0] || '';
+    }catch(e){ console.error('loadFlavors',e); state.flavors = []; }
+  }
+  async function loadGuestMixes(){
+    try{
+      const r = await api('/api/mixes');
+      state.guestMixes = r.ok ? (await r.json()) : [];
+      state.guestMixes.sort((a,b)=>(b?.createdAt||0)-(a?.createdAt||0));
+    }catch(_){ state.guestMixes=[]; }
+  }
+  async function saveMixOnServer(mix){
+    const r = await api('/api/mixes', { method:'POST', body: JSON.stringify(mix) });
+    if(!r.ok) throw new Error('save mix '+r.status+': '+await r.text().catch(()=>'')); 
+    return true;
+  }
+  async function deleteMixOnServer(id, user){
+    const uid = String(user && user.id || '');
+    const headers = { 'X-User-Id': uid, 'X-Author-Id': uid, 'Content-Type':'application/json; charset=UTF-8' };
+    const r = await api('/api/mixes/'+encodeURIComponent(id), { method:'DELETE', headers });
+    if (r.ok || r.status===204) return true;
+    throw new Error('Не удалось удалить микс: '+r.status+' — '+await r.text().catch(()=>'')); 
+  }
+  async function createFlavorOnServer(payload, token){
+    const r = await api('/api/flavors', { method:'POST', headers:{ 'X-Admin-Token': token||'' }, body: JSON.stringify(payload) });
+    if(!r.ok) throw new Error('Не удалось добавить вкус: '+r.status+' — '+await r.text().catch(()=>'')); 
+    return true;
+  }
+  async function deleteFlavorOnServer(id, token){
+    const r = await fetch(API_BASE + '/api/flavors/' + encodeURIComponent(id), {
+      method: 'DELETE',
+      headers: { 'X-Admin-Token': token || '' }
+    }).catch(()=>null);
+    const txt = r ? (await r.text().catch(()=>'')) : '';
+    if (r && r.status===204) return true;
+    if (r && r.status===403) throw new Error('Неверный админ-токен');
+    throw new Error('Удаление вкуса не удалось: ' + (txt || (r && r.status)));
+  }
+  // Лайки
+  async function likeMixOnServer(id){
+    const uid = String(state.user?.id || 'anon');
+    const r = await api('/api/mixes/'+encodeURIComponent(id)+'/like', { method:'POST', headers:{ 'X-User-Id': uid } });
+    if(!r.ok) throw new Error('like '+r.status);
+    return await r.json();
+  }
+  async function unlikeMixOnServer(id){
+    const uid = String(state.user?.id || 'anon');
+    const r = await api('/api/mixes/'+encodeURIComponent(id)+'/like', { method:'DELETE', headers:{ 'X-User-Id': uid } });
+    if(!r.ok) throw new Error('unlike '+r.status);
+    return await r.json();
+  }
+  // Рекомендатор
+  async function fetchRecommendations(){
+    const q = new URLSearchParams();
+    if (state.recTaste) q.set('taste', state.recTaste);
+    if (Number.isFinite(state.recStrength)) q.set('strength', String(state.recStrength));
+    q.set('limit','10');
+    const r = await api('/api/mixes/recommend?'+q.toString());
+    state.recList = r.ok ? (await r.json()) : [];
+  }
+
+  function LogoSVG(cls){
+    return (
+      '<svg class="'+(cls||'w-8 h-8')+'" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
+      '  <defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#F59E0B"/><stop offset="1" stop-color="#FDBA74"/></linearGradient></defs>' +
+      '  <circle cx="32" cy="32" r="30" fill="url(#g)" opacity="0.18"/>' +
+      '  <path d="M32 10c-4 4-4 8 0 12 4 4 4 8 0 12-4 4-4 8 0 12" stroke="#fde68a" stroke-width="3" fill="none" stroke-linecap="round"/>' +
+      '  <circle cx="32" cy="50" r="3" fill="#fde68a"/>' +
+      '</svg>'
+    );
+  }
+
+  // ========================= РЕНДЕР =========================================
+  function render(){
+    const root = document.getElementById('root'); if(!root) return;
+
+    const brands = Array.from(new Set((state.flavors||[]).map(f=>normalizeBrand(f.brand)))).filter(Boolean).sort();
+    const flavorsOfActive = (state.flavors||[]).filter(f=>normalizeBrand(f.brand)===state.activeBrand);
+    const searchedFlavors = filterFlavorsByQueryAdv(state.flavors, state.search);
+    const listFlavors = state.search ? searchedFlavors : flavorsOfActive;
+
+    const total = percentSum(state.parts);
+    const mixStrength10 = (function(parts,flavors){
+      if(!Array.isArray(parts)||!Array.isArray(flavors)||!parts.length) return null;
+      const t=percentSum(parts); if(t<=0) return null; let w=0;
+      for(const p of parts){
+        const pr=safePercent(p?.percent); if(pr<=0) continue;
+        const fl=flavors.find(x=>x&&x.id===(p&&p.flavorId)); if(!fl) continue;
+        w += getStrength10(fl)*(pr/t);
+      }
+      return w? Math.round(w*10)/10 : null;
+    })(state.parts,state.flavors);
+    const mixTaste = getMixTasteLabel(state.parts,state.flavors);
+
+    const strengthBadge = (function(){
+      if(typeof mixStrength10!=='number') return '';
+      const c=strengthColor(mixStrength10);
+      return '<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+mixStrength10.toFixed(1)+'</span>';
+    })();
+
+    // --- бренды
+    const brandsHTML = brands.map(b =>
+      '<button data-brand="'+escAttr(b)+'" class="brand-chip tap '+(state.activeBrand===b?'active':'')+'">'+escHTML(b)+'</button>'
+    ).join('');
+
+    // --- список вкусов
+    const flavorsHTML = listFlavors.map(f=>{
+      const inMix = state.parts.some(p=>p.flavorId===f.id);
+      const s = getStrength10(f); const c = strengthColor(s);
+      const desc = f.description ? '<div class="text-[11px] text-slate-300/80 line-clamp-2">'+escHTML(f.description)+'</div>' : '';
+      return (
+        '<div class="flex items-center justify-between gap-2 text-sm hover:bg-white/5 rounded-lg px-2 py-1">' +
+          '<div class="min-w-0">' +
+            '<div class="flex items-center gap-2">' +
+              '<div class="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center text-[11px] opacity-80">'+escHTML((f.brand||'?').slice(0,1).toUpperCase())+'</div>' +
+              '<div class="font-medium truncate" title="'+escAttr((f.brand||'')+' • '+(f.name||''))+'">'+escHTML(f.name)+' <span class="opacity-60">('+escHTML(f.brand)+')</span></div>' +
+              '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+s.toFixed(1)+'</span>' +
+            '</div>' +
+            desc +
+          '</div>' +
+          '<button data-add="'+escAttr(f.id)+'" class="tap inline-flex items-center justify-center rounded-xl h-8 px-3 text-[12px] '+(inMix?'opacity-50 cursor-not-allowed border border-slate-700':'border border-slate-700 hover:bg-white/10')+'">'+(inMix?'✓':'+')+'</button>' +
+        '</div>'
+      );
+    }).join('');
+
+    // --- части микса
+    const partsHTML = state.parts.map(p=>{
+      const fl = state.flavors.find(x=>x.id===p.flavorId);
+      const name = (fl && fl.name) || p.flavorId;
+      return (
+        '<div class="flex items-center gap-2 text-sm">' +
+          '<span class="truncate w-36" title="'+escAttr(name)+'">'+escHTML(name)+'</span>' +
+          '<input type="range" min="0" max="100" step="5" class="w-28" value="'+safePercent(p.percent)+'" data-range="'+escAttr(p.flavorId)+'"/>' +
+          '<span class="w-10 text-right" data-percent-for="'+escAttr(p.flavorId)+'">'+safePercent(p.percent)+'%</span>' +
+          '<button data-remove="'+escAttr(p.flavorId)+'" class="tap inline-flex items-center justify-center rounded-xl h-8 px-3 text-[12px] hover:bg-white/10 border border-slate-700">Удалить</button>' +
+        '</div>'
+      );
+    }).join('');
+
+    // --- карточки миксов гостей
+    const guestHTML = state.guestMixes.map(m=>{
+      const c = typeof m.strength10==='number' ? strengthColor(m.strength10) : strengthColor(null);
+      const sBadge = typeof m.strength10==='number' ? '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+m.strength10.toFixed(1)+'</span>' : '';
+      const tBadge = m.taste ? '<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">'+escHTML(m.taste)+'</span>' : '';
+      const notes = m.notes ? '<div class="text-[12px] opacity-80 mt-1">'+escHTML(m.notes)+'</div>' : '';
+      const parts = (m.parts||[]).map(pp=>{
+        const fl = state.flavors.find(x=>x.id===pp.flavorId);
+        return '<div class="flex items-center justify-between text-[12px]"><span class="truncate mr-2">'+escHTML(fl?fl.name:pp.flavorId)+'</span><span class="opacity-70">'+safePercent(pp.percent)+'%</span></div>';
+      }).join('');
+      const canDelete = !!(state.user && (m.authorId && String(m.authorId)===String(state.user.id)));
+      const delBtn = canDelete ? '<button data-del="'+escAttr(m.id)+'" class="tap ml-auto inline-flex items-center justify-center rounded-full h-7 px-3 text-[11px] border border-rose-700 text-rose-300 hover:bg-rose-900/40">Удалить</button>' : '';
+      const likes = Array.isArray(m.likers) ? m.likers.length : 0;
+      const iLiked = Array.isArray(m.likers) && state.user && m.likers.includes(String(state.user.id));
+      const likeBtn =
+        '<button data-like="'+escAttr(m.id)+'" class="tap inline-flex items-center gap-1 rounded-full h-7 px-3 text-[11px] border '+(iLiked?'border-pink-500 text-pink-200 bg-pink-900/30':'border-slate-700 text-slate-200 hover:bg-white/10')+'">'+
+        (iLiked?'❤':'♡')+' <span class="tabular-nums">'+likes+'</span></button>';
+
+      return (
+        '<div class="ui-card p-2 text-sm">' +
+          '<div class="flex items-center gap-2">' +
+            '<div class="font-semibold truncate">'+escHTML(m.title)+'</div>' +
+            sBadge + tBadge + delBtn + likeBtn +
+          '</div>' +
+          '<div class="text-[11px] text-slate-400">микс от '+escHTML(m.author||'Гость')+'</div>' +
+          notes +
+          '<div class="mt-1 space-y-0.5">'+parts+'</div>' +
+        '</div>'
+      );
+    }).join('');
+
+    // --- заголовок
+    const headerHTML =
+      '<header class="flex items-center justify-between">' +
+        '<div class="flex items-center gap-2 min-w-0">'+(state.logoUrl?('<img src="'+escAttr(state.logoUrl)+'" alt="logo" class="w-8 h-8 rounded-md ring-1 ring-white/10"/>'):LogoSVG())+'<h1 class="text-lg font-bold truncate">Hookah Mixes</h1></div>' +
+        '<div class="flex items-center gap-2">' +
+          '<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">Здравствуйте, '+escHTML(state.user?.name || 'Гость')+'</span>' +
+          '<button data-tab="builder" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] '+(state.activeTab==='builder'?'bg-slate-100 text-slate-900 shadow-[inset_0_-2px_0_rgba(245,158,11,.7)]':'border border-slate-700 hover:bg-white/10')+'">Конструктор</button>' +
+          '<button data-tab="guest" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] '+(state.activeTab==='guest'?'bg-slate-100 text-slate-900 shadow-[inset_0_-2px_0_rgba(245,158,11,.7)]':'border border-slate-700 hover:bg-white/10')+'">Миксы гостей</button>' +
+          (isAdmin()?('<button data-tab="admin" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] '+(state.activeTab==='admin'?'bg-slate-100 text-slate-900 shadow-[inset_0_-2px_0_rgba(245,158,11,.7)]':'border border-slate-700 hover:bg-white/10')+'">Админ</button>'):'') +
+        '</div>' +
+      '</header>';
+
+    // --- блок брендов
+    const brandsBlock =
+      '<div class="ui-card">' +
+        '<div class="px-3 pt-3">' +
+          '<div class="text-[10px] tracking-wider uppercase text-slate-300/70">Каталог</div>' +
+          '<div class="text-base font-semibold">Бренды и вкусы</div>' +
+        '</div>' +
+        '<div class="p-3 space-y-2">' +
+          '<div class="space-y-2">' +
+            '<input id="search" placeholder="Поиск вкуса…" value="'+escAttr(state.search||'')+'" class="h-9 w-full rounded-xl border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-400 px-3 text-sm outline-none focus:ring-2 focus:ring-slate-600" />' +
+            '<div class="flex gap-2 overflow-auto scrollbar-none brands-rail">'+brandsHTML+(brands.length===0?'<div class="text-[12px] text-slate-400">Нет брендов</div>':'')+'</div>' +
+          '</div>' +
+          '<div id="flavorsMeta" class="text-[11px] text-slate-400">'+(state.search ? ('Найдено: '+listFlavors.length) : (state.activeBrand ? ('Вкусы бренда: '+escHTML(state.activeBrand)) : ''))+'</div>' +
+          '<div id="flavorsList" class="space-y-1">'+flavorsHTML+(listFlavors.length===0?('<div class="text-[12px] text-slate-400">'+(state.search?'Ничего не найдено':'Нет вкусов для этого бренда')+'</div>'):'')+'</div>' +
+        '</div>' +
+      '</div>';
+
+    // --- блок микса
+    const mixBlock =
+      '<div class="ui-card" id="mixBlock">' +
+        '<div class="px-3 pt-3">' +
+          '<div class="text-[10px] tracking-wider uppercase text-slate-300/70">Сборка</div>' +
+          '<div class="text-base font-semibold">Ваш микс</div>' +
+        '</div>' +
+        '<div class="p-3 space-y-2">' +
+          (state.parts.length===0?'<div class="text-[12px] text-slate-400">Добавьте вкусы из списка</div>':'') +
+          partsHTML +
+          '<div class="h-3 rounded-md bg-slate-900 border border-slate-700 overflow-hidden my-2" id="mixBar"></div>' +
+          '<div class="flex items-center justify-between text-[12px]">' +
+            '<span>Итог: <b id="mixTotal">'+total+'</b>%</span>' +
+            '<div class="flex items-center gap-2">' +
+              '<span id="mixStrength">'+strengthBadge+'</span>' +
+              '<span id="mixTaste">'+(mixTaste?('<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">'+escHTML(mixTaste)+'</span>'):'')+'</span>' +
+            '</div>' +
+          '</div>' +
+          (state.parts.length===2 ? '<button id="autoThird" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-white/10 w-full">Подобрать 3-й компонент</button>' : '') +
+        '</div>' +
+      '</div>';
+
+    // --- название/описание
+    const saveEnabled = isMixValid(state.parts,state.title);
+    const saveBtnClass = saveEnabled
+      ? 'tap btn-primary shimmer inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px]'
+      : 'tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] opacity-50 cursor-not-allowed border border-slate-700';
+
+    const titleBlock =
+      '<div class="ui-card">' +
+        '<div class="px-3 pt-3">' +
+          '<div class="text-[10px] tracking-wider uppercase text-slate-300/70">Оформление</div>' +
+          '<div class="text-base font-semibold">Название и заметки</div>' +
+        '</div>' +
+        '<div class="p-3 space-y-2">' +
+          '<input id="title" placeholder="Название микса" value="'+escAttr(state.title||'')+'" class="h-9 w-full rounded-xl border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-400 px-3 text-sm outline-none focus:ring-2 focus:ring-slate-600" />' +
+          '<textarea id="notes" placeholder="Описание / заметки…" class="min-h-[72px] w-full rounded-xl border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-400 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-600">'+escHTML(state.notes||'')+'</textarea>' +
+          '<div class="flex gap-2">' +
+            '<button id="reset" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-white/10">Сброс</button>' +
+            '<button id="save" class="'+saveBtnClass+'">Сохранить</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+
+    // --- рекомендации
+    const tasteChips = ['фруктовый','ледяной','сладкий','пряный','десертный','кислый'].map(t =>
+      '<button data-taste="'+t+'" class="tap inline-flex items-center rounded-full h-8 px-3 text-[12px] '+(state.recTaste===t?'bg-slate-100 text-slate-900':'border border-slate-700 hover:bg-white/10')+'">'+t+'</button>'
+    ).join(' ');
+    const recItems = (state.recList||[]).map(m=>{
+      const likes = Array.isArray(m.likers) ? m.likers.length : 0;
+      const c = typeof m.strength10==='number' ? strengthColor(m.strength10) : strengthColor(null);
+      const sBadge = typeof m.strength10==='number' ? '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+m.strength10.toFixed(1)+'</span>' : '';
+      const tBadge = m.taste ? '<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">'+escHTML(m.taste)+'</span>' : '';
+      return '<div class="flex items-center justify-between gap-2 text-sm border border-slate-800 rounded-lg px-2 py-1">'+
+        '<div class="min-w-0"><div class="truncate font-medium">'+escHTML(m.title)+'</div><div class="text-[11px] opacity-70">❤ '+likes+'</div></div>'+
+        '<div class="flex items-center gap-2">'+sBadge+tBadge+'<button data-apply="'+escAttr(m.id)+'" class="tap inline-flex items-center rounded-xl h-8 px-3 text-[12px] border border-slate-700 hover:bg-white/10">Загрузить</button></div>'+
+      '</div>';
+    }).join('');
+    const recBlock =
+      '<div class="ui-card">' +
+        '<div class="px-3 pt-3">' +
+          '<div class="text-[10px] tracking-wider uppercase text-slate-300/70">Подсказки</div>' +
+          '<div class="text-base font-semibold">Рекомендации</div>' +
+        '</div>' +
+        '<div class="p-3 space-y-2">' +
+          '<div class="text-[12px] text-slate-400">Выберите вкус и целевую крепость — покажем подходящие миксы.</div>' +
+          '<div class="flex flex-wrap gap-2">'+tasteChips+'</div>' +
+          '<div class="flex items-center gap-2">' +
+            '<span class="text-[12px] opacity-80">Крепость:</span>' +
+            '<input id="recStrength" type="range" min="1" max="10" step="1" value="'+(state.recStrength||5)+'" class="w-full" />' +
+            '<span class="text-[12px] w-6 text-right">'+(state.recStrength||5)+'</span>' +
+          '</div>' +
+          '<button id="recFetch" class="tap btn-primary shimmer inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] w-full">Показать рекомендации</button>' +
+          '<div id="recList" class="space-y-1">'+(recItems||'')+'</div>' +
+        '</div>' +
+      '</div>';
+
+    // --- админка
+    const adminBlock = (!isAdmin() ? '' :
+      ('<div class="ui-card">' +
+       '  <div class="px-3 pt-3">' +
+       '    <div class="text-[10px] tracking-wider uppercase text-slate-300/70">Управление</div>' +
+       '    <div class="text-base font-semibold">Админ</div>' +
+       '  </div>' +
+       '  <div class="p-3 space-y-4 text-sm">' +
+       '    <div class="text-[11px] text-slate-400">Токен сохранён. Можно добавлять и удалять вкусы. Ниже — статистика.</div>' +
+       '    <div class="grid grid-cols-1 gap-2">' +
+       '      <input id="admBrand" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Бренд" />' +
+       '      <input id="admName" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Название" />' +
+       '      <input id="admTags" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Теги (через запятую)" />' +
+       '      <input id="admStrength" type="number" min="1" max="10" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Крепость 1–10 (необязательно)" />' +
+       '      <textarea id="admDesc" class="min-h-[72px] rounded-xl border border-slate-700 bg-slate-900 px-3 py-2" placeholder="Описание (необязательно)"></textarea>' +
+       '    </div>' +
+       '    <div class="flex gap-2">' +
+       '      <button id="admAddFlavor" class="tap btn-primary shimmer inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px]">Добавить вкус</button>' +
+       '      <button id="admReload" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-white/10">Обновить список</button>' +
+       '      <button id="admClearToken" class="tap ml-auto inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-rose-700 text-rose-300 hover:bg-rose-900/40">Выйти</button>' +
+       '    </div>' +
+       '    <div>' +
+       '      <div class="text-xs font-semibold mb-2">Все вкусы</div>' +
+       '      <div id="admFlavorList" class="space-y-1"></div>' +
+       '    </div>' +
+       '  </div>' +
+       '</div>')
+    );
+
+    const adminLoginBlock = (!isAdmin() && state.adminPrompt) ? (
+      '<div class="ui-card">' +
+        '<div class="px-3 pt-3"><div class="text-[10px] tracking-wider uppercase text-slate-300/70">Админ-доступ</div><div class="text-base font-semibold">Введите токен</div></div>' +
+        '<div class="p-3 space-y-2">' +
+          '<input id="admToken" class="h-9 w-full rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Вставьте X-Admin-Token" />' +
+          '<div class="flex gap-2">' +
+            '<button id="admSaveToken" class="tap btn-primary shimmer inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px]">Сохранить токен</button>' +
+            '<button id="admCancel" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-white/10">Скрыть</button>' +
+          '</div>' +
+          '<div id="admMsg" class="text-[11px] text-slate-400">После сохранения появится вкладка «Админ».</div>' +
+        '</div>' +
+      '</div>'
+    ) : '';
+
+    const guestBlock =
+      '<div class="ui-card">' +
+        '<div class="px-3 pt-3"><div class="text-[10px] tracking-wider uppercase text-slate-300/70">Комьюнити</div><div class="text-base font-semibold">Миксы гостей</div></div>' +
+        '<div class="p-3 space-y-2">' +
+          (state.guestMixes.length===0?'<div class="text-[12px] text-slate-400">Пока нет сохранённых миксов</div>':'') +
+          guestHTML +
+        '</div>' +
+      '</div>';
+
+    const bodyHTML =
+      '<div class="min-h-[100svh] p-3">' + (state.logoUrl?('<div id="wm" class="wm" style="background-image:url(\''+escAttr(state.logoUrl)+'\')"></div>'):'') +
+        '<div class="mx-auto w-full max-w-lg space-y-5">' +
+          headerHTML +
+          (state.activeTab==='builder' ? (brandsBlock + mixBlock + titleBlock + recBlock) : '') +
+          (state.activeTab==='guest'   ? (guestBlock) : '') +
+          (state.activeTab==='admin'   ? (adminBlock) : '') +
+          (state.activeTab==='builder' && (!isAdmin() && state.adminPrompt) ? adminLoginBlock : '') +
+        '</div>' +
+      '</div>';
+
+    root.innerHTML = bodyHTML;
+
+    // Ensure save button state is correct after first render
+    updateSaveButtonUI();
+
+    // === анимации и ripple после каждого render
+    if(!window.__skipReveal){ applyAnimationsAfterRender(); window.__skipReveal=true; }
+    attachRipples(root);
+
+    // ===== События =====
+    root.querySelectorAll('[data-tab]').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        state.activeTab = btn.getAttribute('data-tab');
+        if (state.activeTab==='guest') await loadGuestMixes();
+        if (state.activeTab==='admin')  buildAdminFlavorList(root);
+        render();
+      });
+    });
+    root.querySelectorAll('[data-brand]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{ state.activeBrand=btn.getAttribute('data-brand'); state.search=''; render(); });
+    });
+
+    const search = root.querySelector('#search');
+    if(search){ search.addEventListener('input', e=>{ state.search=e.target.value; updateSearchUI(); }); }
+
+    bindAddButtons(); attachMixEvents();
+
+    const titleEl=root.querySelector('#title'); if(titleEl){ titleEl.addEventListener('input', e=>{ state.title=e.target.value; updateSaveButtonUI(); }); }
+    const notesEl=root.querySelector('#notes'); if(notesEl){ notesEl.addEventListener('input', e=>{ state.notes=e.target.value; }); }
+    const resetEl=root.querySelector('#reset'); if(resetEl){ resetEl.addEventListener('click', ()=>{ state.title=''; state.notes=''; state.parts=[]; render(); }); }
+
+    const saveEl=root.querySelector('#save');
+    if(saveEl){
+      saveEl.addEventListener('click', async ()=>{
+        if(!isMixValid(state.parts,state.title)) return;
+        if(!state.user) return;
+        const mix={
+          id: uuidv4(),
+          title: String(state.title).trim(),
+          parts: state.parts.slice(),
+          notes: String(state.notes||'').trim(),
+          author: state.user.name || 'Гость',
+          authorId: state.user.id || null,
+          createdAt: Date.now(),
+          taste: getMixTasteLabel(state.parts, state.flavors) || null,
+          strength10: (function(){ const t=percentSum(state.parts); if(!t) return null; let w=0; for(const p of state.parts){ const pr=safePercent(p.percent); if(pr<=0) continue; const fl=state.flavors.find(x=>x&&x.id===p.flavorId); if(!fl) continue; w+=getStrength10(fl)*(pr/t);} return w?Math.round(w*10)/10:null; })(),
+          likers: []
+        };
+        try{
+          await saveMixOnServer(mix);
+          await loadGuestMixes();
+          state.title=''; state.notes=''; state.parts=[]; state.activeTab='guest';
+          render();
+        }catch(e){ alert(e.message||'Не удалось сохранить микс'); }
+      });
+    }
+
+    // Удаление микса (свой)
+    root.querySelectorAll('[data-del]').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const id = btn.getAttribute('data-del'); if(!id) return;
+        if(!confirm('Удалить микс?')) return;
+        try{
+          await deleteMixOnServer(id, state.user);
+          await loadGuestMixes();
+          render();
+        }catch(e){ alert(e.message||'Ошибка удаления'); }
+      });
+    });
+
+    // Лайки
+    root.querySelectorAll('[data-like]').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const id = btn.getAttribute('data-like');
+        const mix = state.guestMixes.find(m=>m.id===id);
+        const liked = Array.isArray(mix?.likers) && state.user && mix.likers.includes(String(state.user.id));
+        try{
+          if (liked) await unlikeMixOnServer(id);
+          else        await likeMixOnServer(id);
+          await loadGuestMixes();
+          render();
+        }catch(e){ alert('Не удалось обновить лайк'); }
+      });
+    });
+
+    // Рекомендатор
+    const rs = root.querySelector('#recStrength');
+    if (rs) rs.addEventListener('input', e=>{ state.recStrength = Number(e.target.value)||5; const out=rs.nextElementSibling; if(out) out.textContent=String(state.recStrength); });
+    root.querySelectorAll('[data-taste]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const t = btn.getAttribute('data-taste');
+        state.recTaste = (state.recTaste===t) ? null : t;
+        render();
+      });
+    });
+    const recBtn = root.querySelector('#recFetch');
+    if (recBtn){
+      recBtn.addEventListener('click', async ()=>{
+        await fetchRecommendations();
+        updateRecListUI();
+      });
+    }
+    root.querySelectorAll('[data-apply]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const id = btn.getAttribute('data-apply');
+        const m = state.guestMixes.find(x=>x.id===id) || state.recList.find(x=>x.id===id);
+        if (!m) return;
+        state.title = m.title + ' (копия)';
+        state.notes = m.notes || '';
+        state.parts = Array.isArray(m.parts) ? m.parts.map(p=>({ flavorId:p.flavorId, percent:safePercent(p.percent) })) : [];
+        state.activeTab = 'builder';
+        render();
+      });
+    });
+
+    // автоподбор 3-го компонента
+    const autoBtn = root.querySelector('#autoThird');
+    if (autoBtn){
+      autoBtn.addEventListener('click', ()=>{
+        const targetTaste = state.recTaste || getMixTasteLabel(state.parts, state.flavors) || null;
+        const currentStrength = (function(){ const t=percentSum(state.parts); if(!t) return null; let w=0; for(const p of state.parts){ const pr=safePercent(p.percent); if(pr<=0) continue; const fl=state.flavors.find(x=>x&&x.id===p.flavorId); if(!fl) continue; w+=getStrength10(fl)*(pr/t);} return w?Math.round(w*10)/10:null; })();
+        const targetStrength = Number.isFinite(currentStrength) ? currentStrength : (state.recStrength||5);
+        const suggestion = suggestThirdFlavor(state.parts, state.flavors, targetTaste, targetStrength);
+        if (!suggestion) { alert('Не удалось подобрать компонент'); return; }
+        const left = Math.max(0, 100 - percentSum(state.parts));
+        const addPct = Math.min(30, left||20);
+        state.parts = state.parts.concat([{ flavorId:suggestion.id, percent:addPct }]);
+        render();
+      });
+    }
+
+    // админ-доступ
+    const tokBtn=root.querySelector('#admSaveToken'); if(tokBtn){ tokBtn.addEventListener('click', ()=>{ const v=(root.querySelector('#admToken')||{}).value||''; try{localStorage.setItem('admin_token',v);}catch(_){ } state.adminToken=v||''; state.adminPrompt=false; render(); }); }
+    const tokCancel=root.querySelector('#admCancel'); if(tokCancel){ tokCancel.addEventListener('click', ()=>{ state.adminPrompt=false; render(); }); }
+
+    if (isAdmin() && state.activeTab==='admin'){
+      buildAdminFlavorList(root);
+      const btnReload=root.querySelector('#admReload'); if(btnReload){ btnReload.addEventListener('click', async ()=>{ await loadFlavors(); render(); }); }
+      const btnLogout=root.querySelector('#admClearToken'); if(btnLogout){ btnLogout.addEventListener('click', ()=>{ try{localStorage.removeItem('admin_token');}catch(_){ } state.adminToken=''; state.activeTab='builder'; render(); }); }
+      const btnAdd=root.querySelector('#admAddFlavor'); if(btnAdd){
+        btnAdd.addEventListener('click', async ()=>{
+          const brand=(root.querySelector('#admBrand')||{}).value||'';
+          const name =(root.querySelector('#admName')||{}).value||'';
+          const tags =(root.querySelector('#admTags')||{}).value||'';
+          const desc =(root.querySelector('#admDesc')||{}).value||'';
+          const str10=(root.querySelector('#admStrength')||{}).value||'';
+          if(!brand.trim()||!name.trim()){ alert('Укажите бренд и название'); return; }
+          const payload={
+            brand: brand.trim(),
+            name:  name.trim(),
+            description: String(desc||'').trim() || undefined,
+            tags: tags ? tags.split(',').map(s=>s.trim()).filter(Boolean) : undefined,
+            strength10: str10 ? Number(str10) : undefined
+          };
+          try{
+            await createFlavorOnServer(payload, state.adminToken||'');
+            await loadFlavors();
+            render();
+          }catch(e){ alert(e.message||'Не удалось добавить вкус'); }
+        });
+      }
+      buildAdminFlavorList(root);
+    }
+
+    // полоса состава
+    renderMixBar();
+  }
+
+  // ====== Подбор 3-го компонента (простая эвристика) ======
+  function flavorTasteLabel(f){
+    if (!f) return null;
+    const pool = []
+      .concat(Array.isArray(f.tags)?f.tags:[])
+      .concat(String(f.name||'').split(/\s+/));
+    for (const t of pool){
+      const w = tasteWordFromTag(t);
+      if (w) return w;
+    }
+    return null;
+  }
+  function suggestThirdFlavor(parts, flavors, targetTaste, targetStrength){
+    if (!Array.isArray(flavors) || !flavors.length) return null;
+    const used = new Set((parts||[]).map(p=>p.flavorId));
+    const candidates = flavors.filter(f=>!used.has(f.id));
+
+    let best = null, bestScore = -1e9;
+    for (const f of candidates){
+      const s = getStrength10(f);
+      const taste = flavorTasteLabel(f);
+      let score = 0;
+      if (targetTaste && taste){
+        if (taste === targetTaste) score += 2.0;
+        const comp = {
+          'фруктовый': ['ледяной','сладкий','пряный'],
+          'десертный': ['фруктовый','сладкий'],
+          'ледяной':   ['фруктовый','сладкий'],
+          'пряный':    ['фруктовый'],
+          'кислый':    ['сладкий','фруктовый'],
+          'сладкий':   ['кислый','фруктовый','ледяной']
+        };
+        if ((comp[targetTaste]||[]).includes(taste)) score += 1.0;
+      }
+      if (Number.isFinite(targetStrength)){
+        score += (10 - Math.abs(targetStrength - s)) / 10;
+      }
+      const brandCount = parts.reduce((acc,p)=>{
+        const fl = flavors.find(x=>x.id===p.flavorId);
+        return acc + (fl && normalizeBrand(fl.brand)===normalizeBrand(f.brand) ? 1 : 0);
+      }, 0);
+      if (brandCount>=2) score -= 0.5;
+
+      if (score>bestScore){ bestScore=score; best=f; }
+    }
+    return best;
+  }
+
+  // ======= Полоса состава микса =======
+  
+  function updateSaveButtonUI(){
+    const btn=document.getElementById('save');
+    if(!btn) return;
+    const enabled = isMixValid(state.parts,state.title);
+    if(enabled){
+      btn.className='tap btn-primary shimmer inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px]';
+      btn.disabled=false;
+    } else {
+      btn.className='tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] opacity-50 cursor-not-allowed border border-slate-700';
+      btn.disabled=true;
+    }
+  }
+
+  
+  function updateRecListUI(){
+    const list=document.getElementById('recList'); if(!list) return;
+    const items=(state.recList||[]).map(m=>{
+      const likes = Array.isArray(m.likers) ? m.likers.length : 0;
+      const c = typeof m.strength10==='number' ? strengthColor(m.strength10) : strengthColor(null);
+      const sBadge = typeof m.strength10==='number' ? '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+m.strength10.toFixed(1)+'</span>' : '';
+      const tBadge = m.taste ? '<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">'+escAttr(m.taste)+'</span>' : '';
+      return '<div class="flex items-center justify-between gap-2 text-sm border border-slate-800 rounded-lg px-2 py-1">'+
+        '<div class="min-w-0"><div class="truncate font-medium">'+escAttr(m.title)+'</div><div class="text-[11px] opacity-70">❤ '+likes+'</div></div>'+
+        '<div class="flex items-center gap-2">'+sBadge+tBadge+'<button data-apply="'+escAttr(m.id)+'" class="tap inline-flex items-center rounded-xl h-8 px-3 text-[12px] border border-slate-700 hover:bg-white/10">Загрузить</button></div>'+
+      '</div>';
+    }).join('');
+    list.innerHTML=items||'';
+    // rebind apply buttons
+    list.querySelectorAll('[data-apply]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const id = btn.getAttribute('data-apply');
+        const m = state.guestMixes.find(x=>x.id===id) || state.recList.find(x=>x.id===id);
+        if (!m) return;
+        state.title = m.title + ' (копия)';
+        state.notes = m.notes || '';
+        state.parts = Array.isArray(m.parts) ? m.parts.map(p=>({ flavorId:p.flavorId, percent:safePercent(p.percent) })) : [];
+        state.activeTab = 'builder';
+        render();
+      });
+    });
+  }
+
+  function renderMixBar(){
+    const bar = document.getElementById('mixBar'); if(!bar) return;
+    if(!state.parts.length){ bar.innerHTML=''; return; }
+    function colorFor(fl){
+      const b = (fl?.brand||'').toLowerCase();
+      if (b.includes('dark'))   return 'linear-gradient(90deg,#F59E0B,#FDBA74)';
+      if (b.includes('black'))  return 'linear-gradient(90deg,#f43f5e,#f97316)';
+      if (b.includes('must'))   return 'linear-gradient(90deg,#22c55e,#84cc16)';
+      if (b.includes('bonch'))  return 'linear-gradient(90deg,#a78bfa,#38bdf8)';
+      if (b.includes('star'))   return 'linear-gradient(90deg,#eab308,#f59e0b)';
+      return 'linear-gradient(90deg,#94a3b8,#cbd5e1)';
+    }
+    const total = percentSum(state.parts) || 1;
+    const segs = state.parts.map(p=>{
+      const fl = state.flavors.find(x=>x.id===p.flavorId);
+      const w = Math.max(0, Math.min(100, (p.percent/total)*100));
+      const bg = colorFor(fl);
+      return '<div class="mix-seg" style="width:'+w+'%; background:'+bg+'"></div>';
+    }).join('');
+    bar.innerHTML = segs;
+  }
+
+  // ======= Частичные обновления UI =======
+  function updateMixStatsUI(){
+    const total = percentSum(state.parts);
+    const totalEl=document.getElementById('mixTotal'); if(totalEl) totalEl.textContent=String(total);
+    let strength=null; const t=percentSum(state.parts); if(t>0){ let w=0; for(const p of state.parts){ const pr=safePercent(p.percent); if(pr<=0) continue; const fl=state.flavors.find(x=>x&&x.id===p.flavorId); if(fl) w+=getStrength10(fl)*(pr/t);} strength=w?Math.round(w*10)/10:null; }
+    const sEl=document.getElementById('mixStrength'); if(sEl){ if(typeof strength==='number'){ const c=strengthColor(strength); sEl.innerHTML='<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+strength.toFixed(1)+'</span>'; } else { sEl.innerHTML=''; } }
+    const taste=getMixTasteLabel(state.parts,state.flavors);
+    const tEl=document.getElementById('mixTaste'); if(tEl){ tEl.innerHTML = taste ? ('<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">'+escHTML(taste)+'</span>') : ''; }
+    renderMixBar();
+  }
+  function rerenderMixBlock(){
+    const container=document.getElementById('mixBlock'); if(!container) return;
+    const total=percentSum(state.parts);
+    const strength=(function(){ const t=percentSum(state.parts); if(!t) return null; let w=0; for(const p of state.parts){ const pr=safePercent(p.percent); if(pr<=0) continue; const fl=state.flavors.find(x=>x&&x.id===p.flavorId); if(!fl) continue; w+=getStrength10(fl)*(pr/t);} return w?Math.round(w*10)/10:null; })();
+    const strengthBadge= (typeof strength==='number') ? (function(){ const c=strengthColor(strength); return '<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+strength.toFixed(1)+'</span>'; })() : '';
+    const mixTaste=getMixTasteLabel(state.parts,state.flavors);
+    const partsHTML=state.parts.map(p=>{ const fl=state.flavors.find(x=>x.id===p.flavorId); const name=(fl&&fl.name)||p.flavorId; return (
+      '<div class="flex items-center gap-2 text-sm">' +
+        '<span class="truncate w-36" title="'+escAttr(name)+'">'+escHTML(name)+'</span>' +
+        '<input type="range" min="0" max="100" step="5" class="w-28" value="'+safePercent(p.percent)+'" data-range="'+escAttr(p.flavorId)+'"/>' +
+        '<span class="w-10 text-right" data-percent-for="'+escAttr(p.flavorId)+'">'+safePercent(p.percent)+'%</span>' +
+        '<button data-remove="'+escAttr(p.flavorId)+'" class="tap inline-flex items-center justify-center rounded-xl h-8 px-3 text-[12px] hover:bg-white/10 border border-slate-700">Удалить</button>' +
+      '</div>'
+    ); }).join('');
+    const html =
+      '<div class="px-3 pt-3"><div class="text-[10px] tracking-wider uppercase text-slate-300/70">Сборка</div><div class="text-base font-semibold">Ваш микс</div></div>' +
+      '<div class="p-3 space-y-2">' +
+        (state.parts.length===0?'<div class="text-[12px] text-slate-400">Добавьте вкусы из списка</div>':'') +
+        partsHTML +
+        '<div class="h-3 rounded-md bg-slate-900 border border-slate-700 overflow-hidden my-2" id="mixBar"></div>' +
+        '<div class="flex items-center justify-between text-[12px]">' +
+          '<span>Итог: <b id="mixTotal">'+total+'</b>%</span>' +
+          '<div class="flex items-center gap-2"><span id="mixStrength">'+strengthBadge+'</span><span id="mixTaste">'+(mixTaste?('<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">'+escHTML(mixTaste)+'</span>'):'')+'</span></div>' +
+        '</div>' +
+        (state.parts.length===2 ? '<button id="autoThird" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-white/10 w-full">Подобрать 3-й компонент</button>' : '') +
+      '</div>';
+    container.innerHTML=html;
+    attachMixEvents();
+    const autoBtn = document.getElementById('autoThird');
+    if (autoBtn) autoBtn.addEventListener('click', ()=>{
+      const targetTaste = state.recTaste || getMixTasteLabel(state.parts, state.flavors) || null;
+      const currentStrength = (function(){ const t=percentSum(state.parts); if(!t) return null; let w=0; for(const p of state.parts){ const pr=safePercent(p.percent); if(pr<=0) continue; const fl=state.flavors.find(x=>x&&x.id===p.flavorId); if(!fl) continue; w+=getStrength10(fl)*(pr/t);} return w?Math.round(w*10)/10:null; })();
+      const targetStrength = Number.isFinite(currentStrength) ? currentStrength : (state.recStrength||5);
+      const suggestion = suggestThirdFlavor(state.parts, state.flavors, targetTaste, targetStrength);
+      if (!suggestion) { alert('Не удалось подобрать компонент'); return; }
+      const left = Math.max(0, 100 - percentSum(state.parts));
+      const addPct = Math.min(30, left||20);
+      state.parts = state.parts.concat([{ flavorId:suggestion.id, percent:addPct }]);
+      render();
+    });
+    renderMixBar();
+  }
+  function updateSearchUI(){
+    const meta=document.getElementById('flavorsMeta');
+    const list=document.getElementById('flavorsList');
+    if(!meta||!list) return;
+    const flavorsOfActive=(state.flavors||[]).filter(f=>normalizeBrand(f.brand)===state.activeBrand);
+    const searchedFlavors=filterFlavorsByQueryAdv(state.flavors,state.search);
+    const listFlavors=state.search?searchedFlavors:flavorsOfActive;
+    meta.textContent = state.search ? ('Найдено: '+listFlavors.length) : (state.activeBrand ? ('Вкусы бренда: '+state.activeBrand) : '');
+    list.innerHTML = listFlavors.map(f=>{
+      const inMix = state.parts.some(p=>p.flavorId===f.id);
+      const s=getStrength10(f), c=strengthColor(s);
+      const desc=f.description?'<div class="text-[11px] text-slate-300/80 line-clamp-2">'+escHTML(f.description)+'</div>':'';
+      return (
+        '<div class="flex items-center justify-between gap-2 text-sm hover:bg-white/5 rounded-lg px-2 py-1">' +
+          '<div class="min-w-0">' +
+            '<div class="flex items-center gap-2">' +
+              '<div class="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center text-[11px] opacity-80">'+escHTML((f.brand||'?').slice(0,1).toUpperCase())+'</div>' +
+              '<div class="font-medium truncate" title="'+escAttr((f.brand||'')+' • '+(f.name||''))+'">'+escHTML(f.name)+' <span class="opacity-60">('+escHTML(f.brand)+')</span></div>' +
+              '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+s.toFixed(1)+'</span>' +
+            '</div>' +
+            desc +
+          '</div>' +
+          '<button data-add="'+escAttr(f.id)+'" class="tap inline-flex items-center justify-center rounded-xl h-8 px-3 text-[12px] '+(inMix?'opacity-50 cursor-not-allowed border border-slate-700':'border border-slate-700 hover:bg-white/10')+'">'+(inMix?'✓':'+')+'</button>' +
+        '</div>'
+      );
+    }).join('') + (listFlavors.length===0?('<div class="text-[12px] text-slate-400">'+(state.search?'Ничего не найдено':'Нет вкусов для этого бренда')+'</div>'):'');
+    bindAddButtons();
+  }
+
+  function buildAdminFlavorList(root){
+    const list=root.querySelector('#admFlavorList'); if(!list) return;
+    const byBrand={}; (state.flavors||[]).forEach(f=>{ const b=(f.brand||'').trim()||'Без бренда'; (byBrand[b]||(byBrand[b]=[])).push(f); });
+    const html = Object.keys(byBrand).sort().map(brand=>{
+      const rows = byBrand[brand].sort((a,b)=>a.name.localeCompare(b.name,'ru')).map(f=>{
+        return (
+          '<div class="flex items-center justify-between gap-2 text-[12px] border border-slate-800 rounded-lg px-2 py-1">' +
+            '<div class="min-w-0 truncate"><span class="opacity-70">'+escHTML(brand)+'</span> • '+escHTML(f.name)+'</div>' +
+            '<button data-del-flavor="'+escAttr(f.id)+'" class="tap inline-flex items-center justify-center h-7 px-3 rounded-full border border-rose-700 text-rose-300 hover:bg-rose-900/40">Удалить</button>' +
+          '</div>'
+        );
+      }).join('');
+      return '<div class="space-y-1"><div class="text-[11px] uppercase tracking-wide text-slate-400">'+escHTML(brand)+'</div>'+rows+'</div>';
+    }).join('') || '<div class="text-[12px] text-slate-400">Пока нет вкусов</div>';
+    list.innerHTML = html;
+
+    root.querySelectorAll('[data-del-flavor]').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const id = btn.getAttribute('data-del-flavor'); if(!id) return;
+        if(!confirm('Удалить вкус "'+id+'"? Это действие необратимо.')) return;
+        try{
+          await deleteFlavorOnServer(id, state.adminToken||'');
+          await loadFlavors();
+          if (!state.flavors.some(f=>normalizeBrand(f.brand)===state.activeBrand)) {
+            state.activeBrand = (state.flavors[0] && state.flavors[0].brand) || '';
+          }
+          render();
+        }catch(e){ alert('Не удалось удалить вкус. '+(e&&e.message?e.message:'')); }
+      });
+    });
+  }
+
+  function bindAddButtons(){
+    const list = document.getElementById('flavorsList'); if(!list) return;
+    list.querySelectorAll('[data-add]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const id=btn.getAttribute('data-add'); if(!id) return;
+        if(state.parts.some(p=>p.flavorId===id)) return;
+        const def=Math.min(30, Math.max(0, 100-percentSum(state.parts)));
+        state.parts = state.parts.concat([{ flavorId:id, percent:def }]);
+        rerenderMixBlock(); updateSearchUI();
+      });
+    });
+  }
+  function attachMixEvents(){
+    document.querySelectorAll('[data-range]').forEach(sl=>{
+      sl.addEventListener('input', function(){
+        const id=this.getAttribute('data-range');
+        const req=safePercent(this.value);
+        const newParts=state.parts.map(p=>p.flavorId===id?{ flavorId:p.flavorId, percent:clampPercentForPart(state.parts,id,req)}:p);
+        const newVal=newParts.find(p=>p.flavorId===id).percent;
+        state.parts=newParts;
+        if(newVal!==req) this.value=newVal;
+        updateMixStatsUI();
+        const span=document.querySelector('[data-percent-for="'+id+'"]'); if(span) span.textContent=newVal+'%';
+      });
+    });
+    document.querySelectorAll('[data-remove]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{ const id=btn.getAttribute('data-remove'); state.parts=state.parts.filter(p=>p.flavorId!==id); rerenderMixBlock(); });
+    });
+  }
+
+  // ======= Анимации после render + ripple =======
+  function applyAnimationsAfterRender(){
+    document.querySelectorAll('.ui-card').forEach((el,i)=>{
+      el.classList.add('reveal'); el.style.setProperty('--d', (i*40)+'ms');
+      requestAnimationFrame(()=>el.classList.add('in'));
+    });
+    document.querySelectorAll('.brand-chip').forEach((el,i)=>{
+      el.classList.add('reveal-up'); el.style.setProperty('--d', (i*25)+'ms');
+      requestAnimationFrame(()=>el.classList.add('in'));
+    });
+    document.querySelectorAll('#flavorsList > div').forEach((el,i)=>{
+      el.classList.add('reveal-up'); el.style.setProperty('--d', (i*20)+'ms');
+      requestAnimationFrame(()=>el.classList.add('in'));
+    });
+  }
+  function attachRipples(root){
+    root.querySelectorAll('.tap').forEach(btn=>{
+      if (btn._rippling) return; btn._rippling = true;
+      btn.addEventListener('click', e=>{
+        const r = btn.getBoundingClientRect();
+        btn.style.setProperty('--rx', (e.clientX - r.left)+'px');
+        btn.style.setProperty('--ry', (e.clientY - r.top)+'px');
+        btn.classList.remove('rippling'); void btn.offsetWidth;
+        btn.classList.add('rippling');
+        setTimeout(()=>btn.classList.remove('rippling'), 650);
+      });
+    });
+  }
+
+  // ========================= СТАРТ ==========================================
+  (async function start(){
+    initAuth();
+    await detectLogo();
+    await loadFlavors();
+    await loadGuestMixes();
+    const ms = (function(parts,flavors){
+      if(!parts.length) return null; const t=percentSum(parts); if(t<=0) return null; let w=0;
+      for(const p of parts){ const pr=safePercent(p?.percent); if(pr<=0) continue; const fl=flavors.find(x=>x&&x.id===(p&&p.flavorId)); if(!fl) continue; w+=getStrength10(fl)*(pr/t); }
+      return w? Math.round(w*10)/10 : null;
+    })(state.parts,state.flavors);
+    const mt = getMixTasteLabel(state.parts,state.flavors);
+    if (ms) state.recStrength = ms;
+    if (mt) state.recTaste = mt;
+
+    render();
+
+    setInterval(async ()=>{
+      const before = JSON.stringify(state.guestMixes?.map(m=>m.id));
+      await loadGuestMixes();
+      const after  = JSON.stringify(state.guestMixes?.map(m=>m.id));
+      if (before !== after) render();
+    }, 10000);
+  })();
   </script>
 </body>
 </html>
