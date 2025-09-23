@@ -134,7 +134,7 @@
         if (!root) return;
         root.innerHTML =
           '<div class="min-h-[100svh] flex items-center justify-center p-6">' +
-          '  <div class="max-w-md w	full rounded-xl border border-rose-800 bg-rose-950 p-4 text-sm">' +
+          '  <div class="max-w-md w-full rounded-xl border border-rose-800 bg-rose-950 p-4 text-sm">' +
           '    <div class="font-bold mb-2 text-rose-200">Произошла ошибка</div>' +
           '    <div class="text-rose-100/90 whitespace-pre-wrap break-words">' + String(msg || 'Unknown error') + '</div>' +
           '  </div>' +
@@ -402,7 +402,7 @@
             desc +
           '</div>' +
           '<button data-add="'+escAttr(f.id)+'" class="tap inline-flex items-center justify-center rounded-xl h-8 px-3 text-[12px] '+(inMix?'opacity-50 cursor-not-allowed border border-slate-700':'border border-slate-700 hover:bg-white/10')+'">'+(inMix?'✓':'+')+'</button>' +
-        '</div>"
+        '</div>'
       );
     }).join('');
 
