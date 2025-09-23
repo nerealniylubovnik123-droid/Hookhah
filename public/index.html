@@ -9,6 +9,220 @@
 
   <!-- ВИЗУАЛ ТОЛЬКО: тёплая тёмная тема + анимации (логика НЕ менялась) -->
   <style id="anim-pack">
+/* ===== Themes page animations & active highlight ===== */
+@keyframes slideFadeIn {
+  0% { opacity: 0; transform: translateY(-10px); }
+  100% { opacity: 1; transform: none; }
+}
+#themesPage { animation: slideFadeIn .28s cubic-bezier(.2,.6,.2,1); }
+#themesGrid .brand-chip{ transition: transform .18s cubic-bezier(.2,.6,.2,1), box-shadow .18s, outline .18s; }
+#themesGrid .brand-chip.active{
+  background: linear-gradient(180deg, color-mix(in oklab, var(--accent1) 12%, var(--chip)), var(--chip));
+  box-shadow: 0 0 0 2px var(--ring) inset, 0 10px 22px color-mix(in oklab, var(--accent1) 20%, transparent);
+  transform: translateY(-1px);
+}
+#themesGrid .brand-chip:active{ transform: translateY(0); }
+
+/* ===== Theme sheet: top anchored ===== */
+#themeSheet{
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 9999 !important;
+  display: flex !important;
+  align-items: flex-start !important; /* open from top */
+  justify-content: center !important;
+  background: color-mix(in oklab, var(--bg) 70%, black) !important;
+  backdrop-filter: blur(2px) !important;
+}
+#themeSheet[hidden]{ display:none !important; }
+#themeSheet .sheet{
+  position: relative !important;
+  width: 100% !important;
+  max-width: 700px !important;
+  background: var(--card) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 0 0 16px 16px !important; /* dropdown feel */
+  padding: 14px 16px 16px !important;
+  max-height: 70dvh !important;
+  overflow: auto !important;
+  margin: calc(env(safe-area-inset-top, 0) + 58px) 8px 8px !important; /* below header */
+  box-shadow: 0 20px 50px rgba(0,0,0,.35);
+}
+#themeSheet .grid{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px; }
+@media (max-width: 480px){
+  #themeSheet .sheet{ max-width: 100% !important; }
+  #themeSheet .grid{ grid-template-columns:repeat(2, minmax(0,1fr)); }
+}
+
+/* ===== Robust fullscreen theme sheet positioning ===== */
+#themeSheet{
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 9999 !important;
+  display: flex !important;
+  align-items: flex-end !important;
+  justify-content: center !important;
+  background: color-mix(in oklab, var(--bg) 70%, black) !important;
+  backdrop-filter: blur(2px) !important;
+}
+#themeSheet[hidden]{ display:none !important; }
+#themeSheet .sheet{
+  position: relative !important;
+  width: 100% !important;
+  max-width: 520px !important;
+  background: var(--card) !important;
+  border-top: 1px solid var(--border) !important;
+  border-radius: 16px 16px 0 0 !important;
+  padding: 14px 12px 16px !important;
+  max-height: 85dvh !important;
+  overflow: auto !important;
+  margin: 0 8px 8px !important;
+}
+#themeSheet .grid{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px; }
+@media (max-width: 420px){
+  #themeSheet .grid{ grid-template-columns:repeat(2, minmax(0,1fr)); }
+}
+
+/* ===== Theme Sheet Responsive Fix ===== */
+#themeSheet{
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: color-mix(in oklab, var(--bg) 70%, black);
+  backdrop-filter: blur(2px);
+}
+#themeSheet[hidden]{ display:none; }
+#themeSheet .sheet{
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  width: 100%;
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  border-radius: 16px 16px 0 0;
+  padding: 14px 12px 16px;
+  max-height: 85dvh;
+  overflow: auto;
+}
+@media (min-width: 520px){
+  #themeSheet .sheet{
+    left: 50%; right: auto; bottom: 50%;
+    transform: translate(-50%, 50%);
+    width: min(520px, 92vw);
+    border-radius: 16px;
+  }
+}
+#themeSheet .grid{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px; }
+@media (max-width: 420px){
+  #themeSheet .grid{ grid-template-columns:repeat(2, minmax(0,1fr)); }
+}
+#themeSheet .opt{
+  border:1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px;
+  text-align:center;
+  cursor:pointer;
+  background: color-mix(in oklab, var(--card) 92%, transparent);
+}
+#themeSheet .opt.active{ outline:2px solid var(--ring); }
+#themeSheet .opt:active{ transform: scale(.98); }
+
+/* ===== Minimal Light stronger overrides ===== */
+body[data-theme="minimal-light"]{
+  --text:#0b0c0e;
+  --muted:#4b5563;
+  --card:#ffffff;
+  --border:rgba(0,0,0,.12);
+  --chip:#f3f4f6;
+}
+/* Force key text utilities to dark in minimal-light */
+body[data-theme="minimal-light"] .text-slate-100,
+body[data-theme="minimal-light"] .text-slate-200,
+body[data-theme="minimal-light"] .text-slate-300,
+body[data-theme="minimal-light"] .text-slate-900{
+  color:#0b0c0e !important;
+}
+body[data-theme="minimal-light"] .opacity-60,
+body[data-theme="minimal-light"] .text-slate-400,
+body[data-theme="minimal-light"] .text-slate-300\/70,
+body[data-theme="minimal-light"] .text-slate-300\/80{
+  color:#4b5563 !important;
+}
+/* Inputs and badges readable on light */
+body[data-theme="minimal-light"] .bg-slate-900,
+body[data-theme="minimal-light"] .bg-slate-800,
+body[data-theme="minimal-light"] .bg-slate-700{
+  background:#ffffff !important;
+}
+body[data-theme="minimal-light"] .border-slate-900,
+body[data-theme="minimal-light"] .border-slate-800,
+body[data-theme="minimal-light"] .border-slate-700{
+  border-color: rgba(0,0,0,.12) !important;
+}
+body[data-theme="minimal-light"] .hover\:bg-white\/10:hover{
+  background: rgba(0,0,0,.06) !important;
+}
+
+/* ===== Mobile & Readability Fixes ===== */
+
+/* 1) Stabilize layout on touch: disable hover translate on touch devices */
+@media (hover:none){
+  .ui-card:hover{ transform:none !important; }
+  .brand-chip:hover{ transform:none !important; }
+}
+
+/* 2) Header actions as a horizontal scroller on small screens */
+@media (max-width: 480px){
+  header > div:last-child{
+    display:flex;
+    gap:.5rem;
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+    padding-bottom: 2px;
+  }
+  header > div:last-child > *{
+    flex:0 0 auto;
+  }
+}
+
+/* 3) Prevent page "jumping" on focus rings by reserving outline space */
+:focus-visible{ outline-offset: 2px; }
+.tap:active{ transform: translateY(0) scale(.997); } /* keep subtle but not shift */
+
+
+/* 4) Minimal-light theme readability: ensure foregrounds are dark on light surfaces */
+body[data-theme="minimal-light"] .text-slate-100,
+body[data-theme="minimal-light"] .text-slate-200,
+body[data-theme="minimal-light"] .text-slate-300{
+  color:#0b0c0e !important;
+}
+body[data-theme="minimal-light"] .opacity-60,
+body[data-theme="minimal-light"] .text-slate-400{
+  color:#4b5563 !important;
+}
+/* Lighten heavy dark backgrounds that were mapped from bg-slate-9xx */
+body[data-theme="minimal-light"] .bg-slate-900,
+body[data-theme="minimal-light"] .bg-slate-800,
+body[data-theme="minimal-light"] .bg-slate-700{
+  background-color:#ffffff !important;
+}
+/* Softer borders for light theme */
+body[data-theme="minimal-light"] .border-slate-900,
+body[data-theme="minimal-light"] .border-slate-800,
+body[data-theme="minimal-light"] .border-slate-700{
+  border-color: rgba(0,0,0,.12) !important;
+}
+/* Active tabs: keep readable */
+body[data-theme="minimal-light"] .bg-slate-100{ background:#e5e7eb !important; }
+body[data-theme="minimal-light"] .text-slate-900{ color:#0b0c0e !important; }
+
+/* 5) Card internal separators not too harsh on light */
+body[data-theme="minimal-light"] .ui-card{
+  box-shadow: 0 6px 16px rgba(0,0,0,.08), inset 0 1px 0 rgba(255,255,255,.6);
+}
+
+/* 6) Avoid full-viewport wobble on iOS address bar changes */
+.min-h-\[100svh\]{ min-height: 100dvh; } /* prefer dynamic viewport unit */
+
 /* === THEME OVERRIDES (map Tailwind-like classes to tokens) ================ */
 /* Borders */
 body[data-theme] .border-slate-700{ border-color: var(--border) !important; }
@@ -458,8 +672,11 @@ function applyTheme(t){
 
     recTaste: null,
     recStrength: 5,
-    recList: []
+    recList: [],
+    recError: ''
   };
+  state.prevTab = 'builder';
+  state.theme = getSavedTheme() || 'warm-dark';
   state.themePickerVisible = !getSavedTheme();
   state.theme = getSavedTheme() || 'warm-dark';
   const isAdmin = ()=> !!(state.adminToken && state.adminToken.length>=6);
@@ -542,14 +759,33 @@ function applyTheme(t){
     return await r.json();
   }
   // Рекомендатор
-  async function fetchRecommendations(){
-    const q = new URLSearchParams();
-    if (state.recTaste) q.set('taste', state.recTaste);
-    if (Number.isFinite(state.recStrength)) q.set('strength', String(state.recStrength));
-    q.set('limit','10');
-    const r = await api('/api/mixes/recommend?'+q.toString());
-    state.recList = r.ok ? (await r.json()) : [];
+  
+async function fetchRecommendations(){
+  const q = new URLSearchParams();
+  if (state.recTaste) q.set('taste', state.recTaste);
+  if (Number.isFinite(state.recStrength)) q.set('strength', String(state.recStrength));
+  q.set('limit','10');
+  state.recError = '';
+  try{
+    if (location.protocol === 'file:' || location.origin === 'null') {
+      // No backend in file:// mode
+      state.recError = 'Рекомендации недоступны без сервера.';
+      state.recList = [];
+      return;
+    }
+    const r = await api('/api/mixes/recommend?' + q.toString());
+    if (!r.ok) {
+      state.recError = 'Сервер рекомендаций недоступен (' + r.status + ').';
+      state.recList = [];
+      return;
+    }
+    state.recList = await r.json();
+  }catch(e){
+    state.recError = 'Не удалось получить рекомендации.';
+    state.recList = [];
   }
+}
+
 
   function LogoSVG(cls){
     return (
@@ -748,8 +984,7 @@ function applyTheme(t){
         '<div class="flex items-center gap-2">'+sBadge+tBadge+'<button data-apply="'+escAttr(m.id)+'" class="tap inline-flex items-center rounded-xl h-8 px-3 text-[12px] border border-slate-700 hover:bg-white/10">Загрузить</button></div>'+
       '</div>';
     }).join('');
-    const recBlock =
-      '<div class="ui-card">' +
+    const recBlock = '<div class="ui-card">' +
         '<div class="px-3 pt-3">' +
           '<div class="text-[10px] tracking-wider uppercase text-slate-300/70">Подсказки</div>' +
           '<div class="text-base font-semibold">Рекомендации</div>' +
@@ -819,11 +1054,32 @@ function applyTheme(t){
         '</div>' +
       '</div>';
 
+
+      
+const themesBlock =
+  '<div class="ui-card" id="themesPage">' +
+    '<div class="px-3 pt-3">' +
+      '<div class="text-[10px] tracking-wider uppercase text-slate-300/70">Оформление</div>' +
+      '<div class="flex items-center justify-between">' +
+        '<div class="text-base font-semibold">Выбор темы</div>' +
+        '<button id="themesBack" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-white/10">← Назад</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="p-3 space-y-3">' +
+      '<div class="grid grid-cols-2 sm:grid-cols-3 gap-2" id="themesGrid">' +
+        THEMES.map(t => ('<button class="brand-chip h-12 justify-center text-sm '+(state.theme===t?'active':'')+'" data-theme="'+t+'">'+t.replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase())+'</button>')).join('') +
+      '</div>' +
+      '<div class="text-[12px] text-slate-400">Нажмите на вариант — тема применится и вы вернётесь назад.</div>' +
+    '</div>' +
+  '</div>';
+
+
     const bodyHTML =
-      '<button id=\"themeFab\" hidden>Тема</button><div id=\"themeSheet\" hidden><div class=\"sheet\"><div class=\"text-sm mb-2\">Выберите тему</div><div class=\"grid\"><div class=\"opt\" data-theme=\"warm-dark\">Warm Dark</div><div class=\"opt\" data-theme=\"frosted-glass\">Frosted Glass</div><div class=\"opt\" data-theme=\"cyber-neon\">Cyber Neon</div><div class=\"opt\" data-theme=\"minimal-light\">Minimal Light</div><div class=\"opt\" data-theme=\"earth-sepia\">Earth Sepia</div><div class=\"opt\" data-theme=\"high-contrast\">High Contrast</div></div></div></div></div><div class="min-h-[100svh] p-3">' + (state.logoUrl?('<div id="wm" class="wm" style="background-image:url(\''+escAttr(state.logoUrl)+'\')"></div>'):'') +
+      '</div></div></div><div class="min-h-[100svh] p-3">' + (state.logoUrl?('<div id="wm" class="wm" style="background-image:url(\''+escAttr(state.logoUrl)+'\')"></div>'):'') +
         '<div class="mx-auto w-full max-w-lg space-y-5">' +
           headerHTML +
           (state.activeTab==='builder' ? (brandsBlock + mixBlock + titleBlock + recBlock) : '') +
+          (state.activeTab==='themes'  ? (themesBlock) : '') +
           (state.activeTab==='guest'   ? (guestBlock) : '') +
           (state.activeTab==='admin'   ? (adminBlock) : '') +
           (state.activeTab==='builder' && (!isAdmin() && state.adminPrompt) ? adminLoginBlock : '') +
@@ -836,7 +1092,58 @@ function applyTheme(t){
 
     
 
-    // Header theme button opens sheet
+    
+
+    
+
+    
+
+    
+
+    // === THEMES PAGE NAVIGATION ===
+    const headerThemeBtn = root.querySelector('#themeBtn');
+    if(headerThemeBtn){
+      headerThemeBtn.addEventListener('click', ()=>{
+        state.prevTab = state.activeTab || 'builder';
+        state.activeTab = 'themes';
+        render();
+      });
+    }
+    if(state.activeTab==='themes'){
+      const back = document.getElementById('themesBack');
+      if(back) back.addEventListener('click', ()=>{ state.activeTab = state.prevTab || 'builder'; render(); });
+      const grid = document.getElementById('themesGrid');
+      if(grid){
+        grid.querySelectorAll('[data-theme]').forEach(btn=>{
+          btn.addEventListener('click', ()=>{
+            const t = btn.getAttribute('data-theme');
+            state.theme = t;
+            applyTheme(t);
+            try{ localStorage.setItem('theme', t); }catch(_){}
+            state.activeTab = state.prevTab || 'builder';
+            render();
+          });
+        });
+      }
+    }
+// Ensure the theme sheet hides on selection (reinforced)
+    (function enforceThemeAutoHide(){
+      const sheet = document.getElementById('themeSheet');
+      if(!sheet) return;
+      sheet.querySelectorAll('[data-theme]').forEach(opt=>{
+        opt.addEventListener('click', ()=>{ sheet.hidden = true; }, { once:false });
+      });
+    })();
+// Refresh active theme option highlight
+    (function markActiveTheme(){
+      const sheet=document.getElementById('themeSheet');
+      if(!sheet) return;
+      sheet.querySelectorAll('.opt').forEach(el=>{
+        const t = el.getAttribute('data-theme');
+        if(t===state.theme) el.classList.add('active'); else el.classList.remove('active');
+      });
+    })();
+// Header theme button opens sheet
     const themeBtn = root.querySelector('#themeBtn');
     if(themeBtn){
       themeBtn.addEventListener('click', ()=>{
@@ -1106,6 +1413,8 @@ function applyTheme(t){
   
   function updateRecListUI(){
     const list=document.getElementById('recList'); if(!list) return;
+    const err=document.getElementById('recErr'); if(err) err.textContent = String(state.recError||'');
+
     const items=(state.recList||[]).map(m=>{
       const likes = Array.isArray(m.likers) ? m.likers.length : 0;
       const c = typeof m.strength10==='number' ? strengthColor(m.strength10) : strengthColor(null);
