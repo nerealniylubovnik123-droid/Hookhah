@@ -9,6 +9,200 @@
 
   <!-- ВИЗУАЛ ТОЛЬКО: тёплая тёмная тема + анимации (логика НЕ менялась) -->
   <style id="anim-pack">
+/* === THEME OVERRIDES (map Tailwind-like classes to tokens) ================ */
+/* Borders */
+body[data-theme] .border-slate-700{ border-color: var(--border) !important; }
+body[data-theme] .border-slate-800{ border-color: color-mix(in oklab, var(--border) 85%, black) !important; }
+body[data-theme] .border-slate-900{ border-color: color-mix(in oklab, var(--border) 70%, black) !important; }
+/* Backgrounds */
+body[data-theme] .bg-slate-900{ background-color: color-mix(in oklab, var(--card) 80%, black) !important; }
+body[data-theme] .bg-slate-800{ background-color: color-mix(in oklab, var(--card) 88%, black) !important; }
+body[data-theme] .bg-slate-700{ background-color: color-mix(in oklab, var(--card) 92%, black) !important; }
+/* Text */
+body[data-theme] .text-slate-100, 
+body[data-theme] .text-slate-200,
+body[data-theme] .text-slate-300{ color: var(--text) !important; }
+/* Muted text replacements */
+body[data-theme] .text-slate-300\/70, 
+body[data-theme] .text-slate-300\/80,
+body[data-theme] .text-slate-400,
+body[data-theme] .opacity-60{ color: var(--muted) !important; }
+/* Badges that used border-slate & bg-slate */
+body[data-theme] .badge, 
+body[data-theme] .inline-flex.rounded-full.border{ border-color: var(--border) !important; background: color-mix(in oklab, var(--card) 85%, transparent) !important; }
+/* Inputs & textarea (already themed, make specific) */
+body[data-theme] input.h-9, 
+body[data-theme] textarea{ background-color: color-mix(in oklab, var(--card) 86%, black) !important; border-color: var(--border) !important; color: var(--text) !important; }
+/* Focus rings */
+body[data-theme] .focus\:ring-slate-600:focus{ box-shadow: 0 0 0 2px var(--ring) !important; outline: none; border-color: var(--ring) !important; }
+/* Header tab active buttons (bg-slate-100 text-slate-900) remap for light/dark) */
+body[data-theme] .text-slate-900{ color: #0b0c0e !important; } /* fine for most themes */
+body[data-theme="minimal-light"] .bg-slate-100{ background:#e5e7eb !important; }
+body[data-theme]:not([data-theme="minimal-light"]) .bg-slate-100{ background: var(--text) !important; color:#0b0c0e !important; }
+/* Hover overlay tweak */
+body[data-theme] .hover\:bg-white\/10:hover{ background: color-mix(in oklab, var(--text) 10%, transparent) !important; }
+/* Generic button borders */
+body[data-theme] .border{ border-color: var(--border) !important; }
+/* Brand-chip inherent */
+body[data-theme] .brand-chip{ background: var(--chip) !important; border-color: var(--border) !important; }
+/* Guest cards mini badges */
+body[data-theme] .bg-slate-900.border-slate-700{ background: color-mix(in oklab, var(--card) 85%, transparent) !important; border-color: var(--border) !important; }
+
+/* === THEME TOKENS ======================================================= */
+:root{
+  --bg:#0a0b0d; --card:#111216; --text:#e5e7eb; --muted:#9aa4b2; --ring:rgba(245,158,11,.55);
+  --accent1:#F59E0B; --accent2:#FDBA74; --accent3:#FCA5A5;
+  --chip:#0f1013; --border:rgba(148,163,184,.18);
+  --seg1:#F59E0B; --seg2:#f97316; --seg3:#22c55e; --seg4:#a78bfa;
+}
+body[data-theme="warm-dark"]{
+  --bg:#0a0b0d; --card:rgba(17,18,22,.82); --text:#e5e7eb; --muted:#9aa4b2; --ring:rgba(245,158,11,.55);
+  --accent1:#F59E0B; --accent2:#FDBA74; --accent3:#FCA5A5;
+  --chip:#0f1013; --border:rgba(148,163,184,.18);
+  --seg1:#F59E0B; --seg2:#f97316; --seg3:#22c55e; --seg4:#a78bfa;
+}
+body[data-theme="frosted-glass"]{
+  --bg:#0a1117; --card:rgba(13,23,33,.7); --text:#e6f0ff; --muted:#9fb3c8; --ring:rgba(125,211,252,.55);
+  --accent1:#60a5fa; --accent2:#7dd3fc; --accent3:#a78bfa;
+  --chip:rgba(15,25,35,.6); --border:rgba(147,197,253,.22);
+  --seg1:#60a5fa; --seg2:#22d3ee; --seg3:#a78bfa; --seg4:#34d399;
+  backdrop-filter: blur(8px);
+}
+body[data-theme="cyber-neon"]{
+  --bg:#07060a; --card:#0c0a13; --text:#e6e1ff; --muted:#b7a8ff; --ring:rgba(168,85,247,.6);
+  --accent1:#22d3ee; --accent2:#a78bfa; --accent3:#06b6d4;
+  --chip:#0d0a17; --border:rgba(167,139,250,.25);
+  --seg1:#22d3ee; --seg2:#a78bfa; --seg3:#06b6d4; --seg4:#67e8f9;
+}
+body[data-theme="minimal-light"]{
+  --bg:#f7f7f8; --card:#ffffff; --text:#0b0c0e; --muted:#4b5563; --ring:rgba(59,130,246,.35);
+  --accent1:#111827; --accent2:#6b7280; --accent3:#1f2937;
+  --chip:#f3f4f6; --border:rgba(0,0,0,.08);
+  --seg1:#111827; --seg2:#6b7280; --seg3:#1f2937; --seg4:#9ca3af;
+}
+body[data-theme="earth-sepia"]{
+  --bg:#0e0c0a; --card:#151310; --text:#f3efe8; --muted:#cbbba4; --ring:rgba(234,179,8,.45);
+  --accent1:#d97706; --accent2:#f59e0b; --accent3:#a16207;
+  --chip:#14110e; --border:rgba(250,204,21,.18);
+  --seg1:#d97706; --seg2:#f59e0b; --seg3:#a16207; --seg4:#84cc16;
+}
+body[data-theme="high-contrast"]{
+  --bg:#000; --card:#000; --text:#fff; --muted:#d1d5db; --ring:rgba(255,255,0,.8);
+  --accent1:#fff; --accent2:#fff; --accent3:#fff;
+  --chip:#000; --border:rgba(255,255,255,.8);
+  --seg1:#fff; --seg2:#d1d5db; --seg3:#9ca3af; --seg4:#6b7280;
+}
+
+/* Background flourishes adjusted to themes */
+body{ background: var(--bg); color: var(--text); }
+body[data-theme="warm-dark"]{
+  background:
+    radial-gradient(900px 600px at 10% -10%, rgba(245,158,11,.12), transparent 60%),
+    radial-gradient(700px 500px at 95% 0%, rgba(253,186,116,.07), transparent 55%),
+    var(--bg);
+}
+body[data-theme="frosted-glass"]{
+  background:
+    radial-gradient(900px 600px at 0% -20%, rgba(125,211,252,.16), transparent 60%),
+    radial-gradient(700px 500px at 85% 0%, rgba(96,165,250,.12), transparent 55%),
+    var(--bg);
+}
+body[data-theme="cyber-neon"]{
+  background:
+    radial-gradient(900px 600px at 10% -10%, rgba(167,139,250,.16), transparent 60%),
+    radial-gradient(700px 500px at 90% 0%, rgba(34,211,238,.12), transparent 55%),
+    var(--bg);
+}
+/* Inputs respect tokens */
+input[type=text], input[type=number], textarea{
+  background-color: color-mix(in oklab, var(--card) 86%, black);
+  border-color: var(--border);
+  color: var(--text);
+}
+
+/* Mix bar segments use tokenized gradients */
+#mixBar .mix-seg:nth-child(1){ background:linear-gradient(90deg,var(--seg1),var(--seg2)); }
+#mixBar .mix-seg:nth-child(2){ background:linear-gradient(90deg,var(--seg3),var(--seg4)); }
+#mixBar .mix-seg:nth-child(3){ background:linear-gradient(90deg,var(--seg2),var(--seg1)); }
+#mixBar .mix-seg:nth-child(4){ background:linear-gradient(90deg,var(--seg4),var(--seg3)); }
+
+/* Small floating theme button */
+#themeFab{
+  position:fixed; right:12px; bottom:12px; z-index:50;
+  background:linear-gradient(90deg,var(--accent1),var(--accent2));
+  color:#0b0b0b; border-radius:999px; height:40px; padding:0 14px; font-size:12px;
+  box-shadow:0 14px 30px rgba(0,0,0,.35);
+}
+#themeFab[hidden]{ display:none; }
+
+/* Simple sheet */
+#themeSheet[hidden]{ display:none; }
+#themeSheet .sheet{
+  position:fixed; left:0; right:0; bottom:0; z-index:60;
+  background:var(--card); border-top:1px solid var(--border);
+  border-radius:16px 16px 0 0; padding:12px;
+  box-shadow:0 -20px 40px rgba(0,0,0,.4);
+}
+#themeSheet .grid{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:8px; }
+#themeSheet .opt{ border:1px solid var(--border); border-radius:12px; padding:10px; text-align:center; cursor:pointer; }
+#themeSheet .opt.active{ outline:2px solid var(--ring); }
+
+    /* ---------- Visual Tweaks (patch) ---------- */
+    .ui-card{
+      position: relative;
+      background: rgba(17,18,22,.82);
+      border: 1px solid rgba(148,163,184,.18);
+      border-radius: 1rem;
+      overflow: hidden;
+      isolation: isolate;
+    }
+    .ui-card::before{
+      content:"";
+      position:absolute; inset:0;
+      pointer-events:none;
+      opacity:0;
+      background: conic-gradient(from 180deg at 50% 50%, rgba(245,158,11,.35), rgba(253,186,116,.25), rgba(148,163,184,.15), rgba(245,158,11,.35));
+      mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+      mask-composite: exclude; -webkit-mask-composite: xor;
+      padding: 1px; border-radius: 1rem;
+      transition: opacity .25s ease;
+    }
+    .ui-card:hover::before{ opacity:.55; }
+
+    .brand-chip{
+      position: relative;
+      background: rgba(15,16,19,.75);
+    }
+    .brand-chip.active{
+      background: linear-gradient(180deg, rgba(245,158,11,.08), rgba(15,16,19,.75));
+      box-shadow: 0 0 0 2px rgba(245,158,11,.35) inset, 0 6px 14px rgba(245,158,11,.12);
+    }
+    .brand-chip:focus-visible{
+      box-shadow: 0 0 0 2px var(--ring), 0 0 0 4px rgba(245,158,11,.15);
+    }
+
+    /* Smooth scrollbar */
+    .brands-rail{
+      scrollbar-width: thin;
+      scrollbar-color: rgba(148,163,184,.35) transparent;
+    }
+    .brands-rail::-webkit-scrollbar{ height:8px; }
+    .brands-rail::-webkit-scrollbar-track{ background: transparent; }
+    .brands-rail::-webkit-scrollbar-thumb{ background: rgba(148,163,184,.35); border-radius: 999px; }
+
+    /* Mix bar segments subtle separation */
+    #mixBar .mix-seg{ box-shadow: inset -1px 0 0 rgba(0,0,0,.25); }
+
+    /* Inputs higher contrast */
+    input[type=text], input[type=number], textarea{
+      background-color: #0f1115;
+      border-color: rgba(148,163,184,.28);
+    }
+    input[type=text]:focus, input[type=number]:focus, textarea:focus{
+      box-shadow: 0 0 0 2px var(--ring), 0 0 0 1px rgba(245,158,11,.25) inset;
+    }
+
     :root{
       --bg:#0a0b0d; --card:#111216; --ring:rgba(245,158,11,.55);
       --warm1:#F59E0B; --warm2:#FDBA74; --warm3:#FCA5A5; --soft:#1a1b1f;
@@ -156,6 +350,22 @@
   <div id="root" class="min-h-[100svh]"></div>
 
   <script>
+  
+// === THEME RUNTIME =======================================================
+const THEMES = ['warm-dark','frosted-glass','cyber-neon','minimal-light','earth-sepia','high-contrast'];
+function getSavedTheme(){ try{ return localStorage.getItem('theme') || ''; }catch(_){ return ''; } }
+function applyTheme(t){
+  if(!THEMES.includes(t)) t = 'warm-dark';
+  document.body.setAttribute('data-theme', t);
+  try{ localStorage.setItem('theme', t); }catch(_){}
+}
+// initial apply before app render
+(function initTheme(){
+  const qpTheme=new URLSearchParams(location.search).get('theme');
+  const t = qpTheme && THEMES.includes(qpTheme) ? qpTheme : (getSavedTheme() || 'warm-dark');
+  applyTheme(t);
+})();
+
   // ========================= API ============================================
   const API_BASE = location.origin;
   const api = (path, opts={}) => fetch(API_BASE + path, {
@@ -173,13 +383,9 @@
   const isMixValid = (parts,title)=>(Array.isArray(parts) && parts.length>0 && percentSum(parts)===100 && String(title||'').trim().length>=3);
   const uuidv4 = ()=>{let dt=Date.now(); if(typeof performance!='undefined'&&performance.now) dt+=performance.now(); return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=(dt+Math.random()*16)%16|0;dt=Math.floor(dt/16);return (c==='x'?r:(r&0x3|0x8)).toString(16);});};
 
-  const BRAND_STRENGTH10_DEFAULTS={Darkside:5,"Black Burn":6,BlackBurn:6,MustHave:5,Overdose:6,Bonch:7,Starline:3};
+  const BRAND_STRENGTH10_DEFAULTS = {darkside:5,blackburn:6,musthave:5,overdose:6,bonch:7,starline:3};
   const normalizeBrand=b=>(b||'').trim();
-  const getStrength10=f=>{
-    if(!f) return 5;
-    if(typeof f.strength10==='number'&&Number.isFinite(f.strength10)) return Math.max(1,Math.min(10,f.strength10));
-    return BRAND_STRENGTH10_DEFAULTS[ normalizeBrand(f.brand) ] ?? 5;
-  };
+  const getStrength10=f=>{ if(!f) return 5; if(typeof f.strength10==='number'&&Number.isFinite(f.strength10)) return Math.max(1,Math.min(10,f.strength10)); return BRAND_STRENGTH10_DEFAULTS[ brandKey(f.brand) ] ?? 5;};
   const strengthColor=v=>{
     if(v==null) return {bg:'bg-slate-800',text:'text-slate-200',border:'border-slate-700'};
     if(v<4)  return {bg:'bg-emerald-950',text:'text-emerald-300',border:'border-emerald-800'};
@@ -254,6 +460,8 @@
     recStrength: 5,
     recList: []
   };
+  state.themePickerVisible = !getSavedTheme();
+  state.theme = getSavedTheme() || 'warm-dark';
   const isAdmin = ()=> !!(state.adminToken && state.adminToken.length>=6);
 
   // ========================= AUTH / INIT =====================================
@@ -453,6 +661,7 @@
     }).join('');
 
     // --- заголовок
+    
     const headerHTML =
       '<header class="flex items-center justify-between">' +
         '<div class="flex items-center gap-2 min-w-0">'+(state.logoUrl?('<img src="'+escAttr(state.logoUrl)+'" alt="logo" class="w-8 h-8 rounded-md ring-1 ring-white/10"/>'):LogoSVG())+'<h1 class="text-lg font-bold truncate">Hookah Mixes</h1></div>' +
@@ -460,11 +669,11 @@
           '<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">Здравствуйте, '+escHTML(state.user?.name || 'Гость')+'</span>' +
           '<button data-tab="builder" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] '+(state.activeTab==='builder'?'bg-slate-100 text-slate-900 shadow-[inset_0_-2px_0_rgba(245,158,11,.7)]':'border border-slate-700 hover:bg-white/10')+'">Конструктор</button>' +
           '<button data-tab="guest" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] '+(state.activeTab==='guest'?'bg-slate-100 text-slate-900 shadow-[inset_0_-2px_0_rgba(245,158,11,.7)]':'border border-slate-700 hover:bg-white/10')+'">Миксы гостей</button>' +
+          '<button id="themeBtn" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-white/10">Тема</button>' +
           (isAdmin()?('<button data-tab="admin" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] '+(state.activeTab==='admin'?'bg-slate-100 text-slate-900 shadow-[inset_0_-2px_0_rgba(245,158,11,.7)]':'border border-slate-700 hover:bg-white/10')+'">Админ</button>'):'') +
         '</div>' +
       '</header>';
-
-    // --- блок брендов
+// --- блок брендов
     const brandsBlock =
       '<div class="ui-card">' +
         '<div class="px-3 pt-3">' +
@@ -611,7 +820,7 @@
       '</div>';
 
     const bodyHTML =
-      '<div class="min-h-[100svh] p-3">' + (state.logoUrl?('<div id="wm" class="wm" style="background-image:url(\''+escAttr(state.logoUrl)+'\')"></div>'):'') +
+      '<button id=\"themeFab\" hidden>Тема</button><div id=\"themeSheet\" hidden><div class=\"sheet\"><div class=\"text-sm mb-2\">Выберите тему</div><div class=\"grid\"><div class=\"opt\" data-theme=\"warm-dark\">Warm Dark</div><div class=\"opt\" data-theme=\"frosted-glass\">Frosted Glass</div><div class=\"opt\" data-theme=\"cyber-neon\">Cyber Neon</div><div class=\"opt\" data-theme=\"minimal-light\">Minimal Light</div><div class=\"opt\" data-theme=\"earth-sepia\">Earth Sepia</div><div class=\"opt\" data-theme=\"high-contrast\">High Contrast</div></div></div></div></div><div class="min-h-[100svh] p-3">' + (state.logoUrl?('<div id="wm" class="wm" style="background-image:url(\''+escAttr(state.logoUrl)+'\')"></div>'):'') +
         '<div class="mx-auto w-full max-w-lg space-y-5">' +
           headerHTML +
           (state.activeTab==='builder' ? (brandsBlock + mixBlock + titleBlock + recBlock) : '') +
@@ -623,7 +832,49 @@
 
     root.innerHTML = bodyHTML;
 
-    // Ensure save button state is correct after first render
+    
+
+    
+
+    // Header theme button opens sheet
+    const themeBtn = root.querySelector('#themeBtn');
+    if(themeBtn){
+      themeBtn.addEventListener('click', ()=>{
+        const sheet = document.getElementById('themeSheet');
+        if(sheet) sheet.hidden = false;
+      });
+    }
+// === THEME PICKER HANDLERS
+    const fab=document.getElementById('themeFab');
+    const sheet=document.getElementById('themeSheet');
+    function updateThemeFab(){ if(!fab) return; fab.hidden = !state.themePickerVisible; }
+    updateThemeFab();
+    if(fab){
+      fab.addEventListener('click', ()=>{ sheet.hidden=false; });
+    }
+    if(sheet){
+      sheet.querySelectorAll('[data-theme]').forEach(opt=>{
+        if(opt.getAttribute('data-theme')===state.theme) opt.classList.add('active');
+        opt.addEventListener('click', ()=>{
+          const t=opt.getAttribute('data-theme');
+          state.theme = t;
+          applyTheme(t);
+          state.themePickerVisible = false; // hide after selection
+          sheet.hidden=true;
+          render();
+        });
+      });
+    }
+    // Hidden gesture: long-press on logo to reopen picker
+    const logoEl = root.querySelector('header img, header svg');
+    if(logoEl){
+      let timer=null;
+      const start=()=>{ timer=setTimeout(()=>{ state.themePickerVisible=true; render(); }, 650); };
+      const clear=()=>{ if(timer){ clearTimeout(timer); timer=null; } };
+      logoEl.addEventListener('mousedown', start); logoEl.addEventListener('touchstart', start);
+      ['mouseup','mouseleave','touchend','touchcancel'].forEach(ev=>logoEl.addEventListener(ev, clear));
+    }
+// Ensure save button state is correct after first render
     updateSaveButtonUI();
 
     // === анимации и ripple после каждого render
@@ -859,7 +1110,7 @@
       const likes = Array.isArray(m.likers) ? m.likers.length : 0;
       const c = typeof m.strength10==='number' ? strengthColor(m.strength10) : strengthColor(null);
       const sBadge = typeof m.strength10==='number' ? '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+m.strength10.toFixed(1)+'</span>' : '';
-      const tBadge = m.taste ? '<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">'+escAttr(m.taste)+'</span>' : '';
+      const tBadge = m.taste ? '<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">'+escHTML(m.taste)+'</span>' : '';
       return '<div class="flex items-center justify-between gap-2 text-sm border border-slate-800 rounded-lg px-2 py-1">'+
         '<div class="min-w-0"><div class="truncate font-medium">'+escAttr(m.title)+'</div><div class="text-[11px] opacity-70">❤ '+likes+'</div></div>'+
         '<div class="flex items-center gap-2">'+sBadge+tBadge+'<button data-apply="'+escAttr(m.id)+'" class="tap inline-flex items-center rounded-xl h-8 px-3 text-[12px] border border-slate-700 hover:bg-white/10">Загрузить</button></div>'+
