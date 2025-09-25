@@ -1661,328 +1661,90 @@ const themesBlock =
   })();
   </script>
 
+<!-- SAFE ADD-FLAVOR SHIM -->
 <script>
-// === Admin mode & delete guest mixes (safe addon) ===
 (function(){
-  function isAdmin(){
-    try {
-      if (window.state && (state.user?.isAdmin || String(state.user?.role).toLowerCase()==='admin')) return true;
-    } catch(_) {}
-    if (localStorage.getItem('adminMode') === '1') return true;
-    if (/[?&]admin=1(\b|$)/.test(location.search)) return true;
-    return false;
-  }
-  window.__isAdmin = isAdmin;
-
-  function ensureAdminToggle(){
-    let el = document.getElementById('adminToggleFab');
-    const show = /[?&]admin=1(\b|$)/.test(location.search) || (window.state && (state.user?.isAdmin || String(state.user?.role).toLowerCase()==='admin'));
-    if (!show){ if (el) el.remove(); return; }
-    if (!el){
-      el = document.createElement('button');
-      el.id = 'adminToggleFab';
-      el.setAttribute('class','fixed right-3 bottom-24 z-[62] px-3 py-2 rounded-xl border border-slate-700 bg-white/5 backdrop-blur text-xs');
-      el.textContent = localStorage.getItem('adminMode')==='1' ? 'Admin: ON' : 'Admin: OFF';
-      el.title = 'Переключить админ-режим';
-      el.addEventListener('click', ()=>{
-        const on = localStorage.getItem('adminMode')==='1';
-        localStorage.setItem('adminMode', on ? '0' : '1');
-        el.textContent = on ? 'Admin: OFF' : 'Admin: ON';
-        try { render(); } catch(_) {}
-      });
-      document.body.appendChild(el);
-    } else {
-      el.textContent = localStorage.getItem('adminMode')==='1' ? 'Admin: ON' : 'Admin: OFF';
+  // expose a safe helper without breaking existing code
+  window.adminAddFlavorSafe = async function adminAddFlavorSafe(formOrState){
+    function readField(source, key){
+      if (source && source[key] != null) return source[key];
+      const elByName = document.querySelector('[name="'+key+'"]');
+      if (elByName && elByName.value != null) return elByName.value;
+      const elById = document.getElementById(key);
+      if (elById && elById.value != null) return elById.value;
+      if (typeof window !== 'undefined' && typeof window[key] !== 'undefined') return window[key];
+      return undefined;
     }
-  }
+    const brand  = String(
+      readField(formOrState, 'brand') ??
+      readField(formOrState, 'brandKey') ??
+      readField(formOrState, 'producer') ?? ''
+    ).trim();
+    const name   = String(
+      readField(formOrState, 'name') ??
+      readField(formOrState, 'title') ??
+      readField(formOrState, 'flavor') ?? ''
+    ).trim();
+    const strength = Number(
+      readField(formOrState, 'strength') ??
+      readField(formOrState, 'strength10') ?? 5
+    ) || 5;
+    let tagsRaw = readField(formOrState, 'tags');
+    const tags = Array.isArray(tagsRaw)
+      ? tagsRaw
+      : String(tagsRaw || '')
+          .split(',')
+          .map(s => s.trim())
+          .filter(Boolean);
 
-  async function deleteGuestMix(id){
-    if (!id) return false;
-    try{ const r = await fetch(`/api/guest-mixes/${encodeURIComponent(id)}`, { method:'DELETE' }); if (r.ok) return true; }catch(_){}
-    try{ const r = await fetch(`/api/guest-mixes?id=${encodeURIComponent(id)}`, { method:'DELETE' }); if (r.ok) return true; }catch(_){}
-    try{ const r = await fetch(`/api/delete-guest-mix`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id}) }); if (r.ok) return true; }catch(_){}
-    return false;
-  }
-
-  function wireAdminDelete(){
-    if (!isAdmin()) {
-      document.querySelectorAll('[data-del]').forEach(b=>b.remove());
-      return;
+    if (!brand || !name){
+      try { alert('Укажи бренд и название вкуса'); } catch(_){}
+      return { ok:false, error:'brand_name_required' };
     }
-    document.querySelectorAll('[data-like]').forEach(likeBtn=>{
-      const id = likeBtn.getAttribute('data-like');
-      if (!id) return;
-      const container = likeBtn.parentElement || likeBtn;
-      if (container.querySelector(`[data-del="${CSS.escape(id)}"]`)) return;
-      const del = document.createElement('button');
-      del.setAttribute('data-del', id);
-      del.setAttribute('class','tap text-xs px-2 py-1 rounded-lg border border-red-700/70 hover:bg-red-600/10 ml-2');
-      del.textContent = 'Удалить';
-      del.addEventListener('click', async (e)=>{
-        e.stopPropagation();
-        const yes = confirm('Удалить этот микс?');
-        if (!yes) return;
-        let card = likeBtn.closest('.ui-card') || likeBtn.closest('[data-card]') || null;
-        if (card) { card.style.opacity = '0.5'; }
-        const ok = await deleteGuestMix(id);
-        if (ok){
-          try { if (Array.isArray(state.guestMixes)) state.guestMixes = state.guestMixes.filter(x=>x && String(x.id)!==String(id)); } catch(_){}
-          if (card) card.remove();
-        } else {
-          if (card) card.style.opacity = '';
-          alert('Не удалось удалить. Проверьте права и API.');
-        }
-      });
-      container.appendChild(del);
-    });
-  }
 
-  const _render = window.render;
-  if (typeof _render === 'function'){
-    window.render = function(){
-      const r = _render.apply(this, arguments);
-      try { ensureAdminToggle(); wireAdminDelete(); } catch(_) {}
-      return r;
-    };
-  } else {
-    document.addEventListener('DOMContentLoaded', ()=>{ try { ensureAdminToggle(); wireAdminDelete(); } catch(_) {} });
-  }
-})();
-</script>
+    const payload = { brand, name, strength, tags };
+    const headers = { 'Content-Type': 'application/json' };
+    if (localStorage.getItem('adminKey')) headers['x-admin-key'] = localStorage.getItem('adminKey');
 
+    const res = await fetch('/api/flavors', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload)
+    }).catch(e => ({ ok:false, _err:e }));
 
-<script>
-// === Flicker fix for recommendation click + preserve scroll on render ===
-(function(){
-  // 1) Preserve scroll position across render()
-  if (typeof window.render === 'function' && !window.__renderScrollPatched){
-    const _render = window.render;
-    window.render = function(){
-      const x = window.scrollX, y = window.scrollY;
-      const r = _render.apply(this, arguments);
-      // restore in next frame to avoid jump/flicker
-      requestAnimationFrame(()=>window.scrollTo(x, y));
-      return r;
-    };
-    window.__renderScrollPatched = true;
-  }
-
-  // 2) Intercept clicks on recommendations to remove panel BEFORE render
-  if (!window.__thirdPanelFlickerPatched){
-    document.addEventListener('click', function(e){
-      const btn = e.target.closest && e.target.closest('[data-add-third]');
-      if (!btn) return;
-      // prevent any other handlers from double-rendering
-      e.stopImmediatePropagation();
-      e.preventDefault();
-      try {
-        const id = btn.getAttribute('data-add-third');
-        const parts = Array.isArray(state?.parts) ? state.parts.slice() : [];
-        const rest = Math.max(0, 100 - parts.reduce((s,p)=>s + Math.max(0, Math.min(100, Number(p?.percent)||0)), 0));
-        if (rest <= 0) return;
-        // remove panel immediately to avoid layout flash
-        const panel = document.getElementById('thirdRecPanel');
-        if (panel) panel.remove();
-        state._hideThirdPanel = true;
-        // update state synchronously
-        state.parts = parts.concat([{ flavorId: id, percent: rest }]);
-        // re-render in next frame to give DOM время на удаление панели
-        requestAnimationFrame(()=>{ try{ render(); }catch(_){ /* ignore */ } });
-      } catch(_){ /* ignore */ }
-    }, true);
-    window.__thirdPanelFlickerPatched = true;
-  }
-
-  // 3) Small CSS tweaks to avoid repaint spikes
-  const style = document.createElement('style');
-  style.textContent = `
-    #thirdRecPanel{ will-change: opacity, transform; contain: layout paint; }
-    .ui-card{ backface-visibility: hidden; }
-    @media (prefers-reduced-motion: reduce){
-      *{ scroll-behavior: auto !important; transition: none !important; animation: none !important; }
+    if (!res || !res.ok){
+      const txt = res && res.text ? await res.text().catch(()=> '') : '';
+      console && console.error && console.error('Add flavor failed', res && res.status, txt);
+      try { alert('Не удалось добавить вкус'); } catch(_){}
+      return { ok:false, status: res && res.status };
     }
-  `;
-  document.head.appendChild(style);
-})();
-</script>
+    const json = await res.json().catch(()=> ({}));
+    return { ok:true, flavor: json && json.flavor };
+  };
 
+  // Optional: global shim to avoid ReferenceError if legacy code references these names
+  if (typeof brandKey === 'undefined') window.brandKey = undefined;
+  if (typeof producer === 'undefined') window.producer = undefined;
+  if (typeof brand === 'undefined') window.brand = undefined;
+  if (typeof title === 'undefined') window.title = undefined;
+  if (typeof flavor === 'undefined') window.flavor = undefined;
+  if (typeof name === 'undefined') window.name = undefined;
+  if (typeof strength === 'undefined') window.strength = undefined;
+  if (typeof strength10 === 'undefined') window.strength10 = undefined;
+  if (typeof tags === 'undefined') window.tags = undefined;
 
-<script>
-// === Admin Management: delete ANY guest mix (modal + per-card) ===
-(function(){
-  // Helper: admin check
-  function isAdmin(){
-    try {
-      if (window.state && (state.user?.isAdmin || String(state.user?.role).toLowerCase()==='admin')) return true;
-    } catch(_) {}
-    if (localStorage.getItem('adminMode') === '1') return true;
-    if (/[?&]admin=1(\b|$)/.test(location.search)) return true;
-    return false;
-  }
-
-  // API: delete by id (choose first working endpoint)
-  async function apiDelete(id){
-    try{ const r = await fetch(`/api/guest-mixes/${encodeURIComponent(id)}`, { method:'DELETE' }); if (r.ok) return true; }catch(_){}
-    try{ const r = await fetch(`/api/guest-mixes?id=${encodeURIComponent(id)}`, { method:'DELETE' }); if (r.ok) return true; }catch(_){}
-    try{ const r = await fetch(`/api/delete-guest-mix`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id}) }); if (r.ok) return true; }catch(_){}
-    return false;
-  }
-
-  // 1) Per-card delete (more robust): attach by data-id or fallback to [data-like]
-  function attachPerCardDelete(){
-    if (!isAdmin()) { document.querySelectorAll('[data-del]').forEach(b=>b.remove()); return; }
-    // Prefer explicit card dataset
-    document.querySelectorAll('[data-card-id]').forEach(card=>{
-      const id = card.getAttribute('data-card-id'); if (!id) return;
-      if (card.querySelector(`[data-del="${CSS.escape(id)}"]`)) return;
-      const btn = document.createElement('button');
-      btn.setAttribute('data-del', id);
-      btn.setAttribute('class','tap text-xs px-2 py-1 rounded-lg border border-red-700/70 hover:bg-red-600/10 ml-2');
-      btn.textContent = 'Удалить';
-      btn.addEventListener('click', async (e)=>{
-        e.stopPropagation();
-        if (!confirm('Удалить этот микс?')) return;
-        card.style.opacity='0.5';
-        const ok = await apiDelete(id);
-        if (ok){
-          try { if (Array.isArray(state.guestMixes)) state.guestMixes = state.guestMixes.filter(x=>x && String(x.id)!==String(id)); } catch(_) {}
-          card.remove();
-        } else {
-          card.style.opacity='';
-          alert('Не удалось удалить. Проверьте права и API.');
-        }
-      });
-      // insert into card header or footer
-      (card.querySelector('.card-actions') || card).appendChild(btn);
-    });
-    // Fallback: next to [data-like]
-    document.querySelectorAll('[data-like]').forEach(likeBtn=>{
-      const id = likeBtn.getAttribute('data-like'); if (!id) return;
-      const container = likeBtn.parentElement || likeBtn;
-      if (container.querySelector(`[data-del="${CSS.escape(id)}"]`)) return;
-      const del = document.createElement('button');
-      del.setAttribute('data-del', id);
-      del.setAttribute('class','tap text-xs px-2 py-1 rounded-lg border border-red-700/70 hover:bg-red-600/10 ml-2');
-      del.textContent = 'Удалить';
-      del.addEventListener('click', async (e)=>{
-        e.stopPropagation();
-        if (!confirm('Удалить этот микс?')) return;
-        const card = likeBtn.closest('.ui-card') || likeBtn.closest('[data-card]') || null;
-        if (card) card.style.opacity='0.5';
-        const ok = await apiDelete(id);
-        if (ok){
-          try { if (Array.isArray(state.guestMixes)) state.guestMixes = state.guestMixes.filter(x=>x && String(x.id)!==String(id)); } catch(_){}
-          if (card) card.remove();
-        } else {
-          if (card) card.style.opacity='';
-          alert('Не удалось удалить. Проверьте права и API.');
-        }
-      });
-      container.appendChild(del);
-    });
-  }
-
-  // 2) Admin modal: list all guest mixes with search and delete
-  function ensureAdminModal(){
-    if (!isAdmin()) { const ex = document.getElementById('adminMixModal'); if (ex) ex.remove(); const fab = document.getElementById('adminManageFab'); if (fab) fab.remove(); return; }
-    let fab = document.getElementById('adminManageFab');
-    if (!fab){
-      fab = document.createElement('button');
-      fab.id = 'adminManageFab';
-      fab.setAttribute('class','fixed right-3 bottom-40 z-[62] px-3 py-2 rounded-xl border border-slate-700 bg-white/5 backdrop-blur text-xs');
-      fab.textContent = 'Миксы (админ)';
-      fab.addEventListener('click', ()=>openModal());
-      document.body.appendChild(fab);
-    }
-    if (!document.getElementById('adminMixModal')){
-      const div = document.createElement('div');
-      div.id = 'adminMixModal';
-      div.hidden = true;
-      div.innerHTML = `
-        <div class="fixed inset-0 z-[1000] flex items-end md:items-center justify-center" style="background: color-mix(in oklab, var(--bg) 55%, black); backdrop-filter: blur(2px);">
-          <div class="sheet ui-card elevate w-full max-w-2xl mx-auto rounded-2xl border border-slate-800/60 p-2 pb-3 bg-[color-mix(in_oklab,var(--bg)_70%,transparent)]">
-            <div class="flex items-center justify-between px-2 py-2">
-              <div class="font-medium">Гостевые миксы — админ</div>
-              <button id="adminMixClose" class="tap text-xs px-2 py-1 rounded-lg border border-slate-700 hover:bg-white/5">Закрыть</button>
-            </div>
-            <div class="px-2 pb-2 flex gap-2">
-              <input id="adminMixSearch" placeholder="Поиск по названию/автору/бренду..." class="w-full px-3 py-2 rounded-xl border border-slate-800 bg-transparent" />
-            </div>
-            <div id="adminMixList" class="max-h-[60vh] overflow-auto px-2 pb-2 grid gap-2"></div>
-          </div>
-        </div>`;
-      document.body.appendChild(div);
-
-      function openModal(){ div.hidden = false; renderList(''); }
-      function closeModal(){ div.hidden = true; }
-      function renderList(q){
-        const list = document.getElementById('adminMixList'); if (!list) return;
-        const mixes = Array.isArray(state?.guestMixes) ? state.guestMixes : [];
-        const s = String(q||'').toLowerCase();
-        const data = mixes.filter(m=>{
-          const title = (m?.title||'').toLowerCase();
-          const author = (m?.author||m?.userName||'').toLowerCase();
-          const brands = Array.isArray(m?.parts)? m.parts.map(p=>{
-            const fl = (state?.flavors||[]).find(x=>x && String(x.id)===String(p.flavorId));
-            return (fl?.brand||'') + ' ' + (fl?.name||fl?.title||'');
-          }).join(' ').toLowerCase() : '';
-          return !s || title.includes(s) || author.includes(s) || brands.includes(s);
-        });
-        list.innerHTML = data.map(m=>{
-          const id = String(m?.id||'');
-          const title = m?.title || 'Без названия';
-          const author = m?.author || m?.userName || 'гость';
-          const count = Array.isArray(m?.likers)? m.likers.length : 0;
-          return `<div class="ui-card rounded-xl border border-slate-800 p-2" data-admin-row="${id}">
-            <div class="flex items-center justify-between gap-2">
-              <div class="min-w-0">
-                <div class="truncate font-medium">${title}</div>
-                <div class="text-xs opacity-70 truncate">Автор: ${author} • ❤ ${count}</div>
-              </div>
-              <div class="flex items-center gap-2">
-                <button class="tap text-xs px-2 py-1 rounded-lg border border-red-700/70 hover:bg-red-600/10" data-del-id="${id}">Удалить</button>
-              </div>
-            </div>
-          </div>`;
-        }).join('') || '<div class="text-sm opacity-60 px-2 py-2">Ничего не найдено</div>';
-
-        list.querySelectorAll('[data-del-id]').forEach(btn=>{
-          btn.addEventListener('click', async ()=>{
-            const id = btn.getAttribute('data-del-id');
-            if (!confirm('Удалить этот микс?')) return;
-            btn.disabled = true;
-            const ok = await apiDelete(id);
-            if (ok){
-              try { if (Array.isArray(state.guestMixes)) state.guestMixes = state.guestMixes.filter(x=>x && String(x.id)!==String(id)); } catch(_){}
-              const row = list.querySelector(`[data-admin-row="${CSS.escape(id)}"]`);
-              if (row) row.remove();
-              try { render(); } catch(_){}
-            } else {
-              btn.disabled = false;
-              alert('Не удалось удалить. Проверьте права и API.');
-            }
-          });
-        });
+  // If there's a known admin button, auto-wire it (non-breaking)
+  document.addEventListener('click', function(e){
+    const btn = e.target.closest && e.target.closest('[data-admin-add-flavor]');
+    if (!btn) return;
+    e.preventDefault();
+    adminAddFlavorSafe(window.state && state.newFlavor ? state.newFlavor : undefined).then(function(r){
+      if (r && r.ok){
+        // Try to refresh flavors list if app has such function
+        try { if (typeof loadFlavors === 'function') loadFlavors(''); } catch(_){}
       }
-
-      div.addEventListener('click', e=>{ if (e.target===div) closeModal(); });
-      div.querySelector('#adminMixClose').addEventListener('click', closeModal);
-      div.querySelector('#adminMixSearch').addEventListener('input', e=>renderList(e.target.value));
-      window.__openAdminManage = openModal;
-    }
-  }
-
-  // Hook into render to keep everything up-to-date
-  const _render = window.render;
-  if (typeof _render === 'function'){
-    window.render = function(){
-      const r = _render.apply(this, arguments);
-      try { attachPerCardDelete(); ensureAdminModal(); } catch(_){}
-      return r;
-    };
-  } else {
-    document.addEventListener('DOMContentLoaded', ()=>{ try { attachPerCardDelete(); ensureAdminModal(); } catch(_){ } });
-  }
+    });
+  }, true);
 })();
 </script>
 
