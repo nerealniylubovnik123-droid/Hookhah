@@ -1662,188 +1662,92 @@ const themesBlock =
   </script>
 
 <script>
-// === Safe add-on: richer alcohol/gastronomy tags + recommendation panel ===
-
-// 1) Heuristics for tagging flavors (non-destructive; runs on every render once)
+// === Admin mode & delete guest mixes (safe addon) ===
 (function(){
-  if (!window.__flavorEnrichedOnce) { window.__flavorEnrichedOnce = false; }
-  function lc(s){ return String(s||'').toLowerCase(); }
-  const RULES = [
-    {tag:'алкогольный', words:['ром','rum','виски','whisky','скотч','коньяк','бренди','brandy','текила','tequila','абсент','absinthe','шампан','champagne','вино','wine','мохито','mojito','ликёр','liqueur','амаретто','amaretto','бейлиз','baileys']},
-    {tag:'гастрономический', words:['чай','tea','матча','matcha','улун','oolong','жасмин','jasmine','каркаде','hibiscus','кофе','coffee','эспрессо','espresso','латте','latte','капучино','cappuccino','мокка','mocha','орех','nut','миндаль','almond','фундук','hazelnut','грецкий орех','walnut','корица','cinnamon','имбир','ginger','кардамон','cardamom','анис','anis','фенхел','fennel','базилик','basil','розмарин','rosemary','тимьян','thyme','шалфей','sage']},
-    {tag:'кофейный', words:['кофе','эспрессо','espresso','латте','капучино','мокка','mocha']},
-    {tag:'чайный', words:['чай','матча','улун','жасмин','каркаде','oolong','matcha','jasmine','hibiscus']},
-    {tag:'пряный', words:['корица','имбир','кардамон','анис','фенхел','spice']},
-    {tag:'травяной', words:['базилик','розмарин','тимьян','шалфей','herb','rosemary','basil','thyme','sage']},
-    {tag:'ореховый', words:['орех','миндаль','фундук','грецк','walnut','almond','hazelnut','pistachio']},
-    {tag:'шоколадный', words:['шоколад','какао','cacao','chocolate']},
-    {tag:'десертный', words:['ваниль','карамель','сливк','печень','маршмеллоу','ириск','брауни','кекс','мед','honey','toffee','marshmallow']},
-  ];
-  function enrichOnce(){
-    if (window.__flavorEnrichedOnce) return;
-    if (!window.state || !Array.isArray(state.flavors) || !state.flavors.length) return;
-    for (const f of state.flavors){
-      const base = lc((f.name||f.title||'')+' '+(f.brand||''));
-      const tags = Array.isArray(f.tags) ? f.tags.map(lc) : [];
-      for (const r of RULES){
-        if (tags.includes(r.tag)) continue;
-        if (r.words.some(w => base.includes(w))) tags.push(r.tag);
-      }
-      f.tags = Array.from(new Set(tags));
-    }
-    window.__flavorEnrichedOnce = true;
+  function isAdmin(){
+    try {
+      if (window.state && (state.user?.isAdmin || String(state.user?.role).toLowerCase()==='admin')) return true;
+    } catch(_) {}
+    if (localStorage.getItem('adminMode') === '1') return true;
+    if (/[?&]admin=1(\b|$)/.test(location.search)) return true;
+    return false;
   }
-  // wrap original render to ensure enrichment before we show panel
-  const _render = window.render;
-  window.render = function(){
-    const result = _render.apply(this, arguments);
-    try { enrichOnce(); } catch(e){ /* silent */ }
-    try { renderThirdPanel(); } catch(e){ /* silent */ }
-    return result;
-  };
-})();
+  window.__isAdmin = isAdmin;
 
-// 2) Soft classifier for current mix: returns a label like "алкогольный", "гастрономический" etc.
-function detectMixTasteLabel(parts, flavors){
-  if (!Array.isArray(parts) || !parts.length || !Array.isArray(flavors)) return null;
-  const total = parts.reduce((s,p)=>s + Math.max(0, Math.min(100, Number(p?.percent)||0)), 0) || 1;
-  const tally = Object.create(null);
-  const add = (k,w)=>{ if(!k) return; tally[k]=(tally[k]||0)+w; };
-  const GROUPS = {
-    'алкогольный':['алкогольный','ром','виски','коньяк','бренди','текила','абсент','шампан','вино','мохито','ликёр','амаретто','бейлиз'],
-    'гастрономический':['гастрономический','чайный','кофейный','пряный','травяной','ореховый','шоколадный'],
-    'кофейный':['кофейный','кофе','эспрессо','латте','капучино','мокка'],
-    'чайный':['чайный','чай','матча','улун','жасмин','каркаде'],
-    'десертный':['десертный','ваниль','карамель','шоколад','сливк','печень','маршмеллоу','ириск','брауни','кекс','мед'],
-    'пряный':['пряный','корица','имбир','кардамон','анис','фенхел'],
-    'травяной':['травяной','базилик','розмарин','тимьян','шалфей'],
-    'ореховый':['ореховый','миндаль','фундук','грецк'],
-    'шоколадный':['шоколадный','шоколад','какао','cacao','chocolate']
-  };
-  const KEYS = Object.keys(GROUPS);
-  const lc = s => String(s||'').toLowerCase();
-
-  for (const p of parts){
-    const pr = Math.max(0, Math.min(100, Number(p?.percent)||0));
-    const w = pr / total;
-    const f = flavors.find(x => x && String(x.id) === String(p.flavorId));
-    if (!f) continue;
-    const name = lc((f.name||f.title||'') + ' ' + (f.brand||''));
-    const tags = Array.isArray(f.tags) ? f.tags.map(lc) : [];
-    for (const k of KEYS){
-      const dict = GROUPS[k];
-      if (tags.some(t => dict.some(d => t.includes(d)))) add(k, 1.0*w);
-      else if (dict.some(d => name.includes(d))) add(k, 0.7*w);
+  function ensureAdminToggle(){
+    let el = document.getElementById('adminToggleFab');
+    const show = /[?&]admin=1(\b|$)/.test(location.search) || (window.state && (state.user?.isAdmin || String(state.user?.role).toLowerCase()==='admin'));
+    if (!show){ if (el) el.remove(); return; }
+    if (!el){
+      el = document.createElement('button');
+      el.id = 'adminToggleFab';
+      el.setAttribute('class','fixed right-3 bottom-24 z-[62] px-3 py-2 rounded-xl border border-slate-700 bg-white/5 backdrop-blur text-xs');
+      el.textContent = localStorage.getItem('adminMode')==='1' ? 'Admin: ON' : 'Admin: OFF';
+      el.title = 'Переключить админ-режим';
+      el.addEventListener('click', ()=>{
+        const on = localStorage.getItem('adminMode')==='1';
+        localStorage.setItem('adminMode', on ? '0' : '1');
+        el.textContent = on ? 'Admin: OFF' : 'Admin: ON';
+        try { render(); } catch(_) {}
+      });
+      document.body.appendChild(el);
+    } else {
+      el.textContent = localStorage.getItem('adminMode')==='1' ? 'Admin: ON' : 'Admin: OFF';
     }
   }
-  let best=null, bestVal=0;
-  for (const k in tally){ if (tally[k] > bestVal){ bestVal = tally[k]; best = k; } }
-  return best;
-}
 
-// 3) The bottom recommendation panel (runs after each render)
-function renderThirdPanel(){
-  const root = document.getElementById('root');
-  if (!root || !window.state) return;
-  const existing = document.getElementById('thirdRecPanel');
-  const parts = Array.isArray(state.parts) ? state.parts : [];
-  const show = parts.length === 2 && !state._hideThirdPanel;
-  if (!show){ if (existing) existing.remove(); return; }
-
-  // Strength blend
-  let mixStrength10 = null;
-  try {
-    const t = parts.reduce((s,p)=>s + Math.max(0, Math.min(100, Number(p?.percent)||0)), 0) || 1;
-    let w = 0;
-    for (const p of parts){
-      const pr = Math.max(0, Math.min(100, Number(p?.percent)||0));
-      const fl = (state.flavors||[]).find(x=>x && String(x.id)===String(p.flavorId));
-      if (!fl) continue;
-      const s10 = typeof getStrength10==='function' ? getStrength10(fl) : (Number(fl.strength)||5);
-      w += s10 * (pr/t);
-    }
-    mixStrength10 = Math.round(w*10)/10;
-  } catch(_){}
-
-  const taste = detectMixTasteLabel(parts, state.flavors||[]) || null;
-
-  // candidates
-  const used = new Set(parts.map(p=>String(p.flavorId)));
-  let cands = (state.flavors||[]).filter(f=>f && !used.has(String(f.id)));
-
-  const lc = s => String(s||'').toLowerCase();
-  const hasTag = (f, t) => {
-    const tags = Array.isArray(f.tags)? f.tags.map(lc) : [];
-    return !!(t && tags.includes(lc(t)));
-  };
-
-  function score(f){
-    const s = Math.abs((typeof mixStrength10==='number'?mixStrength10:5) - (typeof getStrength10==='function'? getStrength10(f) : (Number(f.strength)||5)));
-    let bonus = 0;
-    if (taste && hasTag(f, taste)) bonus -= 0.35; // сильнее притягиваем по направлению
-    if (!taste && (hasTag(f,'алкогольный') || hasTag(f,'гастрономический'))) bonus -= 0.2; // даже без taste продвигаем ключевые категории
-    return s + bonus;
+  async function deleteGuestMix(id){
+    if (!id) return false;
+    try{ const r = await fetch(`/api/guest-mixes/${encodeURIComponent(id)}`, { method:'DELETE' }); if (r.ok) return true; }catch(_){}
+    try{ const r = await fetch(`/api/guest-mixes?id=${encodeURIComponent(id)}`, { method:'DELETE' }); if (r.ok) return true; }catch(_){}
+    try{ const r = await fetch(`/api/delete-guest-mix`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id}) }); if (r.ok) return true; }catch(_){}
+    return false;
   }
-  cands.sort((a,b)=>score(a)-score(b));
-  cands = cands.slice(0, 6);
 
-  const rest = Math.max(0, 100 - parts.reduce((s,p)=>s + Math.max(0, Math.min(100, Number(p?.percent)||0)), 0));
-  const badges = (f)=>{
-    const tags = Array.isArray(f.tags)? f.tags.map(lc) : [];
-    const list = [];
-    if (taste && tags.includes(lc(taste))) list.push(taste);
-    if (tags.includes('алкогольный') && (!taste || taste!=='алкогольный')) list.push('алкогольный');
-    if (tags.includes('гастрономический') && (!taste || taste!=='гастрономический')) list.push('гастрономический');
-    return list.slice(0,2).map(x=>'<span class="px-2 py-0.5 text-[10px] rounded-md border border-slate-700/70">'+x+'</span>').join(' ');
-  };
-
-  const items = cands.map(f=>
-    '<button class="tap flex items-center justify-between w-full px-3 py-2 rounded-xl border border-slate-800 hover:bg-white/5" data-add-third="'+String(f.id)+'">'+
-      '<span class="min-w-0 truncate">'+(f.brand||'')+' — '+(f.name||f.title||'Без названия')+'</span>'+
-      '<span class="ml-2 flex items-center gap-2">'+
-        (typeof mixStrength10==='number'?('<span class="text-xs opacity-70">~'+(typeof getStrength10==='function'?getStrength10(f):(Number(f.strength)||5))+'</span>'):'')+
-        badges(f)+
-      '</span>'+
-    '</button>'
-  ).join('');
-
-  const topBadge = taste ? '<span class="px-2 py-0.5 text-[11px] rounded-lg border border-slate-700/80 bg-white/5">'+taste+'</span>' : '';
-
-  const html =
-    '<div id="thirdRecPanel" class="fixed inset-x-0 bottom-0 z-[60]">' +
-      '<div class="mx-auto max-w-3xl p-3">' +
-        '<div class="ui-card rounded-2xl border border-slate-800 bg-[color-mix(in_oklab,var(--bg)_70%,transparent)] backdrop-blur-xs shadow-elevate p-2">' +
-          '<div class="flex items-center justify-between px-2 py-1">' +
-            '<div class="text-sm opacity-80 flex items-center gap-2">Рекомендуем 3-й компонент '+ topBadge +'</div>' +
-            '<button id="thirdPanelClose" class="tap text-xs px-2 py-1 rounded-lg border border-slate-700 hover:bg-white/5">Не сейчас</button>' +
-          '</div>' +
-          '<div class="grid gap-2 px-2 pb-2">' + (items || '<div class="text-sm opacity-60 px-2 py-2">Нет подходящих вариантов</div>') + '</div>' +
-          '<div class="px-2 pb-2 text-[11px] opacity-60">Добавится ~'+rest+'% (до 100%)</div>' +
-        '</div>' +
-      '</div>' +
-    '</div>';
-
-  if (existing) existing.outerHTML = html;
-  else document.body.insertAdjacentHTML('beforeend', html);
-
-  const panel = document.getElementById('thirdRecPanel');
-  if (panel){
-    const closeBtn = document.getElementById('thirdPanelClose');
-    if (closeBtn) closeBtn.addEventListener('click', ()=>{ state._hideThirdPanel = true; const p=document.getElementById('thirdRecPanel'); if(p) p.remove(); });
-    panel.querySelectorAll('[data-add-third]').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        const id = btn.getAttribute('data-add-third');
-        const rest = Math.max(0, 100 - parts.reduce((s,p)=>s + Math.max(0, Math.min(100, Number(p?.percent)||0)), 0));
-        if (rest > 0) {
-          state.parts = (state.parts||[]).concat([{ flavorId: id, percent: rest }]);
-          state._hideThirdPanel = true;
-          render();
-          const p=document.getElementById('thirdRecPanel'); if(p) p.remove();
+  function wireAdminDelete(){
+    if (!isAdmin()) {
+      document.querySelectorAll('[data-del]').forEach(b=>b.remove());
+      return;
+    }
+    document.querySelectorAll('[data-like]').forEach(likeBtn=>{
+      const id = likeBtn.getAttribute('data-like');
+      if (!id) return;
+      const container = likeBtn.parentElement || likeBtn;
+      if (container.querySelector(`[data-del="${CSS.escape(id)}"]`)) return;
+      const del = document.createElement('button');
+      del.setAttribute('data-del', id);
+      del.setAttribute('class','tap text-xs px-2 py-1 rounded-lg border border-red-700/70 hover:bg-red-600/10 ml-2');
+      del.textContent = 'Удалить';
+      del.addEventListener('click', async (e)=>{
+        e.stopPropagation();
+        const yes = confirm('Удалить этот микс?');
+        if (!yes) return;
+        let card = likeBtn.closest('.ui-card') || likeBtn.closest('[data-card]') || null;
+        if (card) { card.style.opacity = '0.5'; }
+        const ok = await deleteGuestMix(id);
+        if (ok){
+          try { if (Array.isArray(state.guestMixes)) state.guestMixes = state.guestMixes.filter(x=>x && String(x.id)!==String(id)); } catch(_){}
+          if (card) card.remove();
+        } else {
+          if (card) card.style.opacity = '';
+          alert('Не удалось удалить. Проверьте права и API.');
         }
       });
+      container.appendChild(del);
     });
   }
-}
+
+  const _render = window.render;
+  if (typeof _render === 'function'){
+    window.render = function(){
+      const r = _render.apply(this, arguments);
+      try { ensureAdminToggle(); wireAdminDelete(); } catch(_) {}
+      return r;
+    };
+  } else {
+    document.addEventListener('DOMContentLoaded', ()=>{ try { ensureAdminToggle(); wireAdminDelete(); } catch(_) {} });
+  }
+})();
 </script>
 
 </body>
