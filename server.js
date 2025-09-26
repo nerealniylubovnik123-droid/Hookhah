@@ -151,6 +151,15 @@ app.delete("/api/mixes/:id", (req, res) => {
   if (idx === -1) return res.status(404).json({ error: "Not found" });
 
   const mix = mixes[idx];
+  // Admin with valid X-Admin-Token can delete any mix
+const adminHeader = req.header("X-Admin-Token");
+const isAdmin = adminHeader && adminHeader === (process.env.ADMIN_TOKEN || "");
+if (isAdmin) {
+  mixes.splice(idx, 1);
+  writeJSON(MIXES_FILE, mixes);
+  return res.json({ ok: true, by: "admin" });
+}
+
   // Админ с валидным X-Admin-Token может удалить любой микс
   const adminHeader = req.header("X-Admin-Token");
   const isAdmin = adminHeader && adminHeader === (process.env.ADMIN_TOKEN || "");
