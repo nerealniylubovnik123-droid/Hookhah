@@ -8,7 +8,7 @@
     :root{
       --bg:#0b1220; --card:#111a2b; --border:#1f2a44; --text:#e5e7eb; --muted:#9ca3af;
       --green:#10b981; --green2:#065f46; --rose:#f43f5e; --rose2:#7f1d1d;
-      --accent:#60a5fa; --accent2:#1e3a8a;
+      --accent:#60a5fa; --accent2:#1e3a8a; --warn:#f59e0b;
     }
     *{box-sizing:border-box}
     html,body{height:100%}
@@ -27,7 +27,7 @@
     .w-half{flex:1 1 480px; min-width:320px}
     .w-full{flex:1 1 100%}
     label{display:block; font-size:12px; color:var(--muted); margin-bottom:4px}
-    input, textarea, select{
+    input, textarea{
       width:100%; background:#0b1020; color:var(--text); border:1px solid var(--border);
       border-radius:10px; padding:10px; outline:none;
     }
@@ -46,9 +46,7 @@
     .btn-green:hover{background:#0f2e26}
     .toolbar{display:flex; gap:10px; align-items:end; flex-wrap:wrap}
     .list{display:grid; gap:12px}
-    .mix-card{
-      border:1px solid var(--border); border-radius:14px; padding:12px; background:#0c1326;
-    }
+    .mix-card{border:1px solid var(--border); border-radius:14px; padding:12px; background:#0c1326;}
     .mix-head{display:flex; align-items:center; gap:8px; justify-content:space-between}
     .badges{display:flex; gap:6px; align-items:center; flex-wrap:wrap}
     .badge{font-size:11px; padding:2px 8px; border:1px solid #2b3d63; color:#c7d2fe; border-radius:999px}
@@ -62,23 +60,22 @@
     .table{width:100%; border-collapse:collapse}
     .table th,.table td{border-bottom:1px dashed var(--border); padding:8px; text-align:left}
     .table th{font-weight:600; color:#cbd5e1}
-    .right{margin-left:auto}
-    .flex{display:flex; gap:8px; align-items:center}
-    .spacer{flex:1}
-    .small{font-size:12px}
+    .alert{margin:10px 0; padding:10px 12px; border:1px solid #7c5b13; background:#1a1304; color:#fde68a; border-radius:10px}
   </style>
 </head>
 <body>
   <div class="container">
     <h1>Hookah Mixes</h1>
 
+    <div id="globalError" class="alert" style="display:none"></div>
+
     <!-- Панель администратора / пользователя -->
     <div class="card w-full">
       <div class="toolbar">
         <div style="min-width:240px; flex:1">
           <label>Admin token (для операций админа)</label>
-          <div class="flex">
-            <input id="admTok" type="password" placeholder="X-Admin-Token" />
+          <div class="toolbar" style="gap:6px">
+            <input id="admTok" type="password" placeholder="введите X-Admin-Token" style="flex:1; min-width:180px" />
             <button id="saveTok" class="btn btn-primary">Сохранить</button>
             <button id="clearTok" class="btn">Очистить</button>
           </div>
@@ -87,11 +84,11 @@
 
         <div style="min-width:220px">
           <label>Ваш userId (для лайков и удаления своего)</label>
-          <div class="flex">
+          <div class="toolbar" style="gap:6px">
             <input id="userId" type="text" placeholder="например, user123" />
             <button id="saveUser" class="btn btn-green">ОК</button>
           </div>
-          <div class="small muted">Будет отправляться в заголовках X-User-Id/X-Author-Id</div>
+          <div class="small muted">Отправляется в заголовках X-User-Id/X-Author-Id</div>
         </div>
 
         <div class="spacer"></div>
@@ -156,6 +153,9 @@
   </div>
 
   <script>
+  // ======== Конфиг: если фронт на другом домене — укажи BASE, иначе оставь '' ========
+  const BASE = ''; // пример: 'https://YOUR-BACKEND.onrender.com'
+
   // ======== Состояние и утилиты =========
   const state = {
     adminToken: localStorage.getItem('adminToken') || '',
@@ -173,20 +173,42 @@
   }
   function escAttr(s){ return escHTML(s).replace(/"/g,'&quot;') }
 
-  async function api(url, opts){
-    opts = opts || {};
-    opts.headers = opts.headers || {};
-    // если есть тело и не указан тип — ставим JSON
-    if (opts.body && !opts.headers['Content-Type']) {
-      opts.headers['Content-Type'] = 'application/json';
+  function showError(msg){
+    const el = document.getElementById('globalError');
+    el.style.display = 'block';
+    el.textContent = msg;
+  }
+  function hideError(){
+    const el = document.getElementById('globalError');
+    el.style.display = 'none';
+    el.textContent = '';
+  }
+
+  async function api(path, opts){
+    const url = BASE + path;
+    const o = Object.assign({}, opts||{});
+    o.headers = Object.assign({}, o.headers||{});
+    if (o.body && !o.headers['Content-Type']) o.headers['Content-Type'] = 'application/json';
+    try{
+      return await fetch(url, o);
+    }catch(e){
+      // сеть упала — вернём объект-имитацию с ok=false
+      return { ok:false, status:0, json: async()=>({ error:'network' }), text: async()=>String(e), headers:new Headers() };
     }
-    return fetch(url, opts);
   }
 
   // ======== ФЛЕЙВОРЫ =========
   async function loadFlavors(){
-    const r = await api('/api/flavors');
-    state.flavors = await r.json().catch(()=>[]);
+    try{
+      const r = await api('/api/flavors');
+      if (!r.ok) { state.flavors = []; showError('Ошибка загрузки вкусов: ' + r.status); return; }
+      const data = await r.json().catch(()=>[]);
+      state.flavors = Array.isArray(data) ? data : [];
+      hideError();
+    }catch(e){
+      state.flavors = [];
+      showError('Ошибка загрузки вкусов: ' + (e.message||e));
+    }
   }
 
   function flavorId(brand, name){
@@ -205,8 +227,11 @@
       headers:{ 'X-Admin-Token': state.adminToken },
       body: JSON.stringify({ brand, name })
     });
-    const data = await r.json().catch(()=>null);
-    if(!r.ok){ alert('Ошибка добавления вкуса: '+r.status+' '+(data && data.error || '')); return }
+    if(!r.ok){
+      const t = await r.text().catch(()=> '');
+      alert('Ошибка добавления вкуса: '+r.status+' '+t);
+      return;
+    }
     await loadFlavors(); renderFlavors();
   }
 
@@ -221,25 +246,25 @@
       method:'POST',
       headers:{ 'X-Admin-Token': state.adminToken, 'Content-Type':'application/json' },
       body: JSON.stringify({ action:'delete', brand, name })
-    }).catch(()=>null);
+    });
 
     // B) fallback: DELETE по id
-    if(!r || !r.ok){
+    if(!r.ok){
       r = await api('/api/flavors/'+encodeURIComponent(flavorId(brand,name)), {
         method:'DELETE',
         headers:{ 'X-Admin-Token': state.adminToken }
-      }).catch(()=>null);
+      });
     }
     // C) fallback: DELETE по brand+name
-    if(!r || !r.ok){
+    if(!r.ok){
       r = await api('/api/flavors/by-brand-name?brand='+encodeURIComponent(brand)+'&name='+encodeURIComponent(name), {
         method:'DELETE',
         headers:{ 'X-Admin-Token': state.adminToken }
-      }).catch(()=>null);
+      });
     }
-    if(!r || !r.ok){
-      let body=''; try{ body = r ? await r.text() : '' }catch(_){}
-      alert('Удаление вкуса не удалось: '+(r?r.status:'нет ответа')+' '+body); return;
+    if(!r.ok){
+      const t = await r.text().catch(()=> '');
+      alert('Удаление вкуса не удалось: '+r.status+' '+t); return;
     }
     await loadFlavors(); renderFlavors();
   }
@@ -264,8 +289,16 @@
 
   // ======== МИКСЫ =========
   async function loadGuestMixes(){
-    const r = await api('/api/mixes');
-    state.mixes = await r.json().catch(()=>[]);
+    try{
+      const r = await api('/api/mixes');
+      if (!r.ok) { state.mixes = []; showError('Ошибка загрузки миксов: ' + r.status); return; }
+      const data = await r.json().catch(()=>[]);
+      state.mixes = Array.isArray(data) ? data : [];
+      hideError();
+    }catch(e){
+      state.mixes = [];
+      showError('Ошибка загрузки миксов: ' + (e.message||e));
+    }
   }
 
   async function addMix(){
@@ -280,11 +313,8 @@
       parts: parts ? parts.split(',').map(s=>s.trim()).filter(Boolean) : [],
       notes
     };
-    const r = await api('/api/mixes', {
-      method:'POST',
-      body: JSON.stringify(body)
-    });
-    if(!r.ok){ alert('Ошибка добавления микса'); return }
+    const r = await api('/api/mixes', { method:'POST', body: JSON.stringify(body) });
+    if(!r.ok){ const t = await r.text().catch(()=> ''); alert('Ошибка добавления микса: '+r.status+' '+t); return }
     document.getElementById('mixTitle').value = '';
     document.getElementById('mixAuthor').value = '';
     document.getElementById('mixParts').value = '';
@@ -302,24 +332,24 @@
     };
 
     // 1) DELETE /api/mixes/:id
-    let t = await api('/api/mixes/'+encodeURIComponent(id), { method:'DELETE', headers }).catch(()=>null);
-    if (t && (t.ok || t.status===204)) return true;
+    let t = await api('/api/mixes/'+encodeURIComponent(id), { method:'DELETE', headers });
+    if (t.ok) return true;
 
     // 2) DELETE /api/mixes/:id?authorId=...
-    t = await api('/api/mixes/'+encodeURIComponent(id)+'?authorId='+encodeURIComponent(uid), { method:'DELETE', headers }).catch(()=>null);
-    if (t && (t.ok || t.status===204)) return true;
+    t = await api('/api/mixes/'+encodeURIComponent(id)+'?authorId='+encodeURIComponent(uid), { method:'DELETE', headers });
+    if (t.ok) return true;
 
     // 3) POST /api/mixes/delete { id, authorId }
-    t = await api('/api/mixes/delete', { method:'POST', headers, body: JSON.stringify({ id, authorId: uid }) }).catch(()=>null);
-    if (t && (t.ok || t.status===204)) return true;
+    t = await api('/api/mixes/delete', { method:'POST', headers, body: JSON.stringify({ id, authorId: uid }) });
+    if (t.ok) return true;
 
     // 4) POST override _method=DELETE
-    t = await api('/api/mixes/'+encodeURIComponent(id)+'?_method=DELETE', { method:'POST', headers, body: JSON.stringify({ authorId: uid }) }).catch(()=>null);
-    if (t && (t.ok || t.status===204)) return true;
+    t = await api('/api/mixes/'+encodeURIComponent(id)+'?_method=DELETE', { method:'POST', headers, body: JSON.stringify({ authorId: uid }) });
+    if (t.ok) return true;
 
     // 5) DELETE с body
-    t = await api('/api/mixes/'+encodeURIComponent(id), { method:'DELETE', headers, body: JSON.stringify({ authorId: uid }) }).catch(()=>null);
-    if (t && (t.ok || t.status===204)) return true;
+    t = await api('/api/mixes/'+encodeURIComponent(id), { method:'DELETE', headers, body: JSON.stringify({ authorId: uid }) });
+    if (t.ok) return true;
 
     return false;
   }
@@ -343,29 +373,26 @@
       const sBadge = (m.strength10!=null) ? '<span class="badge">Крепость: '+escHTML(m.strength10)+'/10</span>' : '';
       const tBadge = (m.taste!=null) ? '<span class="badge">Вкус: '+escHTML(m.taste)+'</span>' : '';
 
-      return `
-        <div class="mix-card">
-          <div class="mix-head">
-            <div class="flex">
-              <div class="pill" title="Автор">
-                👤&nbsp;${escHTML(m.author || 'Гость')}
-              </div>
-              <div class="pill muted">id: ${escHTML(m.id)}</div>
-            </div>
-            <div class="actions">${likeBtn} ${delBtn}</div>
-          </div>
-          <div class="hr"></div>
-          <div class="flex">
-            <div class="badge" style="border-color:#2b3d63;color:#c7d2fe">${escHTML(m.title || 'Без названия')}</div>
-            ${sBadge} ${tBadge}
-          </div>
-          ${m.parts && m.parts.length ? `<div class="small muted" style="margin-top:6px">Части: ${escHTML(m.parts.join(', '))}</div>` : ``}
-          ${m.notes ? `<div class="small" style="margin-top:6px">Заметки: ${escHTML(m.notes)}</div>` : ``}
-        </div>
-      `;
+      return (
+        '<div class="mix-card">'+
+          '<div class="mix-head">'+
+            '<div class="badges">'+
+              '<div class="pill" title="Автор">👤&nbsp;'+escHTML(m.author || 'Гость')+'</div>'+
+              '<div class="pill muted">id: '+escHTML(m.id)+'</div>'+
+            '</div>'+
+            '<div class="actions">'+likeBtn+' '+delBtn+'</div>'+
+          '</div>'+
+          '<div class="hr"></div>'+
+          '<div class="badges">'+
+            '<div class="badge" style="border-color:#2b3d63;color:#c7d2fe">'+escHTML(m.title || 'Без названия')+'</div>'+
+            sBadge + ' ' + tBadge +
+          '</div>'+
+          (m.parts && m.parts.length ? '<div class="small muted" style="margin-top:6px">Части: '+escHTML(m.parts.join(", "))+'</div>' : '')+
+          (m.notes ? '<div class="small" style="margin-top:6px">Заметки: '+escHTML(m.notes)+'</div>' : '')+
+        '</div>'
+      );
     }).join('');
 
-    // навесим обработчики
     // удаление
     box.querySelectorAll('[data-del]').forEach(btn=>{
       btn.addEventListener('click', async ()=>{
@@ -384,19 +411,15 @@
         const id = btn.getAttribute('data-like');
         if(!id) return;
         const uid = String(state.user && state.user.id || 'anon');
-        try{
-          const r = await api('/api/mixes/'+encodeURIComponent(id)+'/like', {
-            method:'POST',
-            headers:{ 'X-User-Id': uid }
-          });
-          const data = await r.json().catch(()=>null);
-          if(r.ok && data && data.ok){
-            await loadGuestMixes(); renderMixes();
-          }else{
-            alert('Не удалось поставить лайк');
-          }
-        }catch(e){
-          alert('Ошибка сети при лайке');
+        const r = await api('/api/mixes/'+encodeURIComponent(id)+'/like', {
+          method:'POST',
+          headers:{ 'X-User-Id': uid }
+        });
+        if(r.ok){
+          await loadGuestMixes(); renderMixes();
+        }else{
+          const t = await r.text().catch(()=> '');
+          alert('Не удалось поставить лайк: '+r.status+' '+t);
         }
       });
     });
@@ -411,7 +434,6 @@
   }
 
   async function init(){
-    // кнопки/инпуты
     document.getElementById('saveTok').addEventListener('click', ()=>{
       const v = document.getElementById('admTok').value.trim();
       state.adminToken = v; localStorage.setItem('adminToken', v);
@@ -437,7 +459,6 @@
 
     document.getElementById('addMix').addEventListener('click', addMix);
 
-    // первичная подгрузка
     renderTop();
     await loadFlavors(); renderFlavors();
     await loadGuestMixes(); renderMixes();
