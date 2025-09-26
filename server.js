@@ -4,24 +4,22 @@ const fs = require("fs");
 const path = require("path");
 const cors = require("cors");
 
-const app = express();                           // ✅ правильная инициализация
+const app = express();                    // корректная инициализация
 const PORT = process.env.PORT || 8080;
 
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 
-// ====== файлы данных ======
+// ---- файлы данных ----
 const DATA_DIR = __dirname;
 const FLAVORS_FILE = path.join(DATA_DIR, "flavors.json");
 const MIXES_FILE   = path.join(DATA_DIR, "guest_mixes.json");
 
-// ====== статика (опционально, если есть public/) ======
-const PUBLIC_DIR = path.join(__dirname, "public");
-if (fs.existsSync(PUBLIC_DIR)) {
-  app.use(express.static(PUBLIC_DIR));
-}
+// создадим пустые json при первом запуске
+if (!fs.existsSync(FLAVORS_FILE)) fs.writeFileSync(FLAVORS_FILE, "[]", "utf8");
+if (!fs.existsSync(MIXES_FILE))   fs.writeFileSync(MIXES_FILE,   "[]", "utf8");
 
-// ====== helpers ======
+// ---- утилиты ----
 function readJSON(file, fallback) {
   try {
     if (!fs.existsSync(file)) return fallback;
@@ -39,62 +37,52 @@ function writeJSON(file, data) {
   }
 }
 
-// создаём пустые файлы при первом запуске
-if (!fs.existsSync(FLAVORS_FILE)) writeJSON(FLAVORS_FILE, []);
-if (!fs.existsSync(MIXES_FILE))   writeJSON(MIXES_FILE,   []);
-
-// ====== health ======
+// ---- health ----
 app.get("/healthz", (_req, res) => {
   res.json({ ok: true, ts: new Date().toISOString() });
 });
 
-// ================= FLAVORS =================
+// ===================== FLAVORS =====================
 
-// список вкусов
+// Список вкусов
 app.get("/api/flavors", (_req, res) => {
   res.json(readJSON(FLAVORS_FILE, []));
 });
 
-// добавление вкуса (как было; удаление вкусов админом НЕ меняли)
+// Добавление вкуса (как было; удаление вкусов не трогаем)
 app.post("/api/flavors", (req, res) => {
   const adminHeader = req.header("X-Admin-Token");
   const isAdmin = adminHeader && adminHeader === (process.env.ADMIN_TOKEN || "");
   if (!isAdmin) return res.status(403).json({ error: "Forbidden (admin token)" });
 
   const body = req.body || {};
-  if (!body.brand || !body.name) {
-    return res.status(400).json({ error: "brand and name are required" });
-  }
+  const brand = String(body.brand || "").trim();
+  const name  = String(body.name  || "").trim();
+  if (!brand || !name) return res.status(400).json({ error: "brand and name are required" });
 
   const list = readJSON(FLAVORS_FILE, []);
   let id =
     String(body.id || "").trim().toLowerCase() ||
-    (body.brand + "-" + body.name)
-      .toLowerCase()
-      .replace(/\s+/g, "-")
-      .replace(/[^a-z0-9\-]+/g, "");
+    (brand + "-" + name).toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9\-]+/g, "");
 
   if (list.some(f => String(f.id || "") === id)) {
     return res.status(409).json({ error: "id already exists" });
   }
 
   const item = {
-    id,
-    brand: String(body.brand || "").trim(),
-    name: String(body.name || "").trim(),
+    id, brand, name,
     description: String(body.description || ""),
     tags: body.tags || [],
     strength10: Number(body.strength10 || 0),
   };
-
   list.push(item);
   writeJSON(FLAVORS_FILE, list);
   res.json(item);
 });
 
-// ================= MIXES =================
+// ===================== MIXES =====================
 
-// список миксов (новые сверху)
+// Список миксов (новые сверху)
 app.get("/api/mixes", (_req, res) => {
   const list = readJSON(MIXES_FILE, []);
   const arr = Array.isArray(list) ? list.slice() : [];
@@ -102,29 +90,27 @@ app.get("/api/mixes", (_req, res) => {
   res.json(arr);
 });
 
-// создание микса
+// Создание микса
 app.post("/api/mixes", (req, res) => {
-  const body = req.body || {};
+  const b = req.body || {};
   const list = readJSON(MIXES_FILE, []);
-
   const item = {
     id: "mix_" + Math.random().toString(36).slice(2, 10), // серверный id
-    title: String(body.title || "Микс"),
-    parts: Array.isArray(body.parts) ? body.parts : [],
-    notes: String(body.notes || ""),
-    author: String(body.author || "Гость"),
-    authorId: String(body.authorId || ""),
+    title: String(b.title || "Микс"),
+    parts: Array.isArray(b.parts) ? b.parts : [],
+    notes: String(b.notes || ""),
+    author: String(b.author || "Гость"),
+    authorId: String(b.authorId || ""),
     createdAt: new Date().toISOString(),
-    taste: String(body.taste || ""),
-    strength10: Number(body.strength10 || 0),
+    taste: String(b.taste || ""),
+    strength10: Number(b.strength10 || 0),
   };
-
   list.push(item);
   writeJSON(MIXES_FILE, list);
   res.json(item);
 });
 
-// удаление микса
+// Удаление микса: автор — только свой; АДМИН — любой (через X-Admin-Token)
 app.delete("/api/mixes/:id", (req, res) => {
   const id = String(req.params.id);
   const userId = req.header("X-User-Id") || null;
@@ -135,7 +121,7 @@ app.delete("/api/mixes/:id", (req, res) => {
 
   const mix = mixes[idx];
 
-  // ✅ НОВОЕ: админ с валидным X-Admin-Token может удалить ЛЮБОЙ микс
+  // ✅ админ с валидным токеном может удалить ЛЮБОЙ микс
   const adminHeader = req.header("X-Admin-Token");
   const isAdmin = adminHeader && adminHeader === (process.env.ADMIN_TOKEN || "");
   if (isAdmin) {
@@ -151,23 +137,25 @@ app.delete("/api/mixes/:id", (req, res) => {
     return res.json({ ok: true });
   }
 
-  // legacy: если authorId отсутствует — разрешим удалить, если X-User-Id === "admin"
+  // legacy: без authorId — разрешим удалить, если X-User-Id === "admin"
   if (!mix.authorId && userId === "admin") {
     mixes.splice(idx, 1);
     writeJSON(MIXES_FILE, mixes);
-    return res.json({ ok: true, note: "deleted legacy mix by admin" });
+    return res.json({ ok: true, note: "deleted legacy mix by admin (X-User-Id)" });
   }
 
   return res.status(403).json({ error: "Forbidden" });
 });
 
-// ====== SPA fallback (фикс звёздочки для path-to-regexp) ======
-if (fs.existsSync(PUBLIC_DIR)) {
-  // Любой GET, кроме /api/* — отдаём index.html
-  app.get(/^\/(?!api\/).*/, (_req, res) => {
-    res.sendFile(path.join(PUBLIC_DIR, "index.html"));
-  });
-}
+// ===================== FRONT (SPA) =====================
+// Отдаём index.html из КОРНЯ проекта
+app.get("/", (_req, res) => {
+  res.type("html").sendFile(path.join(__dirname, "index.html"));
+});
+// Любой GET, КРОМЕ /api/*, тоже на index.html (без звёздочки)
+app.get(/^\/(?!api\/).*/, (_req, res) => {
+  res.type("html").sendFile(path.join(__dirname, "index.html"));
+});
 
 app.listen(PORT, () => {
   console.log(`✅ Server started on http://localhost:${PORT}`);
