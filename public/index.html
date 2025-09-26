@@ -3,710 +3,495 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#020617" />
   <title>Hookah Mixes</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <style>body{background:#020617}</style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-
-  <!-- Ранний экран ошибок -->
-  <script>
-    (function(){
-      function showFatal(msg){
-        var root = document.getElementById('root');
-        if (!root) return;
-        root.innerHTML =
-          '<div class="min-h-[100svh] flex items-center justify-center p-6">' +
-          '  <div class="max-w-md w-full rounded-xl border border-rose-800 bg-rose-950 p-4 text-sm">' +
-          '    <div class="font-semibold text-rose-200 mb-1">Критическая ошибка</div>' +
-          '    <div class="text-rose-300/90">'+String(msg||'Unknown')+'</div>' +
-          '  </div>' +
-          '</div>';
-      }
-      window.__fatal = showFatal;
-      window.addEventListener('error', function(e){
-        try{ showFatal(e && e.error && e.error.message || e.message || 'Unexpected error'); }catch(_){}
-      });
-    })();
-  </script>
+  <style>body{background:#0b1220}</style>
 </head>
 <body class="text-slate-100">
-  <div id="root" class="min-h-[100svh]"></div>
+  <div id="root"></div>
 
   <script>
-  // ========================= API ============================================
-  const API_BASE = "https://hookhah.onrender.com";
-  function api(path, opts={}) {
-    const headers = { Accept: "application/json", ...(opts.headers||{}) };
-    // Авто-Content-Type для JSON body
-    if (opts.body && !headers["Content-Type"] && !(opts.body instanceof FormData)) {
-      headers["Content-Type"] = "application/json; charset=UTF-8";
+  (function(){
+    "use strict";
+
+    // ============== Utils ==============
+    const API_BASE = "https://hookhah.onrender.com"; // backend base
+    const qs = (s, r=document)=>r.querySelector(s);
+    const qsa = (s, r=document)=>Array.prototype.slice.call(r.querySelectorAll(s));
+    const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const escAttr = esc;
+    const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+    const nowIso = ()=>new Date().toISOString();
+
+    function api(path, opt){
+      const url = /^https?:/.test(path)? path : (API_BASE + path);
+      const headers = Object.assign({'Content-Type':'application/json'}, (opt && opt.headers) || {});
+      return fetch(url, Object.assign({mode:'cors', credentials:'omit', headers}, opt||{}));
     }
-    return fetch(API_BASE + path, { cache: "no-store", ...opts, headers });
-  }
-
-  // ========================= УТИЛИТЫ ========================================
-  const safeNum = (v, d=0) => { const n = Number(v); return Number.isFinite(n)?n:d; };
-  const safePercent = (v) => Math.max(0, Math.min(100, safeNum(v, 0)));
-  const percentSum = (parts=[]) => (Array.isArray(parts)?parts.reduce((a,b)=>a+safePercent(b && b.percent),0):0);
-  const isMixValid = (parts,title) => (Array.isArray(parts)?(percentSum(parts)===100 && String(title||'').trim().length>=3):false);
-  const clampPercentForPart=(parts,targetId,newVal)=>{
-    const other=percentSum(parts.filter(x=>x&&x.flavorId!==targetId));
-    return Math.max(0,Math.min(safePercent(newVal),100-other));
-  };
-  const uuidv4=()=>{let dt=Date.now();if(typeof performance!='undefined'&&typeof performance.now==='function'){dt+=performance.now();}return'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){const r=(dt+Math.random()*16)%16|0;dt=Math.floor(dt/16);const v=c==='x'?r:(r&0x3)|0x8;return v.toString(16);});};
-  const normalizeBrand=(b)=>(b||'').trim();
-  const BRAND_STRENGTH10_DEFAULTS={Darkside:5,"Black Burn":6,BlackBurn:6,MustHave:5,Overdose:6,Bonch:7,Starline:3};
-  const getStrength10=(f)=>{
-    if(!f) return 5;
-    if(typeof f.strength10==='number'&&Number.isFinite(f.strength10)) return Math.max(1,Math.min(10,f.strength10));
-    return BRAND_STRENGTH10_DEFAULTS[normalizeBrand(f.brand)]??5;
-  };
-  const strengthColor=(v)=>{
-    if(v==null)return{bg:"bg-slate-800",text:"text-slate-200",border:"border-slate-700"};
-    if(v<4)return{bg:"bg-emerald-950",text:"text-emerald-300",border:"border-emerald-800"};
-    if(v<7)return{bg:"bg-amber-950",text:"text-amber-300",border:"border-amber-800"};
-    return{bg:"bg-rose-950",text:"text-rose-300",border:"border-rose-800"};
-  };
-  const tasteWordFromTag=(tag)=>{
-    if(tag==null)return null;const t=String(tag).toLowerCase().trim();if(!t)return null;
-    const rules=[
-      [/(кисл|sour|лимон|lime|грейпфрут)/,"кислый"],
-      [/(сладк|sweet|sugar|мед|honey)/,"сладкий"],
-      [/(прян|spice|ginger|имбир)/,"пряный"],
-      [/(лед|ice|cold|frost|мят)/,"ледяной"],
-      [/(фрукт|fruit|яблок|banana|mango|pineapple|grape|orange|pear|melon|berry)/,"фруктовый"],
-      [/(десерт|dessert|cake|pie|cookie|choco|cream|vanilla|waffle)/,"десертный"]
-    ];
-    for (const [re,w] of rules){ if(re.test(t)) return w; }
-    return null;
-  };
-  const getMixTasteLabel=(parts,flavors)=>{
-    if(!Array.isArray(parts)||!Array.isArray(flavors)||parts.length===0)return null;
-    const total=percentSum(parts); if(total<=0)return null;
-    const scores=new Map();
-    const add=(raw,w)=>{const word=tasteWordFromTag(raw);if(word)scores.set(word,(scores.get(word)||0)+w);};
-    for (const p of parts){
-      const pr=safePercent(p&&p.percent); if(pr<=0) continue;
-      const fl=flavors.find(x=>x&&x.id===(p&&p.flavorId));
-      if(!fl) continue;
-      add(fl.name,pr);
-      add(fl.brand,pr*0.2);
-      if(Array.isArray(fl.tags)) for(const t of fl.tags) add(t,pr*1.2);
-      if(fl.description) add(fl.description,pr*0.5);
-    }
-    let best=null,bestVal=-1;
-    for(const [k,v] of scores.entries()){ if(v>bestVal){best=k;bestVal=v;} }
-    return best;
-  };
-
-  // ========================= СОСТОЯНИЕ/ИНИЦИАЛИЗАЦИЯ =======================
-  const qp = new URLSearchParams(location.search);
-  const state = {
-    flavors: [],
-    guestMixes: [],
-    title: '',
-    notes: '',
-    parts: [],
-    activeTab: 'constructor', // constructor | guest | admin
-    activeBrand: '',
-    search: '',
-    user: null,
-    adminToken: (localStorage.getItem('admin_token') || ""),
-    adminPrompt: qp.get('admin') === '1'
-  };
-  const isAdmin=()=> !!(state.adminToken && state.adminToken.length>=6);
-
-  // ========================= ИНИТ ПОЛЬЗОВАТЕЛЯ ==============================
-  (async function initUser(){
-    try{
-      if (window.Telegram && Telegram.WebApp && Telegram.WebApp.initDataUnsafe && Telegram.WebApp.initDataUnsafe.user){
-        const u = Telegram.WebApp.initDataUnsafe.user;
-        state.user = { id: String(u.id), name: [u.first_name,u.last_name].filter(Boolean).join(' ') || 'Гость' };
-      } else {
-        state.user = { id: 'guest-'+Math.random().toString(36).slice(2,8), name: 'Гость' };
-      }
-    }catch(_){ state.user = { id: 'guest-'+Math.random().toString(36).slice(2,8), name: 'Гость' }; }
-  })();
-
-  // ========================= FLAVORS API ====================================
-  const flavorsApi = {
-    async list(){
-      const r = await api('/api/flavors');
-      if (!r.ok) return [];
-      return (await r.json())||[];
-    },
-    async add(item, token){
-      const r = await api('/api/flavors', { method:'POST', headers:{'X-Admin-Token': token}, body: JSON.stringify(item) });
-      if(!r.ok) throw new Error('Не удалось добавить вкус');
-      return await r.json();
-    },
-    async removeById(id, token){
-      const r = await api('/api/flavors', { method:'POST', headers:{'X-Admin-Token': token}, body: JSON.stringify({ action:'delete', id }) });
-      if(!r.ok) throw new Error('Не удалось удалить вкус');
-      return await r.json();
-    },
-    async removeByBrandName(brand, name, token){
-      const r = await api('/api/flavors', { method:'POST', headers:{'X-Admin-Token': token}, body: JSON.stringify({ action:'delete', brand, name }) });
-      if(!r.ok) throw new Error('Не удалось удалить вкус');
-      return await r.json();
-    }
-  };
-
-  // ========================= ЗАГРУЗКА ДАННЫХ ================================
-  async function loadFlavors(){
-    try{
-      const r = await api('/api/flavors');
-      if (r.ok){
-        const arr = await r.json();
-        state.flavors = Array.isArray(arr) ? arr.map(normalizeFlavorRecord) : [];
-      } else {
-        state.flavors = [];
-      }
-    }catch(_){ state.flavors = []; }
-  }
-
-  function normalizeFlavorRecord(f){
-    const id = String(f && f.id || '');
-    const brand = String(f && f.brand || '');
-    const name = String(f && f.name || '');
-    const tags = Array.isArray(f && f.tags) ? f.tags : String(f && f.tags || '').split(',').map(s=>s.trim()).filter(Boolean);
-    const description = f?.description ? String(f.description) : undefined;
-    return { id, brand, name, description, tags, strength10 };
-  }
-
-  async function loadGuestMixes(){
-    try{
-      const r = await api('/api/mixes');
-      if (r.ok){
-        const arr = await r.json();
-        state.guestMixes = Array.isArray(arr) ? arr : [];
-        state.guestMixes.sort((a,b)=>(b?.createdAt||0)-(a?.createdAt||0));
-      } else {
-        state.guestMixes = [];
-      }
-    }catch(_){ state.guestMixes = []; }
-  }
-
-  async function detectLogo(){
-    async function exists(url){ try{ const r=await fetch(url,{method:'HEAD',cache:'no-store'}); return r.ok; }catch(_){ return false; } }
-    const candidates=[ './logo.jpg','./logo.jpeg','./logo.JPG','./logo.JPEG','./AKGpihYIdG2xycCNV3hAm2gVxkuF4tS5.jpg' ];
-    for(const c of candidates){ if(await exists(c)){ state.logoUrl=c; return; } }
-    state.logoUrl=null;
-  }
-  function LogoSVG(cls){
-    return (
-      '<svg class="'+(cls||'w-8 h-8')+'" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
-      '  <defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#4f46e5"/><stop offset="1" stop-color="#a78bfa"/></linearGradient></defs>' +
-      '  <circle cx="32" cy="32" r="30" fill="url(#g)" opacity="0.2"/>' +
-      '  <path d="M32 10c-4 4-4 8 0 12 4 4 4 8 0 12-4 4-4 8 0 12" stroke="#c7d2fe" stroke-width="3" fill="none" stroke-linecap="round"/>' +
-      '  <circle cx="32" cy="50" r="3" fill="#c7d2fe"/>' +
-      '</svg>'
-    );
-  }
-
-  // ========================= УДАЛЕНИЕ МИКСА (без создания) ===================
-  async function deleteMixOnServer(id, user){
-    const uid = String(user && user.id || '');
-    const headers = { 'X-Author-Id': uid, 'X-User-Id': uid };
-    // добавляем X-Admin-Token, если админ-режим включён
-    try {
-      const adminToken = (typeof state !== 'undefined' && state.adminToken) ? state.adminToken : '';
-      if (adminToken) headers['X-Admin-Token'] = adminToken;
-    } catch(_) {}
-
-    // 1) DELETE /api/mixes/:id
-    let t = await api('/api/mixes/'+encodeURIComponent(id), { method:'DELETE', headers }).catch(()=>null);
-    if (t && (t.ok || t.status===204)) return true;
-
-    // 2) DELETE /api/mixes/:id?authorId=...
-    t = await api('/api/mixes/'+encodeURIComponent(id)+'?authorId='+encodeURIComponent(uid), { method:'DELETE', headers }).catch(()=>null);
-    if (t && (t.ok || t.status===204)) return true;
-
-    // 3) POST /api/mixes/delete { id, authorId }
-    t = await api('/api/mixes/delete', { method:'POST', headers, body: JSON.stringify({ id, authorId: uid }) }).catch(()=>null);
-    if (t && (t.ok || t.status===204)) return true;
-
-    // 4) POST override
-    t = await api('/api/mixes/'+encodeURIComponent(id)+'?_method=DELETE', { method:'POST', headers, body: JSON.stringify({ authorId: uid }) }).catch(()=>null);
-    if (t && (t.ok || t.status===204)) return true;
-
-    // 5) DELETE с body
-    t = await api('/api/mixes/'+encodeURIComponent(id), { method:'DELETE', headers, body: JSON.stringify({ authorId: uid }) }).catch(()=>null);
-    if (t && (t.ok || t.status===204)) return true;
-
-    let status = t ? t.status : 'нет ответа';
-    let body = '';
-    try {
-      const ct = t && t.headers ? (t.headers.get('content-type')||'') : '';
-      body = t ? (ct.includes('json') ? JSON.stringify(await t.json()) : await t.text()) : '';
-    } catch(_) {}
-    throw new Error('Удаление микса не удалось: ' + status + (body ? ' — ' + body : ''));
-  }
-
-  // ========================= ПОИСК ==========================================
-  function filterFlavorsByQueryAdv(flavors, query){
-    function normalize(s){ return String(s||'').toLowerCase().replace(/ё/g,'е').trim(); }
-    var q = normalize(query);
-    if(!q) return flavors||[];
-    var SYN = {"киви":["kiwi"],"банан":["banana"],"манго":["mango"],"арбуз":["watermelon"],"клубн":["straw"],"мята":["mint","ice"],"молоко":["milk"],"ванил":["vanil","vanilla"],"слив":["cream"],"шоколад":["choco","chocolate"],"кисл":["sour"],"слад":["sweet"]};
-    var tokens = q.split(/\s+/).filter(Boolean);
-    function textOf(f){ return normalize([f && f.name, f && f.description, Array.isArray(f && f.tags)? (f.tags.join(' ')) : '' ].join(' ')); }
-    function brandOf(f){ return normalize(f && f.brand); }
-
-    var expanded = [];
-    tokens.forEach(function(t){
-      expanded.push(t);
-      Object.keys(SYN).forEach(function(k){
-        if (t.includes(k)) expanded.push(...SYN[k]);
+    function uuid(){
+      return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c=>{
+        const r = Math.random()*16|0, v = c==='x'? r : (r&0x3|0x8);
+        return v.toString(16);
       });
-    });
-    return (flavors||[]).filter(function(f){
-      var hay = textOf(f); var b = brandOf(f);
-      return expanded.every(function(t){ return hay.includes(t) || b.includes(t); });
-    });
-  }
-
-  // ========================= РЕНДЕР =========================================
-  function render(){
-    var root = document.getElementById('root');
-    if (!root) return;
-
-    var brands = Array.from(new Set((state.flavors||[]).map(function(f){return normalizeBrand(f.brand);}))).sort((a,b)=>a.localeCompare(b,'ru'));
-    var flavorsByBrand = {};
-    (state.flavors||[]).forEach(function(f){ (flavorsByBrand[normalizeBrand(f.brand)]||(flavorsByBrand[normalizeBrand(f.brand)]=[])).push(f); });
-
-    var brandsTabs = brands.map(function(b){ return {brand:b, count:(flavorsByBrand[b]||[]).length}; });
-
-    var header =
-      '<div class="flex items-center justify-between gap-3 py-3 px-3 md:px-4">' +
-        '<div class="flex items-center gap-2">' +
-          (state.logoUrl?('<img src="'+state.logoUrl+'" class="w-8 h-8 rounded-xl border border-slate-800 object-cover" alt="logo" />'):LogoSVG('w-8 h-8')) +
-          '<div class="text-lg font-semibold">Hookah Mixes</div>' +
-        '</div>' +
-        '<div class="flex items-center gap-2">' +
-          '<button data-tab="constructor" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] '+(state.activeTab==='constructor'?'bg-slate-100 text-slate-900':'border border-slate-700 hover:bg-slate-800')+'">Микс</button>' +
-          '<button data-tab="guest" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] '+(state.activeTab==='guest'?'bg-slate-100 text-slate-900':'border border-slate-700 hover:bg-slate-800')+'">Миксы гостей</button>' +
-          (isAdmin()?('<button data-tab="admin" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] '+(state.activeTab==='admin'?'bg-slate-100 text-slate-900':'border border-slate-700 hover:bg-slate-800')+'">Админ</button>'):'') +
-        '</div>' +
-      '</div>';
-
-    var brandsHTML = brandsTabs.map(function(b){
-      return '<button data-brand="'+b.brand+'" class="inline-flex items-center justify-center rounded-xl h-8 px-3 text-[12px] '+(state.activeBrand===b.brand?'bg-slate-100 text-slate-900':'border border-slate-700 hover:bg-slate-800')+'">'+b.brand+'<span class="ml-1 text-[11px] opacity-60">('+b.count+')</span></button>';
-    }).join('');
-
-    var s = String(state.search||'').trim().toLowerCase();
-    var searched = filterFlavorsByQueryAdv(state.flavors, s);
-
-    var listFlavors = (state.search ? searched : (flavorsByBrand[state.activeBrand]||[]));
-
-    var partsHTML = (state.parts||[]).map(function(p){
-      var f = state.flavors.find(function(x){ return x.id===p.flavorId; });
-      return (
-        '<div class="flex items-center gap-2 border border-slate-800 rounded-xl p-2">' +
-          '<div class="min-w-0 flex-1">' +
-            '<div class="text-sm truncate">'+(f?(f.brand+' • '+f.name):p.flavorId)+'</div>' +
-            '<input type="range" min="0" max="100" step="1" value="'+safePercent(p.percent)+'" data-range="'+p.flavorId+'" class="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer" />' +
-          '</div>' +
-          '<div class="text-sm w-12 text-right" data-percent-for="'+p.flavorId+'">'+safePercent(p.percent)+'%</div>' +
-          '<button class="rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-50 text-[12px] h-8 px-2" data-remove="'+p.flavorId+'">Убрать</button>' +
-        '</div>'
-      );
-    }).join('');
-
-    var total = percentSum(state.parts);
-
-    var mixStrength10 = (function(parts, flavors){
-      if(!Array.isArray(parts)||!Array.isArray(flavors)) return null;
-      var t=percentSum(parts); if(!parts.length||t<=0) return null;
-      var w=0; for(var i=0;i<parts.length;i++){
-        var p=parts[i]; var pr=safePercent(p && p.percent); if(pr<=0) continue;
-        var fl=flavors.find(function(x){return x && x.id===(p && p.flavorId);}); if(!fl) continue;
-        w += getStrength10(fl) * (pr/t);
-      }
-      return w? Math.round(w*10)/10 : null;
-    })(state.parts, state.flavors);
-    var mixTaste = getMixTasteLabel(state.parts, state.flavors);
-
-    var strengthBadge='';
-    if(typeof mixStrength10==='number'){
-      var c=strengthColor(mixStrength10);
-      strengthBadge='<span class="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] border '+c.bg+' '+c.text+' '+c.border+'">'+mixStrength10.toFixed(1)+'</span>';
     }
 
-    var flavorsHTML = listFlavors.map(function(f){
-      var inMix = state.parts.some(function(p){return p.flavorId===f.id;});
-      var s = getStrength10(f);
-      var c = strengthColor(s);
-      return (
-        '<div class="flex items-center justify-between gap-2 text-sm border border-slate-800 rounded-xl p-2">' +
-          '<div class="min-w-0">' +
-            '<div class="truncate font-semibold">'+f.brand+' • '+f.name+'</div>' +
-            (f.description?'<div class="text-[12px] opacity-70">'+f.description+'</div>':'') +
-            ((f.tags||[]).length>0?'<div class="text-[11px] opacity-70">'+(f.tags||[]).join(', ')+'</div>':'') +
-          '</div>' +
-          '<div class="flex items-center gap-2">' +
-            '<span class="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] border '+c.bg+' '+c.text+' '+c.border+'">'+s.toFixed(1)+'</span>' +
-            (inMix?'<span class="text-[11px] opacity-60">В миксе</span>':'<button class="rounded-lg bg-emerald-500/20 border border-emerald-700 hover:bg-emerald-500/30 h-8 px-3" data-add="'+f.id+'">Добавить</button>') +
-          '</div>' +
-        '</div>'
-      );
-    }).join('');
+    // ============== State ==============
+    const state = {
+      user: null,
+      flavors: [],
+      guestMixes: [],
+      builder: { title:'', parts:[], notes:'' },
+      activeTab: 'builder',
+      filteredBrand: '',
+      search: '',
+      adminToken: localStorage.getItem('admin_token') || ''
+    };
+    const isAdmin = () => !!(state.adminToken && state.adminToken.length >= 6);
 
-    var guestHTML = state.guestMixes.map(function(m){
-      var c = typeof m.strength10==='number' ? strengthColor(m.strength10) : strengthColor(null);
-      var sBadge = typeof m.strength10==='number' ? '<span class="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] border '+c.bg+' '+c.text+' '+c.border+'">'+m.strength10.toFixed(1)+'</span>' : '';
-      var tBadge = m.taste ? '<span class="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] border border-slate-700 bg-slate-900">'+m.taste+'</span>' : '';
-      var notes = m.notes ? '<div class="text-[12px] opacity-80 mt-1">'+m.notes+'</div>' : '';
-      var parts = (m.parts||[]).map(function(pp){
-        var fl = state.flavors.find(function(x){return x.id===pp.flavorId;});
-        return '<div class="flex items-center justify-between text-[12px]"><span class="truncate">'+(fl?fl.name:pp.flavorId)+'</span><span class="opacity-70">'+safePercent(pp.percent)+'%</span></div>';
+    // ============== Data loaders ==============
+    async function initUser(){
+      try{
+        if (window.Telegram && Telegram.WebApp && Telegram.WebApp.initDataUnsafe && Telegram.WebApp.initDataUnsafe.user){
+          const u = Telegram.WebApp.initDataUnsafe.user;
+          state.user = { id:String(u.id), name:(u.first_name||'') + (u.last_name?(' '+u.last_name):'') };
+          return;
+        }
+      }catch(e){}
+      state.user = { id:'guest-'+Math.random().toString(36).slice(2,8), name:'Гость' };
+    }
+
+    async function loadFlavors(){
+      const r = await api('/api/flavors', { method:'GET' });
+      const list = await r.json();
+      state.flavors = Array.isArray(list)? list.map(normalizeFlavor) : [];
+    }
+    function normalizeFlavor(f){
+      function parseTags(v){ if (!v) return []; if (Array.isArray(v)) return v; return String(v).split(',').map(s=>s.trim()).filter(Boolean);}
+      return {
+        id:String(f.id||''),
+        brand:String(f.brand||''),
+        name:String(f.name||''),
+        description:String(f.description||''),
+        tags:parseTags(f.tags),
+        strength10:Number(f.strength10||0)
+      };
+    }
+
+    async function loadMixes(){
+      const r = await api('/api/mixes', { method:'GET' });
+      const list = await r.json();
+      state.guestMixes = Array.isArray(list)? list : [];
+    }
+
+    // ============== Builder helpers ==============
+    function percentSum(parts){ return (parts||[]).reduce((s,p)=> s + (Number(p.percent)||0), 0); }
+    function clampPercentForPart(parts, idx, newValue){
+      newValue = clamp(Number(newValue)||0, 0, 100);
+      const cp = parts.map(p=>({ flavorId:String(p.flavorId), percent:Number(p.percent)||0 }));
+      const diff = newValue - (cp[idx]?cp[idx].percent:0);
+      if (diff <= 0) { if (cp[idx]) cp[idx].percent = newValue; return cp; }
+      let remain = diff;
+      for (let i=0;i<cp.length;i++){
+        if (i===idx) continue;
+        const take = Math.min(cp[i].percent, remain);
+        cp[i].percent -= take;
+        remain -= take;
+        if (remain <= 0) break;
+      }
+      cp[idx].percent += diff - remain;
+      return cp;
+    }
+    function computeStrength10(parts){
+      let s=0,w=0;
+      for (const p of parts){
+        const f = state.flavors.find(x=> String(x.id)===String(p.flavorId));
+        if (!f) continue;
+        const wgt = Number(p.percent)||0;
+        s += (Number(f.strength10)||0) * wgt; w += wgt;
+      }
+      if (w<=0) return 0;
+      return Math.round(s / w);
+    }
+    function mixTaste(parts){
+      const text = parts.map(p=>{
+        const f = state.flavors.find(x=> String(x.id)===String(p.flavorId));
+        return f ? (f.brand+' '+f.name) : '';
+      }).join(' ').toLowerCase();
+      if (/mint|ice|лед|frost|freeze|cool/.test(text)) return 'мята/лед';
+      if (/lemon|lime|цитрус|апельсин|orange|лимон|лайм/.test(text)) return 'цитрус';
+      if (/berry|ягод|клубн|вишн|смород|черник/.test(text)) return 'ягоды';
+      if (/mango|манго|персик|peach|pine|ананас|арбуз|melon|дын/.test(text)) return 'фрукты';
+      return '';
+    }
+
+    // ============== UI rendering ==============
+    function render(){
+      const root = document.getElementById('root');
+      if (!root) return;
+
+      // Tabs
+      const tabs =
+        '<div class="flex items-center gap-2">' +
+        tabBtn('builder','Микс') +
+        tabBtn('guests','Миксы гостей') +
+        (isAdmin()?tabBtn('admin','Админ'):'') +
+        '</div>';
+
+      function tabBtn(id, title){
+        const active = state.activeTab===id;
+        return '<button data-tab="'+id+'" class="rounded-xl h-9 px-3 text-[12px] '+(active?'bg-slate-100 text-slate-900':'border border-slate-700 hover:bg-slate-800')+'">'+title+'</button>';
+      }
+
+      // Header
+      const header =
+        '<div class="flex items-center justify-between">' +
+          '<div class="text-xl font-bold">Hookah Mixes</div>' +
+          tabs +
+        '</div>';
+
+      let content = '';
+
+      if (state.activeTab === 'builder') {
+        content = renderBuilder();
+      } else if (state.activeTab === 'guests') {
+        content = renderGuests();
+      } else {
+        content = renderAdmin();
+      }
+
+      root.innerHTML =
+        '<div class="max-w-3xl mx-auto p-4 md:p-6 space-y-4">' +
+          header +
+          content +
+        '</div>';
+
+      // Bind common tab handlers
+      qsa('[data-tab]').forEach(b=> b.onclick = () => { state.activeTab = b.getAttribute('data-tab'); render(); });
+    }
+
+    function renderBuilder(){
+      const brands = Array.from(new Set(state.flavors.map(f=>f.brand))).sort((a,b)=> a.localeCompare(b,'ru'));
+      const parts = state.builder.parts;
+
+      const flavorsFiltered = state.flavors.filter(f=>{
+        if (state.filteredBrand && f.brand!==state.filteredBrand) return false;
+        const s = String(state.search||'').trim().toLowerCase();
+        if (s){
+          const hay = (f.brand+' '+f.name+' '+(f.description||'')+' '+(f.tags||[]).join(',')).toLowerCase();
+          if (!hay.includes(s)) return false;
+        }
+        return true;
+      });
+
+      const partsHtml = parts.map((p, idx)=>{
+        const fl = state.flavors.find(x=> String(x.id)===String(p.flavorId));
+        return (
+          '<div class="flex items-center gap-2 border border-slate-800 rounded-xl p-2">' +
+            '<div class="min-w-0 flex-1">' +
+              '<div class="text-sm truncate">'+esc(fl? (fl.brand+' • '+fl.name) : p.flavorId)+'</div>' +
+              '<input type="range" min="0" max="100" step="1" value="'+escAttr(Number(p.percent)||0)+'" data-idx="'+idx+'" class="w-full h-2 bg-slate-800 rounded-lg appearance-none cursor-pointer" />' +
+            '</div>' +
+            '<div class="text-sm w-12 text-right">'+(Number(p.percent)||0)+'%</div>' +
+            '<button class="rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-50 text-[12px] h-8 px-2" data-rm="'+idx+'">Убрать</button>' +
+          '</div>'
+        );
       }).join('');
-      var canDelete = !!((state.user && m.authorId && String(m.authorId)===String(state.user.id)) || isAdmin());
-      var delBtn = canDelete ? '<button data-del="'+m.id+'" class="ml-auto inline-flex items-center justify-center rounded-xl h-7 px-2 text-[11px] border border-rose-700 text-rose-300 hover:bg-rose-900/40">Удалить</button>' : '';
-      return (
-        '<div class="border border-slate-800 rounded-xl p-2 text-sm">' +
-          '<div class="flex items-center gap-2">' +
-            '<div class="font-semibold truncate">'+m.title+'</div>' +
-            sBadge + tBadge + delBtn +
+
+      const sidebar =
+        '<div class="rounded-xl border border-slate-800 p-3 bg-slate-900/40">' +
+          '<div class="text-[12px] opacity-80 mb-2">Поиск вкусов</div>' +
+          '<div class="flex items-center gap-2 mb-2">' +
+            '<select id="brandFilter" class="rounded-lg h-9 px-3 bg-slate-950 border border-slate-800 outline-none">' +
+              '<option value="">Все бренды</option>' +
+              brands.map(b=> '<option value="'+escAttr(b)+'">'+esc(b)+'</option>').join('') +
+            '</select>' +
+            '<input id="searchInp" placeholder="Поиск..." class="flex-1 rounded-lg h-9 px-3 bg-slate-950 border border-slate-800 outline-none" />' +
           '</div>' +
-          '<div class="text-[11px] text-slate-400">микс от '+(m.author||'Гость')+'</div>' +
-          notes +
-          '<div class="mt-1 space-y-0.5">'+parts+'</div>' +
-        '</div>'
-      );
-    }).join('');
+          '<div id="flavorsList" class="space-y-2 max-h-[50vh] overflow-auto"></div>' +
+        '</div>';
 
-    const headerHTML =
-      '<header class="flex items-center justify-between">' +
-        '<div class="flex items-center gap-2">' +
-          (state.logoUrl?('<img src="'+state.logoUrl+'" class="w-8 h-8 rounded-xl border border-slate-800 object-cover" alt="logo" />'):LogoSVG('w-8 h-8')) +
-          '<div class="text-lg font-semibold">Hookah Mixes</div>' +
-        '</div>' +
-        '<div class="flex items-center gap-2">' +
-          '<button data-tab="constructor" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] '+(state.activeTab==='constructor'?'bg-slate-100 text-slate-900':'border border-slate-700 hover:bg-slate-800')+'">Микс</button>' +
-          '<button data-tab="guest" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] '+(state.activeTab==='guest'?'bg-slate-100 text-slate-900':'border border-slate-700 hover:bg-slate-800')+'">Миксы гостей</button>' +
-          (isAdmin()?('<button data-tab="admin" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] '+(state.activeTab==='admin'?'bg-slate-100 text-slate-900':'border border-slate-700 hover:bg-slate-800')+'">Админ</button>'):'') +
-        '</div>' +
-      '</header>';
-
-    const mixBlock =
-      '<div id="mixBlock" class="rounded-2xl border border-slate-800 bg-slate-900">' +
-        '<div class="px-3 pt-3"><div class="text-xs font-semibold">Микс</div></div>' +
-        '<div class="p-3 space-y-2">' +
-          (state.parts.length===0?'<div class="text-[12px] text-slate-400">Добавьте вкусы из списка</div>':'') +
-          partsHTML +
-          '<div class="flex items-center justify-between text-[12px]">' +
-            '<span>Итог: <b id="mixTotal">'+total+'</b>%</span>' +
-            '<div class="flex items-center gap-2">' +
-              '<span id="mixStrength">'+strengthBadge+'</span>' +
-              '<span id="mixTaste">'+(mixTaste?('<span class="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] border border-slate-700 bg-slate-900">'+mixTaste+'</span>'):'')+'</span>' +
+      const page =
+        '<div class="grid grid-cols-1 md:grid-cols-3 gap-4">' +
+          '<div class="md:col-span-2 space-y-3">' +
+            '<div class="rounded-xl border border-slate-800 p-3 bg-slate-900/40 space-y-2">' +
+              '<input id="mixTitle" placeholder="Название микса" class="w-full rounded-lg h-9 px-3 bg-slate-950 border border-slate-800 outline-none" />' +
+              '<div id="mixParts" class="space-y-2">'+partsHtml+'</div>' +
+              '<div class="text-[12px] opacity-80">Сумма: '+percentSum(parts)+'%</div>' +
+              '<textarea id="mixNotes" rows="3" placeholder="Заметки" class="w-full rounded-lg px-3 py-2 bg-slate-950 border border-slate-800 outline-none"></textarea>' +
+              '<div class="flex items-center gap-2">' +
+                '<button id="saveMix" class="rounded-lg bg-indigo-500/20 border border-indigo-700 hover:bg-indigo-500/30 h-9 px-3">Сохранить</button>' +
+              '</div>' +
             '</div>' +
           '</div>' +
-        '</div>' +
-      '</div>';
+          '<div class="space-y-3">' + sidebar + '</div>' +
+        '</div>';
 
-    const titleBlock =
-      '<div class="rounded-2xl border border-slate-800 bg-slate-900">' +
-        '<div class="px-3 pt-3"><div class="text-xs font-semibold">Название и описание</div></div>' +
-        '<div class="p-3 space-y-2">' +
-          '<input id="title" placeholder="Название микса" value="'+(state.title||'')+'" class="h-9 w-full rounded-xl border border-slate-700 bg-slate-900 px-3 text-sm outline-none focus:ring-2 focus:ring-slate-600" />' +
-          '<textarea id="notes" placeholder="Описание / заметки…" rows="3" class="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-600">'+(state.notes||'')+'</textarea>' +
-          '<div class="flex gap-2">' +
-            '<button id="reset" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-slate-800">Сброс</button>' +
-            '<button id="save" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] '+(isMixValid(state.parts,state.title)?'bg-slate-100 text-slate-900 hover:bg-white':'opacity-50 cursor-not-allowed border border-slate-700')+'">Сохранить</button>' +
-          '</div>' +
-        '</div>' +
-      '</div>';
+      // Render container
+      setTimeout(bindBuilderHandlers, 0);
+      return page;
 
-    const adminBlock = (!isAdmin() ? '' :
-      ('<div class="rounded-2xl border border-slate-800 bg-slate-900">' +
-       '  <div class="px-3 pt-3"><div class="text-xs font-semibold">Админ</div></div>' +
-       '  <div class="p-3 space-y-3">' +
-       '    <div class="flex gap-2">' +
-       '      <input id="admBrand" class="h-9 flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Бренд" />' +
-       '      <input id="admName" class="h-9 flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Название" />' +
-       '      <input id="admTags" class="h-9 flex-1 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Теги (через ,)" />' +
-       '      <input id="admStrength" class="h-9 w-28 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Крепость" />' +
-       '      <button id="admAddFlavor" class="rounded-xl h-9 px-3 text-[12px] bg-emerald-500/20 border border-emerald-700 hover:bg-emerald-500/30">Добавить</button>' +
-       '    </div>' +
-       '    <div>' +
-       '      <div class="text-xs font-semibold mb-2">Все вкусы</div>' +
-       '      <div id="admFlavorList" class="space-y-1"></div>' +
-       '    </div>' +
-       '  </div>' +
-       '</div>')
-    );
+      function bindBuilderHandlers(){
+        const root = document.getElementById('root');
+        const brandSel = qs('#brandFilter', root);
+        const searchInp = qs('#searchInp', root);
 
-    const adminLoginBlock = (!isAdmin() && state.adminPrompt) ? (
-      '<div class="rounded-2xl border border-slate-800 bg-slate-900">' +
-        '<div class="px-3 pt-3"><div class="text-xs font-semibold">Админ-доступ</div></div>' +
-        '<div class="p-3 space-y-2">' +
-          '<input id="admToken" class="h-9 w-full rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Вставьте X-Admin-Token" />' +
-          '<div class="flex gap-2">' +
-            '<button id="admSaveToken" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] bg-slate-100 text-slate-900 hover:bg-white">Сохранить токен</button>' +
-            '<button id="admCancel" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-slate-800">Скрыть</button>' +
-          '</div>' +
-          '<div id="admMsg" class="text-[11px] text-slate-400">После сохранения появится вкладка «Админ».</div>' +
-        '</div>' +
-      '</div>'
-    ) : '';
+        if (brandSel){ brandSel.value = state.filteredBrand || ''; brandSel.onchange = () => { state.filteredBrand = brandSel.value || ''; render(); } }
+        if (searchInp){ searchInp.value = state.search || ''; searchInp.oninput = () => { state.search = searchInp.value || ''; render(); } }
 
-    const guestBlock =
-      '<div class="rounded-2xl border border-slate-800 bg-slate-900">' +
-        '<div class="px-3 pt-3"><div class="text-xs font-semibold">Миксы гостей</div></div>' +
-        '<div class="p-3 space-y-2">' +
-          (state.guestMixes.length===0?'<div class="text-[12px] text-slate-400">Пока нет сохранённых миксов</div>':'') +
-          guestHTML +
-        '</div>' +
-      '</div>';
-
-    root.innerHTML =
-      '<div class="max-w-3xl mx-auto p-4 md:p-6 space-y-4">' +
-        header +
-        (state.activeTab==='constructor'
-          ? (
-              '<div class="grid grid-cols-1 md:grid-cols-3 gap-4">' +
-                '<div class="md:col-span-2 space-y-3">' + mixBlock + '</div>' +
-                '<div class="space-y-3">' +
-                  '<div class="rounded-2xl border border-slate-800 bg-slate-900">' +
-                    '<div class="px-3 pt-3"><div class="text-xs font-semibold">Поиск вкусов</div></div>' +
-                    '<div class="p-3 space-y-2">' +
-                      '<div class="flex items-center gap-2">' +
-                        '<select id="brandFilter" class="rounded-lg h-9 px-3 bg-slate-950 border border-slate-800 outline-none">' +
-                          '<option value="">Все бренды</option>' +
-                          brands.map(function(b){return '<option value="'+b+'">'+b+'</option>';}).join('') +
-                        '</select>' +
-                        '<input id="searchInp" placeholder="Поиск..." class="flex-1 rounded-lg h-9 px-3 bg-slate-950 border border-slate-800 outline-none" />' +
-                      '</div>' +
-                      '<div id="flavorsList" class="space-y-2 max-h-[50vh] overflow-auto">'+flavorsHTML+'</div>' +
-                    '</div>' +
-                  '</div>' +
-                  titleBlock +
-                '</div>' +
-              '</div>'
-            )
-          : (state.activeTab==='guest'
-              ? ('<div class="space-y-3">'+guestBlock+'</div>')
-              : (adminLoginBlock + adminBlock)
-            )
-        ) +
-      '</div>';
-
-    // Наполнить фильтры/поиск
-    (function updateSearchUI(){
-      var brandSel = document.getElementById('brandFilter');
-      var searchInp = document.getElementById('searchInp');
-      if (brandSel){ brandSel.value = state.activeBrand || ''; brandSel.addEventListener('change', function(){ state.activeBrand = brandSel.value || ''; render(); }); }
-      if (searchInp){ searchInp.value = state.search || ''; searchInp.addEventListener('input', function(){ state.search = searchInp.value || ''; render(); }); }
-    })();
-
-    // Сохранить/сброс
-    var saveBtn = document.getElementById('save');
-    if (saveBtn) {
-      saveBtn.addEventListener('click', async function(){
-        if (!isMixValid(state.parts,state.title)) return;
-        var mix = {
-          id: uuidv4(),
-          title: String(state.title||'Микс').slice(0,120),
-          parts: (state.parts||[]).map(function(x){ return { flavorId: x.flavorId, percent: safePercent(x.percent) }; }),
-          notes: String(state.notes||'').slice(0,2000),
-          author: String(state.user && state.user.name || 'Гость'),
-          authorId: String(state.user && state.user.id || ''),
-          createdAt: Date.now(),
-          strength10: (function(parts, flavors){ var t=percentSum(parts); if(!parts.length||t<=0) return null; var w=0; for(var i=0;i<parts.length;i++){ var p=parts[i]; var pr=safePercent(p && p.percent); if(pr<=0) continue; var fl=flavors.find(function(x){return x && x.id===(p && p.flavorId);}); if(!fl) continue; w += getStrength10(fl) * (pr/t);} return w? Math.round(w*10)/10 : null; })(state.parts, state.flavors),
-          taste: getMixTasteLabel(state.parts, state.flavors)
-        };
-        try{
-          var r=await api('/api/mixes',{method:'POST',body:JSON.stringify(mix)});
-          if(!r.ok){ alert('Не удалось сохранить микс ('+r.status+'): '+(await r.text().catch(()=>''))); return; }
-          await loadGuestMixes();
-          state.title=''; state.notes=''; state.parts=[]; state.activeTab='guest';
-          render();
-        }catch(e){
-          console.error(e); alert('Ошибка сети при сохранении');
-        }
-      });
-    }
-
-    // Удаление своего/любой (для админа) микса
-    root.querySelectorAll('[data-del]').forEach(function(btn){
-      btn.addEventListener('click', async function(){
-        const id = btn.getAttribute('data-del');
-        if (!id) return;
-        if (!confirm('Удалить микс?')) return;
-        try{
-          await deleteMixOnServer(id, state.user);
-          await loadGuestMixes();
-          render();
-        }catch(e){
-          console.error(e); alert((e && e.message) ? e.message : 'Ошибка удаления');
-        }
-      });
-    });
-
-    // Админ-доступ (сохранить/скрыть)
-    var tokBtn = document.getElementById('admSaveToken');
-    if (tokBtn){
-      tokBtn.addEventListener('click', function(){
-        var v = (document.getElementById('admToken')||{}).value || '';
-        try{ localStorage.setItem('admin_token', v); }catch(_){}
-        state.adminToken = v || "";
-        state.adminPrompt = false;
-        if (state.activeTab!=='admin') state.activeTab='admin';
-        render();
-      });
-    }
-    var tokCancel = document.getElementById('admCancel');
-    if (tokCancel){
-      tokCancel.addEventListener('click', function(){
-        state.adminPrompt = false; render();
-      });
-    }
-
-    // Построение списка вкусов в админке + удаление
-    buildAdminFlavorList(root);
-
-    // Добавление вкуса
-    var btnAdd = document.getElementById('admAddFlavor');
-    if (btnAdd){
-      btnAdd.addEventListener('click', async function(){
-        try{
-          var brand = (document.getElementById('admBrand')||{}).value || '';
-          var name = (document.getElementById('admName')||{}).value || '';
-          var tags = (document.getElementById('admTags')||{}).value || '';
-          var st = (document.getElementById('admStrength')||{}).value || '';
-          if (!brand || !name) { alert('Укажите бренд и название'); return; }
-          var payload = { brand, name, tags, strength10: Number(st||0) };
-          var headers = { 'X-Admin-Token': state.adminToken };
-          var r = await api('/api/flavors', { method:'POST', headers, body: JSON.stringify(payload) });
-          if (!r.ok) throw new Error('Не удалось добавить вкус');
-          await loadFlavors();
-          render();
-        }catch(e){
-          console.error(e);
-          alert((e && e.message) ? e.message : 'Ошибка добавления вкуса');
-        }
-      });
-    }
-  }
-
-  // Построение списка вкусов в админке + удаление
-  function buildAdminFlavorList(root){
-    var list = root.querySelector('#admFlavorList');
-    if (!list) return;
-    var byBrand = {};
-    (state.flavors||[]).forEach(function(f){
-      var b = (f.brand||'').trim() || 'Без бренда';
-      (byBrand[b]||(byBrand[b]=[])).push(f);
-    });
-
-    var html = Object.keys(byBrand).sort().map(function(brand){
-      var rows = byBrand[brand].sort(function(a,b){ return a.name.localeCompare(b.name, 'ru'); })
-        .map(function(f){
-          return (
-            '<div class="flex items-center justify-between gap-2 text-[12px] border border-slate-800 rounded-lg px-2 py-1">' +
-              '<div class="min-w-0 truncate"><span class="opacity-70">'+brand+'</span> • '+f.name+'</div>' +
-              '<button data-del-flavor="'+f.id+'" class="rounded-lg bg-rose-900/20 border border-rose-700 text-rose-300 hover:bg-rose-900/40">Удалить</button>' +
+        const list = qs('#flavorsList', root);
+        if (list){
+          list.innerHTML = flavorsFiltered.map(f=>(
+            '<div class="flex items-center justify-between gap-2 text-sm border border-slate-800 rounded-xl p-2">' +
+              '<div class="min-w-0">' +
+                '<div class="truncate font-semibold">'+esc(f.brand)+' • '+esc(f.name)+'</div>' +
+                (f.description?'<div class="text-[12px] opacity-70">'+esc(f.description)+'</div>':'') +
+              '</div>' +
+              '<button class="rounded-lg bg-emerald-500/20 border border-emerald-700 hover:bg-emerald-500/30 h-8 px-3" data-add="'+escAttr(f.id)+'">Добавить</button>' +
             '</div>'
-          );
-        }).join('');
-      return (
-        '<div class="space-y-1">' +
-          '<div class="text-[11px] uppercase tracking-wide text-slate-400">'+brand+'</div>' +
-          rows +
-        '</div>'
-      );
-    }).join('') || '<div class="text-[12px] text-slate-400">Пока нет вкусов</div>';
-    list.innerHTML = html;
+          )).join('') || '<div class="text-sm text-slate-400">Ничего не найдено</div>';
 
-    // навешиваем удаление вкуса
-    Array.prototype.forEach.call(list.querySelectorAll('[data-del-flavor]'), function(btn){
-      btn.addEventListener('click', async function(){
-        var id = btn.getAttribute('data-del-flavor');
-        if (!id) return;
-        if (!confirm('Удалить вкус "'+id+'"? Это действие необратимо.')) return;
-        try{
-          const headers = { 'X-Admin-Token': state.adminToken };
-          const r = await api('/api/flavors', { method:'POST', headers, body: JSON.stringify({ action:'delete', id }) });
-          if (!r.ok) throw new Error('Не удалось удалить вкус');
-          await loadFlavors();
-          render();
-        }catch(e){
-          console.error(e); alert((e && e.message) ? e.message : 'Ошибка удаления вкуса');
+          qsa('[data-add]', list).forEach(btn => {
+            btn.onclick = () => {
+              const id = btn.getAttribute('data-add');
+              const cp = state.builder.parts.slice();
+              if (!cp.some(x=> String(x.flavorId)===String(id))) cp.push({ flavorId:id, percent:20 });
+              state.builder.parts = cp; render();
+            };
+          });
         }
-      });
-    });
-  }
 
-  function attachMixEvents(){
-    Array.prototype.forEach.call(document.querySelectorAll('[data-range]'), function(sl){
-      sl.addEventListener('input', function(){
-        var id=this.getAttribute('data-range');
-        var req=safePercent(this.value);
-        var newParts = state.parts.map(function(p){ return p.flavorId===id ? { flavorId: id, percent: clampPercentForPart(state.parts, id, req) } : p; });
-        var newVal = newParts.find(function(p){return p.flavorId===id;}).percent;
-        state.parts = newParts;
-        if (newVal !== req) { this.value = newVal; }
-        updateMixStatsUI();
-        var span = document.querySelector('[data-percent-for="'+id+'"]');
-        if(span) span.textContent = newVal + '%';
-      });
-    });
-    Array.prototype.forEach.call(document.querySelectorAll('[data-remove]'), function(btn){
-      btn.addEventListener('click', function(){ var id=this.getAttribute('data-remove'); state.parts = state.parts.filter(function(p){return p.flavorId!==id;}); rerenderMixBlock(); });
-    });
-  }
+        const title = qs('#mixTitle', root);
+        const notes = qs('#mixNotes', root);
+        if (title) { title.value = state.builder.title || ''; title.oninput = () => { state.builder.title = title.value || ''; }; }
+        if (notes) { notes.value = state.builder.notes || ''; notes.oninput = () => { state.builder.notes = notes.value || ''; }; }
 
-  function rerenderMixBlock(){
-    var container = document.getElementById('mixBlock'); if(!container) return;
-    var total = percentSum(state.parts);
-    var strength = (function(){ var t=percentSum(state.parts); if(!state.parts.length||t<=0) return null; var w=0; for(var i=0;i<state.parts.length;i++){ var p=state.parts[i]; var pr=safePercent(p && p.percent); if(pr<=0) continue; var fl=state.flavors.find(function(x){return x && x.id===(p && p.flavorId);}); if(!fl) continue; w += getStrength10(fl) * (pr/t);} return w?Math.round(w*10)/10:null; })();
-    var strengthBadge=''; if(typeof strength==='number'){ var c=strengthColor(strength); strengthBadge='<span class="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] border '+c.bg+' '+c.text+' '+c.border+'">'+strength.toFixed(1)+'</span>'; }
-    var mixTaste = getMixTasteLabel(state.parts, state.flavors);
-    container.querySelector('#mixTotal').textContent = total;
-    var sEl = container.querySelector('#mixStrength'); if (sEl) sEl.innerHTML = strengthBadge || '';
-    var tEl = container.querySelector('#mixTaste'); if (tEl) tEl.innerHTML = mixTaste?('<span class="inline-flex items-center rounded-md px-2 py-0.5 text-[11px] border border-slate-700 bg-slate-900">'+mixTaste+'</span>'):'';
-  }
+        const partsRoot = qs('#mixParts', root);
+        if (partsRoot){
+          qsa('input[type="range"][data-idx]', partsRoot).forEach(inp=>{
+            inp.oninput = () => {
+              const idx = Number(inp.getAttribute('data-idx')||'0');
+              const val = Number(inp.value||0);
+              state.builder.parts = clampPercentForPart(state.builder.parts, idx, val);
+              render();
+            };
+          });
+          qsa('[data-rm]', partsRoot).forEach(btn=>{
+            btn.onclick = () => {
+              const idx = Number(btn.getAttribute('data-rm')||'-1');
+              if (idx>=0){ const cp = state.builder.parts.slice(); cp.splice(idx,1); state.builder.parts = cp; render(); }
+            };
+          });
+        }
 
-  function updateMixStatsUI(){ try{ rerenderMixBlock(); }catch(_){ } }
+        const saveBtn = qs('#saveMix', root);
+        if (saveBtn){
+          saveBtn.onclick = async () => {
+            const p = state.builder.parts.map(x=>({ flavorId:String(x.flavorId), percent:Number(x.percent)||0 }));
+            const body = {
+              id: uuid(),
+              title: String(state.builder.title||'Микс').slice(0,100),
+              parts: p,
+              notes: String(state.builder.notes||'').slice(0,2000),
+              author: String(state.user && state.user.name || 'Гость'),
+              authorId: String(state.user && state.user.id || ''),
+              createdAt: nowIso(),
+              strength10: computeStrength10(p),
+              taste: mixTaste(p)
+            };
+            try{
+              const r = await api('/api/mixes', { method:'POST', body: JSON.stringify(body) });
+              if (!r.ok) throw new Error('Не удалось сохранить');
+              state.builder = { title:'', parts:[], notes:'' };
+              await loadMixes();
+              state.activeTab = 'guests';
+              render();
+            }catch(e){ alert(e && e.message || 'Ошибка сохранения'); }
+          };
+        }
+      }
+    }
 
-  // ========================= BOOT ===========================================
-  (async function boot(){
-    try{
-      await detectLogo();
+    function renderGuests(){
+      const items = state.guestMixes.slice().sort((a,b)=> String(b.createdAt||'') > String(a.createdAt||'') ? 1 : -1);
+      const html = items.map(m => {
+        const inner = (m.parts||[]).map(pp=>{
+          const fl = state.flavors.find(x=> String(x.id)===String(pp.flavorId));
+          return '<div class="flex items-center gap-2"><span class="truncate mr-2">'+esc(fl?fl.name:pp.flavorId)+'</span><span class="opacity-70">'+(Number(pp.percent)||0)+'%</span></div>';
+        }).join('');
+        const canDelete = !!((state.user && m.authorId && String(m.authorId)===String(state.user.id)) || isAdmin());
+        const delBtn = canDelete ? '<button data-del="'+escAttr(m.id)+'" class="ml-auto inline-flex items-center justify-center rounded-lg bg-rose-900/20 border border-rose-700 text-rose-300 hover:bg-rose-900/40">Удалить</button>' : '';
+        return (
+          '<div class="border border-slate-800 rounded-xl p-2 text-sm">' +
+            '<div class="flex items-center gap-2">' +
+              '<div class="font-semibold truncate">'+esc(m.title||'Без названия')+'</div>' +
+              '<div class="opacity-70 text-[12px]">'+esc(new Date(m.createdAt||Date.now()).toLocaleString())+'</div>' +
+              '<div class="ml-auto opacity-80 text-[12px]">Автор: '+esc(m.author||'Гость')+'</div>' +
+              delBtn +
+            '</div>' +
+            '<div class="mt-2 grid grid-cols-2 gap-2">'+inner+'</div>' +
+            (m.notes?('<div class="mt-2 text-[12px] opacity-80">'+esc(m.notes)+'</div>'):'') +
+          '</div>'
+        );
+      }).join('') || '<div class="text-sm text-slate-400">Пока нет миксов</div>';
+
+      setTimeout(()=>{
+        qsa('[data-del]').forEach(btn=>{
+          btn.onclick = async () => {
+            const id = btn.getAttribute('data-del');
+            if (!id) return;
+            if (!confirm('Удалить микс?')) return;
+            try{
+              await deleteMixOnServer(id, state.user, isAdmin()? state.adminToken : '');
+              await loadMixes();
+              render();
+            }catch(e){ alert(e && e.message || 'Ошибка удаления'); }
+          };
+        });
+      }, 0);
+
+      return '<div class="space-y-3">'+html+'</div>';
+    }
+
+    function renderAdmin(){
+      const form =
+        '<div class="rounded-xl border border-slate-800 p-3 bg-slate-900/40 space-y-2">' +
+          '<div class="text-[12px] opacity-80">Админ-доступ</div>' +
+          '<div class="flex items-center gap-2">' +
+            '<input id="admToken" type="password" placeholder="Вставьте токен" class="flex-1 rounded-lg h-9 px-3 bg-slate-950 border border-slate-800 outline-none" />' +
+            '<button id="admSaveToken" class="rounded-lg bg-indigo-500/20 border border-indigo-700 hover:bg-indigo-500/30 h-9 px-3">Сохранить</button>' +
+            (isAdmin()?'<button id="admLogout" class="rounded-lg bg-slate-800 border border-slate-700 hover:bg-slate-700 h-9 px-3">Выйти</button>':'') +
+          '</div>' +
+        '</div>' +
+
+        '<div class="rounded-xl border border-slate-800 p-3 bg-slate-900/40 space-y-2">' +
+          '<div class="text-[12px] opacity-80">Добавить вкус</div>' +
+          '<div class="grid grid-cols-1 md:grid-cols-5 gap-2">' +
+            '<input id="admBrand" placeholder="Бренд" class="rounded-lg h-9 px-3 bg-slate-950 border border-slate-800 outline-none" />' +
+            '<input id="admName" placeholder="Название" class="rounded-lg h-9 px-3 bg-slate-950 border border-slate-800 outline-none md:col-span-2" />' +
+            '<input id="admTags" placeholder="Теги (через ,)" class="rounded-lg h-9 px-3 bg-slate-950 border border-slate-800 outline-none" />' +
+            '<input id="admStrength" placeholder="Крепость 1..10" class="rounded-lg h-9 px-3 bg-сlate-950 border border-slate-800 outline-none" />' +
+          '</div>' +
+          '<div class="flex items-center gap-2">' +
+            '<input id="admDesc" placeholder="Описание" class="flex-1 rounded-lg h-9 px-3 bg-slate-950 border border-slate-800 outline-none" />' +
+            '<button id="admAddFlavor" class="rounded-lg bg-emerald-500/20 border border-emerald-700 hover:bg-emerald-500/30 h-9 px-3">Добавить</button>' +
+          '</div>' +
+        '</div>';
+
+      const listHtml = (() => {
+        const byBrand = {};
+        for (const f of state.flavors) {
+          if (!byBrand[f.brand]) byBrand[f.brand] = [];
+          byBrand[f.brand].push(f);
+        }
+        return Object.keys(byBrand).sort((a,b)=> a.localeCompare(b,'ru')).map(brand => {
+          const rows = byBrand[brand].sort((a,b)=> a.name.localeCompare(b.name,'ru')).map(f => (
+            '<div class="flex items-center justify-between gap-2 text-[12px] border border-slate-800 rounded-lg px-2 py-1">' +
+              '<div class="min-w-0 truncate"><span class="opacity-70">'+esc(brand)+'</span> • '+esc(f.name)+'</div>' +
+              '<button data-del-flavor="'+escAttr(f.id)+'" class="rounded-lg bg-rose-900/20 border border-rose-700 text-rose-300 hover:bg-rose-900/40">Удалить</button>' +
+            '</div>'
+          )).join('');
+          return '<div class="space-y-1"><div class="text-[11px] uppercase tracking-wide text-slate-400">'+esc(brand)+'</div>'+rows+'</div>';
+        }).join('') || '<div class="text-[12px] text-slate-400">Пока нет вкусов</div>';
+      })();
+
+      const container =
+        '<div class="space-y-3">' +
+          form +
+          '<div class="rounded-xl border border-slate-800 p-3 bg-slate-900/40">' +
+            '<div class="text-[12px] opacity-80 mb-2">Список вкусов</div>' +
+            '<div id="admFlavorList" class="space-y-2">'+listHtml+'</div>' +
+          '</div>' +
+        '</div>';
+
+      setTimeout(bindAdminHandlers, 0);
+      return container;
+
+      function bindAdminHandlers(){
+        const root = document.getElementById('root');
+        const tokBtn = qs('#admSaveToken', root);
+        const logoutBtn = qs('#admLogout', root);
+        const tokInp = qs('#admToken', root);
+        if (tokInp) tokInp.value = state.adminToken || '';
+        if (tokBtn) tokBtn.onclick = () => { const v = tokInp.value || ''; localStorage.setItem('admin_token', v); state.adminToken = v; render(); };
+        if (logoutBtn) logoutBtn.onclick = () => { localStorage.removeItem('admin_token'); state.adminToken = ''; render(); };
+
+        const addBtn = qs('#admAddFlavor', root);
+        if (addBtn) addBtn.onclick = async () => {
+          try{
+            const brand = (qs('#admBrand', root)||{}).value || '';
+            const name = (qs('#admName', root)||{}).value || '';
+            const tags = (qs('#admTags', root)||{}).value || '';
+            const desc = (qs('#admDesc', root)||{}).value || '';
+            const st = (qs('#admStrength', root)||{}).value || '';
+            if (!brand || !name) { alert('Укажите бренд и название'); return; }
+            const payload = { brand, name, tags, description: desc, strength10: Number(st||0) };
+            const headers = { 'X-Admin-Token': state.adminToken, 'Content-Type':'application/json' };
+            const r = await api('/api/flavors', { method:'POST', headers, body: JSON.stringify(payload) });
+            if (!r.ok) throw new Error('Не удалось добавить вкус');
+            await loadFlavors(); render();
+          }catch(e){ alert(e && e.message || 'Ошибка добавления'); }
+        };
+
+        qsa('[data-del-flavor]', root).forEach(btn=>{
+          btn.onclick = async () => {
+            const id = btn.getAttribute('data-del-flavor');
+            if (!confirm('Удалить вкус "'+id+'"?')) return;
+            try{
+              const headers = { 'X-Admin-Token': state.adminToken, 'Content-Type':'application/json' };
+              const r = await api('/api/flavors', { method:'POST', headers, body: JSON.stringify({ action:'delete', id }) });
+              if (!r.ok) throw new Error('Не удалось удалить вкус');
+              await loadFlavors(); render();
+            }catch(e){ alert(e && e.message || 'Ошибка удаления вкуса'); }
+          };
+        });
+      }
+    }
+
+    // ===== Delete mix helper =====
+    async function deleteMixOnServer(id, user, adminToken){
+      const uid = String(user && user.id || '');
+      const headers = { 'X-Author-Id': uid, 'X-User-Id': uid };
+      if (adminToken) headers['X-Admin-Token'] = adminToken;
+
+      // primary route
+      let r = await api('/api/mixes/'+encodeURIComponent(id), { method:'DELETE', headers }).catch(()=>null);
+      if (r && (r.ok || r.status===204)) return true;
+
+      // fallbacks (на сервере их может не быть — это нормально)
+      r = await api('/api/mixes/'+encodeURIComponent(id)+'?authorId='+encodeURIComponent(uid), { method:'DELETE', headers }).catch(()=>null);
+      if (r && (r.ok || r.status===204)) return true;
+
+      r = await api('/api/mixes/delete', { method:'POST', headers, body: JSON.stringify({ id, authorId: uid }) }).catch(()=>null);
+      if (r && (r.ok || r.status===204)) return true;
+
+      r = await api('/api/mixes/'+encodeURIComponent(id)+'?_method=DELETE', { method:'POST', headers, body: JSON.stringify({ authorId: uid }) }).catch(()=>null);
+      if (r && (r.ok || r.status===204)) return true;
+
+      r = await api('/api/mixes/'+encodeURIComponent(id), { method:'DELETE', headers, body: JSON.stringify({ authorId: uid }) }).catch(()=>null);
+      if (r && (r.ok || r.status===204)) return true;
+
+      throw new Error('Удалить не удалось');
+    }
+
+    // ============== Boot ==============
+    async function boot(){
+      await initUser();
       await loadFlavors();
-      if (state.flavors.length>0) state.activeBrand = normalizeBrand(state.flavors[0].brand);
-      await loadGuestMixes();
+      await loadMixes();
       render();
 
       setInterval(async ()=>{
         try{
-          const prev = (state.guestMixes||[]).map(m=> m.id).join(',');
-          await loadGuestMixes();
-          const curr = (state.guestMixes||[]).map(m=> m.id).join(',');
+          const prev = (state.guestMixes||[]).map(m=>m.id).join(',');
+          await loadMixes();
+          const curr = (state.guestMixes||[]).map(m=>m.id).join(',');
           if (prev !== curr) render();
-        }catch(_){}
+        }catch(e){}
       }, 10000);
-    }catch(e){
-      console.error(e);
-      (__fatal||function(){})('Инициализация не удалась: ' + (e && e.message || e));
     }
+    boot();
   })();
-
-  // Smoke tests (тихо в консоль)
-  ;(function(){ try{
-    console.group('HookahMixes – smoke tests');
-    {var p1=[{flavorId:'a',percent:60},{flavorId:'b',percent:40}]; console.assert(percentSum(p1)===100,'sum=100');}
-    {var p2=[{flavorId:'a',percent:60},{flavorId:'b',percent:30}]; console.assert(percentSum(p2)===90,'sum=90');}
-    {var ok=isMixValid([{flavorId:'a',percent:60},{flavorId:'b',percent:40}], 'Mix'); console.assert(ok===true,'valid=100+title');}
-    {var cl=clampPercentForPart([{flavorId:'a',percent:90},{flavorId:'b',percent:10}], 'b', 20); console.assert(cl===10,'clamp remaining');}
-    {var cl2=clampPercentForPart([{flavorId:'a',percent:50}], 'a', 150); console.assert(cl2===100,'clamp max');}
-    {var r=filterFlavorsByQueryAdv([{id:'1',name:'Mango'},{id:'2',name:'Green Mango',brand:'Some'}], 'mango'); console.assert(r.length===2,'search across brands');}
-    {var t=getMixTasteLabel([],[]); console.assert(t===null,'taste null');}
-    {var cl3=clampPercentForPart([{flavorId:'a',percent:10}], 'a', -5); console.assert(cl3===0,'clamp to 0');}
-    console.groupEnd();
-  }catch(e){ console.error('Smoke tests error', e); }})();
   </script>
 </body>
 </html>
