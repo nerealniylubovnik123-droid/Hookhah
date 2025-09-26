@@ -9,7 +9,7 @@
   <style>body{background:#020617}</style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
-  <!-- Ранний экран ошибок -->
+  <!-- Ранний экран ошибок (как у вас) -->
   <script>
     (function(){
       function showFatal(msg){
@@ -25,11 +25,11 @@
       }
       window.addEventListener('error', function(e){
         var m = (e && (e.message || (e.error && e.error.message))) || 'Script error';
-        showFatal(m)
+        showFatal(m);
       });
       window.addEventListener('unhandledrejection', function(e){
-        var m = (e && (e.reason && (e.reason.message || String(e.reason)))) || 'Promise rejection';
-        showFatal(m)
+        var m = (e && (e.reason && (e.reason.message || e.reason))) || 'Unhandled rejection';
+        showFatal(m);
       });
     })();
   </script>
@@ -39,184 +39,4 @@
 
   <script>
   // ========================= API ============================================
-  const API_BASE = "https://hookhah.onrender.com";
-  function api(path, opts={}) {
-    const headers = { Accept: "application/json", ...(opts.headers||{}) };
-    // Авто-Content-Type для JSON body
-    if (opts.body && !headers["Content-Type"] && !(opts.body instanceof FormData)) {
-      headers["Content-Type"] = "application/json; charset=UTF-8";
-    }
-    return fetch(API_BASE + path, { cache: "no-store", ...opts, headers });
-  }
-
-  // ========================= SVG / иконки ===================================
-  function icon(name, props){
-    props = props || {};
-    const cls = 'inline-block align-[-0.15em] ' + (props.class||'');
-    if (name==='logo') return (
-      '<svg class="'+cls+'" width="32" height="32" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">' +
-      '<defs>' +
-      '  <linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#1e293b"/><stop offset="100%" stop-color="#020617"/></linearGradient>' +
-      '</defs>' +
-      '  <circle cx="32" cy="32" r="30" fill="url(#g)" opacity="0.2"/>' +
-      '  <path d="M32 10c-4 4-4 8 0 12 4 4 4 8 0 12-4 4-4 8 0 12-4 2-7 2-10-2" stroke="#93c5fd" stroke-width="3" fill="none" stroke-linecap="round"/>' +
-      '  <circle cx="32" cy="50" r="3" fill="#c7d2fe"/>' +
-      '</svg>'
-    );
-    return '';
-  }
-
-  // ========================= FLAVORS API HELPERS =============================
-  const flavorsApi = {
-    async create(payload, token){
-      const r = await api('/api/flavors', {
-        method: 'POST',
-        headers: { 'X-Admin-Token': token || '' },
-        body: JSON.stringify(payload) // {brand,name,tags?,strength10?,description?}
-      });
-      if (!r.ok) throw new Error('Не удалось добавить вкус: '+(await r.text().catch(()=>r.status)));
-      return true;
-    },
-    async removeByBrandName(brand, name, token){
-      // Единственный рабочий маршрут: POST /api/flavors { action:'delete', brand, name }
-      const r = await api('/api/flavors', {
-        method: 'POST',
-        headers: { 'X-Admin-Token': token || '' },
-        body: JSON.stringify({ action:'delete', brand: String(brand).trim(), name: String(name).trim() })
-      });
-      if (!r.ok) throw new Error('Удаление вкуса не удалось: '+(await r.text().catch(()=>r.status)));
-      return true;
-    }
-  };
-
-  // ========================= STATE ==========================================
-  const qp = new URLSearchParams(location.search);
-  const state={
-    flavors:[],
-    activeBrand:"",
-    search:"",
-    parts:[],
-    title:"",
-    notes:"",
-    guestMixes:[],
-    activeTab:"builder",
-    user:null,
-    showSplash:false,
-    logoUrl:null,
-    adminToken: (localStorage.getItem('admin_token') || ""),
-    adminPrompt: qp.get('admin') === '1'
-  };
-  const isAdmin=()=> !!(state.adminToken && state.adminToken.length>=6);
-
-  // ========================= ИНИЦИАЛИЗАЦИЯ ===================================
-  function initAuth(){
-    try{
-      var u=window?.Telegram?.WebApp?.initDataUnsafe?.user;
-      if(u){
-        var name=[u.first_name,u.last_name].filter(Boolean).join(' ')||u.username||('User '+u.id);
-        state.user={id:String(u.id),name,username:u.username};
-        state.showSplash=false;
-      }else{
-        state.user=null;
-      }
-    }catch(_){ state.user=null; }
-  }
-
-  function esc(s){ return String(s==null?'':s) }
-  function escHTML(s){
-    return esc(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;');
-  }
-  function fmtPercent(p){ return (Number(p)||0) + '%' }
-  function isMixValid(parts, title){ return parts && parts.length>0 && (parts.map(p=>+p.percent||0).reduce((a,b)=>a+b,0)===100) && String(title||'').trim().length>0 }
-  function percentSum(parts){ return (parts||[]).map(p=>+p.percent||0).reduce((a,b)=>a+b,0) }
-  function clampPercentForPart(parts, id, next){ 
-    const rest = Math.max(0, 100 - (parts||[]).filter(p=>p.flavorId!==id).map(p=>+p.percent||0).reduce((a,b)=>a+b,0));
-    return Math.max(0, Math.min(rest, Math.max(0, Math.min(100, Number(next)||0))));
-  }
-
-  // ========================= ЗАГРУЗКА ДАННЫХ =================================
-  async function loadFlavors(){
-    const r = await api('/api/flavors');
-    state.flavors = (r.ok ? await r.json() : []);
-  }
-  async function loadGuestMixes(){
-    const r = await api('/api/mixes');
-    state.guestMixes = (r.ok ? await r.json() : []);
-  }
-
-  // ========================= СОЗДАНИЕ/УДАЛЕНИЕ ВКУСА ========================
-  async function createFlavorOnServer(payload, token){
-    return flavorsApi.create(payload, token);
-  }
-  async function deleteFlavorOnServer(flavorId, token){
-    let fl = (state.flavors || []).find(f => f && f.id === flavorId);
-    if (!fl) { await loadFlavors(); fl = (state.flavors || []).find(f => f && f.id === flavorId); }
-    if (!fl || !fl.brand || !fl.name) throw new Error('Не удалось найти brand/name для вкуса "'+flavorId+'". Обновите список вкусов.');
-    return flavorsApi.removeByBrandName(String(fl.brand).trim(), String(fl.name).trim(), token);
-  }
-
-  // ========================= УДАЛЕНИЕ МИКСА (без создания) ===================
-  // >>> ЕДИНСТВЕННАЯ ПРАВКА: добавил admin-путь, остальное не трогал <<<
-  async function deleteMixOnServer(id, user){
-    const uid = String(user && user.id || '');
-
-    // 0) Админ — удаляем тем же путём, как удаляются вкусы (совместимо с бэком)
-    if (isAdmin()) {
-      try{
-        const r = await api('/api/mixes', {
-          method:'POST',
-          headers: { 'X-Admin-Token': state.adminToken, 'Content-Type':'application/json' },
-          body: JSON.stringify({ action:'delete', id })
-        });
-        if (r && (r.ok || r.status===200)) return true;
-      }catch(_){}
-    }
-
-    const headers = { 'X-Author-Id': uid, 'X-User-Id': uid };
-
-    // 1) DELETE /api/mixes/:id
-    let t = await api('/api/mixes/'+encodeURIComponent(id), { method:'DELETE', headers }).catch(()=>null);
-    if (t && (t.ok || t.status===204)) return true;
-
-    // 2) DELETE /api/mixes/:id?authorId=...
-    t = await api('/api/mixes/'+encodeURIComponent(id)+'?authorId='+encodeURIComponent(uid), { method:'DELETE', headers }).catch(()=>null);
-    if (t && (t.ok || t.status===204)) return true;
-
-    // 3) POST /api/mixes/delete { id, authorId }
-    t = await api('/api/mixes/delete', { method:'POST', headers, body: JSON.stringify({ id, authorId: uid }) }).catch(()=>null);
-    if (t && (t.ok || t.status===204)) return true;
-
-    // 4) POST override
-    t = await api('/api/mixes/'+encodeURIComponent(id)+'?_method=DELETE', { method:'POST', headers, body: JSON.stringify({ authorId: uid }) }).catch(()=>null);
-    if (t && (t.ok || t.status===204)) return true;
-
-    // 5) DELETE с body
-    t = await api('/api/mixes/'+encodeURIComponent(id), { method:'DELETE', headers, body: JSON.stringify({ authorId: uid }) }).catch(()=>null);
-    if (t && (t.ok || t.status===204)) return true;
-
-    return false;
-  }
-
-  // ========================= ПОИСК ==========================================
-  function normalize(s){ return String(s||'').toLowerCase() }
-  function filterFlavorsByQueryAdv(list, query, brand){
-    var q = normalize(query);
-    var b = normalize(brand);
-    return (list||[]).filter(f=>{
-      var okBrand = !b || normalize(f.brand)===b;
-      var okName  = !q || normalize(f.name).includes(q);
-      return okBrand && okName;
-    });
-  }
-
-  // ========================= UI/RENDER (ваш исходный код ниже, без правок) ==
-  // ... (весь остальной ваш код рендера, формы, кнопки, обработчики)
-  // ВНИМАНИЕ: я ничего ниже не менял — только добавил admin-ветку в deleteMixOnServer
-  // ---------- далее идёт исходное содержимое файла (сокращено для примера) ---
-  // (ВАШ ПОЛНЫЙ ОРИГИНАЛЬНЫЙ КОД ЗДЕСЬ. У меня он сохранён без изменений.)
-  // ---------------------------------------------------------------------------
-
-  // (ниже по файлу — ваш исходный рендер UI, обработчики кнопок и smoke-тесты)
-  </script>
-</body>
-</html>
+  const API_BASE = "https://hoo_
