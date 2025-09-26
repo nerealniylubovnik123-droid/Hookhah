@@ -1,4 +1,4 @@
-// server.js — Hookhah backend (Render/Node)
+// server.js — Hookhah backend (Node/Express)
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
@@ -7,62 +7,68 @@ const cors = require("cors");
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-app.use(cors()); // разрешаем CORS со всех источников
+// CORS + JSON
+app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 
-// ==== статика (если захотите отдавать фронт с Render) ====
+// ==== Paths / data files ====
 const PUBLIC_DIR = path.join(__dirname, "public");
-if (fs.existsSync(PUBLIC_DIR)) {
-  app.use(express.static(PUBLIC_DIR));
-}
-
-// ==== файлы данных ====
 const DATA_DIR = __dirname;
 const FLAVORS_FILE = path.join(DATA_DIR, "flavors.json");
 const MIXES_FILE = path.join(DATA_DIR, "guest_mixes.json");
 
+// ==== Helpers ====
 function readJSON(file, fallback) {
   try {
-    if (!fs.existsSync(file)) return fallback;
-    return JSON.parse(fs.readFileSync(file, "utf-8"));
+    if (!fs.existsSync(file)) return Array.isArray(fallback) ? [] : (fallback ?? null);
+    const raw = fs.readFileSync(file, "utf8");
+    return JSON.parse(raw);
   } catch (e) {
-    console.error("readJSON error", file, e);
-    return fallback;
+    console.error("[readJSON]", file, e.message);
+    return Array.isArray(fallback) ? [] : (fallback ?? null);
   }
 }
 function writeJSON(file, data) {
   try {
-    fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf-8");
+    fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
   } catch (e) {
-    console.error("writeJSON error", file, e);
+    console.error("[writeJSON]", file, e.message);
   }
 }
 
-// ==== healthcheck ====
+// ==== Healthcheck ====
 app.get("/healthz", (req, res) => {
   res.json({ ok: true, ts: new Date().toISOString() });
 });
 
-// ==== FLAVORS ====
-// GET /api/flavors — список
+// ==== Static (optional) ====
+if (fs.existsSync(PUBLIC_DIR)) {
+  app.use(express.static(PUBLIC_DIR));
+}
+
+// ================= FLAVORS =================
+
+// GET list
 app.get("/api/flavors", (req, res) => {
   const list = readJSON(FLAVORS_FILE, []);
   res.json(Array.isArray(list) ? list : []);
 });
 
-// POST /api/flavors — добавление (и удаление при action:'delete'), только админ
+// POST add or delete (admin only)
 app.post("/api/flavors", (req, res) => {
   const adminHeader = req.header("X-Admin-Token");
   const isAdmin = adminHeader && adminHeader === (process.env.ADMIN_TOKEN || "");
   if (!isAdmin) return res.status(403).json({ error: "Forbidden" });
 
-  let body = req.body || {};
+  const body = req.body || {};
+
+  // Delete flow
   if (body && body.action === "delete") {
-    // Удаление по id (предпочтительно), либо по brand+name
     const id = String(body.id || "").trim();
     const brand = String(body.brand || "").trim().toLowerCase();
     const name = String(body.name || "").trim().toLowerCase();
     const list = readJSON(FLAVORS_FILE, []);
+
     let idx = -1;
     if (id) {
       idx = list.findIndex(f => String(f.id || "") === id);
@@ -76,22 +82,20 @@ app.post("/api/flavors", (req, res) => {
       return res.status(400).json({ error: "Provide id or (brand+name) to delete" });
     }
     if (idx === -1) return res.status(404).json({ error: "Not found" });
+
     list.splice(idx, 1);
     writeJSON(FLAVORS_FILE, list);
     return res.json({ ok: true });
   }
 
-  // Добавление
+  // Add flow
   const brand = String(body.brand || "").trim();
   const name = String(body.name || "").trim();
   if (!brand || !name) return res.status(400).json({ error: "brand and name are required" });
 
   const list = readJSON(FLAVORS_FILE, []);
-  // сгенерируем id, если не пришёл
   let id =
-    String(body.id || "")
-      .trim()
-      .toLowerCase() ||
+    String(body.id || "").trim().toLowerCase() ||
     (brand + "-" + name)
       .toLowerCase()
       .replace(/\s+/g, "-")
@@ -114,20 +118,26 @@ app.post("/api/flavors", (req, res) => {
   res.json(item);
 });
 
-// ==== MIXES ====
-// GET /api/mixes — список (новые сверху)
+// ================= MIXES =================
+
+// GET list (newest first)
 app.get("/api/mixes", (req, res) => {
   const list = readJSON(MIXES_FILE, []);
-  list.sort((a, b) => String(b.createdAt || "") > String(a.createdAt || "") ? 1 : -1);
-  res.json(Array.isArray(list) ? list : []);
+  const arr = Array.isArray(list) ? list : [];
+  arr.sort((a, b) => {
+    const ta = new Date(a && a.createdAt ? a.createdAt : 0).getTime();
+    const tb = new Date(b && b.createdAt ? b.createdAt : 0).getTime();
+    return tb - ta;
+  });
+  res.json(arr);
 });
 
-// POST /api/mixes — добавить микс
+// POST create
 app.post("/api/mixes", (req, res) => {
   const body = req.body || {};
   const list = readJSON(MIXES_FILE, []);
   const item = {
-    id: "mix_" + Math.random().toString(36).slice(2, 8),
+    id: "mix_" + Math.random().toString(36).slice(2, 10),
     title: String(body.title || "Микс"),
     parts: Array.isArray(body.parts) ? body.parts : [],
     notes: String(body.notes || ""),
@@ -142,7 +152,7 @@ app.post("/api/mixes", (req, res) => {
   res.json(item);
 });
 
-// DELETE /api/mixes/:id — удаление микса
+// DELETE (author only; admin any)
 app.delete("/api/mixes/:id", (req, res) => {
   const id = String(req.params.id);
   const userId = req.header("X-User-Id") || null;
@@ -151,16 +161,8 @@ app.delete("/api/mixes/:id", (req, res) => {
   if (idx === -1) return res.status(404).json({ error: "Not found" });
 
   const mix = mixes[idx];
-  // Admin with valid X-Admin-Token can delete any mix
-const adminHeader = req.header("X-Admin-Token");
-const isAdmin = adminHeader && adminHeader === (process.env.ADMIN_TOKEN || "");
-if (isAdmin) {
-  mixes.splice(idx, 1);
-  writeJSON(MIXES_FILE, mixes);
-  return res.json({ ok: true, by: "admin" });
-}
 
-  // Админ с валидным X-Admin-Token может удалить любой микс
+  // Admin can delete any mix with valid token
   const adminHeader = req.header("X-Admin-Token");
   const isAdmin = adminHeader && adminHeader === (process.env.ADMIN_TOKEN || "");
   if (isAdmin) {
@@ -174,7 +176,6 @@ if (isAdmin) {
     writeJSON(MIXES_FILE, mixes);
     return res.json({ ok: true });
   }
-  // Разрешим удалять старые записи без authorId админом (X-User-Id: admin)
   if (!mix.authorId && userId === "admin") {
     mixes.splice(idx, 1);
     writeJSON(MIXES_FILE, mixes);
@@ -183,9 +184,10 @@ if (isAdmin) {
   return res.status(403).json({ error: "Forbidden" });
 });
 
-// SPA fallback (если фронт в /public на Render)
+// ==== SPA fallback (only if PUBLIC_DIR exists) ====
 if (fs.existsSync(PUBLIC_DIR)) {
-  app.get("*", (req, res) => {
+  // Любой GET, кроме /api/* — отдаём index.html (фикс для path-to-regexp)
+  app.get(/^\/(?!api\/).*/, (req, res) => {
     res.sendFile(path.join(PUBLIC_DIR, "index.html"));
   });
 }
