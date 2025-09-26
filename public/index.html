@@ -252,7 +252,7 @@
             const fl = state.flavors.find(x=> byId(x)===String(pp.flavorId));
             return '<div class="flex items-center gap-2"><span class="truncate mr-2">'+escHTML(fl?fl.name:pp.flavorId)+'</span><span class="opacity-70">'+safePercent(pp.percent)+'%</span></div>';
           }).join('');
-          var canDelete = !!((state.user && (m.authorId && String(m.authorId)===String(state.user.id))) || isAdmin());
+          var canDelete = !!((state.user && m.authorId && String(m.authorId)===String(state.user.id)) || isAdmin());
           var delBtn = canDelete ? '<button data-del="'+escAttr(m.id)+'" class="ml-auto inline-flex items-center justify-center rounded-lg bg-rose-900/20 border border-rose-700 text-rose-300 hover:bg-rose-900/40">Удалить</button>' : '';
           return (
             '<div class="border border-slate-800 rounded-xl p-2 text-sm">' +
@@ -423,6 +423,12 @@
               try{
                 const payload = { action:'delete', id };
                 const headers = { 'X-Admin-Token': state.adminToken, 'Content-Type':'application/json' };
+                // если в приложении введён admin token — добавим его в запрос
+try {
+  const adminToken = (typeof state !== 'undefined' && state.adminToken) ? state.adminToken : '';
+  if (adminToken) headers['X-Admin-Token'] = adminToken;
+} catch(_){}
+
                 const r = await api('/api/flavors', { method:'POST', headers, body: JSON.stringify(payload) });
                 if (!r.ok) throw new Error('Не удалось удалить вкус');
                 await loadFlavors();
