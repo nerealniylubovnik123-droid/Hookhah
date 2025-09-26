@@ -1660,5 +1660,185 @@ const themesBlock =
     }, 10000);
   })();
   </script>
+
+<!-- === ADDON: Safe third-flavor recommendations + Admin delete (non-invasive) === -->
+<script>
+(function(){
+  function _percentSum(parts){
+    try { return (parts||[]).reduce((s,p)=>s + Math.max(0, Math.min(100, Number(p && p.percent) || 0)), 0); }
+    catch(_){ return 0; }
+  }
+  function _getStrength10(f){
+    try { if (typeof getStrength10 === 'function') return getStrength10(f); } catch(_){}
+    const v = Number(f && (f.strength10 ?? f.strength ?? f.power));
+    return isFinite(v) && v>0 ? v : 5;
+  }
+  function renderThirdPanel(){
+    try{
+      if (!window.state || !Array.isArray(state.parts) || !Array.isArray(state.flavors)) return;
+      const parts = state.parts;
+      const haveTwo = parts.length === 2 && !state._hideThirdPanel;
+      const existing = document.getElementById('thirdRecPanel');
+      if (!haveTwo){ if (existing) existing.remove(); return; }
+      let mixS = null;
+      try{
+        const total = _percentSum(parts) || 1;
+        let w = 0;
+        for (const p of parts){
+          const pr = Math.max(0, Math.min(100, Number(p && p.percent) || 0));
+          const f = (state.flavors||[]).find(x => x && String(x.id) === String(p && p.flavorId));
+          if (!f) continue;
+          w += _getStrength10(f) * (pr/total);
+        }
+        mixS = Math.round(w*10)/10;
+      } catch(_){ mixS = null; }
+
+      const used = new Set((parts||[]).map(p=> String(p && p.flavorId)));
+      let cands = (state.flavors||[]).filter(f => f && !used.has(String(f.id)));
+      function score(f){
+        const s = Math.abs((typeof mixS==='number'?mixS:5) - _getStrength10(f));
+        let bonus = 0;
+        try{
+          const stags = new Set();
+          for (const p of parts){
+            const fl = state.flavors.find(x => x && String(x.id)===String(p.flavorId));
+            (fl && Array.isArray(fl.tags) ? fl.tags : []).forEach(t => stags.add(String(t).toLowerCase()));
+          }
+          const ft = (Array.isArray(f.tags)?f.tags:[]).map(t=>String(t).toLowerCase());
+          if (ft.some(t => stags.has(t))) bonus -= 0.15;
+        }catch(_){}
+        return s + bonus;
+      }
+      cands.sort((a,b)=> score(a)-score(b));
+      cands = cands.slice(0,6);
+
+      const rest = Math.max(0, 100 - _percentSum(parts));
+      const items = cands.map(f => (
+        '<button class="tap flex items-center justify-between w-full px-3 py-2 rounded-xl border border-slate-800 hover:bg-white/5" data-add-third="'+ String(f.id) +'">'+
+          '<span class="min-w-0 truncate">'+
+            (f.brand ? String(f.brand).replace(/</g,'&lt;')+' — ' : '')+
+            (String(f.name||f.title||'Без названия').replace(/</g,'&lt;'))+
+          '</span>'+
+          '<span class="ml-2 text-xs opacity-70">~'+ _getStrength10(f) +'</span>'+
+        '</button>'
+      )).join('');
+
+      const html = ''
+      + '<div id="thirdRecPanel" class="fixed inset-x-0 bottom-0 z-[60]">'
+      + '  <div class="mx-auto max-w-3xl p-3">'
+      + '    <div class="ui-card rounded-2xl border border-slate-800 bg-[color-mix(in_oklab,var(--bg)_70%,transparent)] backdrop-blur-xs shadow-elevate p-2">'
+      + '      <div class="flex items-center justify-between px-2 py-1">'
+      + '        <div class="text-sm opacity-80">Рекомендуем 3-й компонент</div>'
+      + '        <button id="thirdPanelClose" class="tap text-xs px-2 py-1 rounded-lg border border-slate-700 hover:bg-white/5">Не сейчас</button>'
+      + '      </div>'
+      + '      <div class="grid gap-2 px-2 pb-2">' + (items || '<div class="text-sm opacity-60 px-2 py-2">Нет подходящих вариантов</div>') + '</div>'
+      + '      <div class="px-2 pb-2 text-[11px] opacity-60">Добавится ~'+ rest +'% (до 100%)</div>'
+      + '    </div>'
+      + '  </div>'
+      + '</div>';
+
+      if (existing) existing.outerHTML = html;
+      else document.body.insertAdjacentHTML('beforeend', html);
+
+      const panel = document.getElementById('thirdRecPanel');
+      if (panel){
+        const btnClose = document.getElementById('thirdPanelClose');
+        if (btnClose) btnClose.addEventListener('click', function(){ state._hideThirdPanel = true; const p=document.getElementById('thirdRecPanel'); if(p) p.remove(); });
+        panel.querySelectorAll('[data-add-third]').forEach(btn => {
+          btn.addEventListener('click', function(e){
+            e.preventDefault();
+            e.stopPropagation();
+            const id = btn.getAttribute('data-add-third');
+            const rest = Math.max(0, 100 - _percentSum(state.parts));
+            const p = document.getElementById('thirdRecPanel'); if (p) p.remove();
+            state._hideThirdPanel = true;
+            if (rest > 0){
+              state.parts = (state.parts||[]).concat([{ flavorId: id, percent: rest }]);
+              try { render(); } catch(_){}
+            }
+          }, { once: true });
+        });
+      }
+    }catch(err){ console && console.warn && console.warn('[third-panel]', err); }
+  }
+
+  function isAdmin(){
+    try { if (window.state && (state.user?.isAdmin || String(state.user?.role).toLowerCase()==='admin')) return true; } catch(_){}
+    if (localStorage.getItem('adminMode') === '1') return true;
+    if (/[?&]admin=1(\b|$)/.test(location.search)) return true;
+    return false;
+  }
+  async function apiDeleteMix(id){
+    try { const r = await fetch('/api/guest-mixes/'+encodeURIComponent(id), { method:'DELETE' }); if (r.ok) return true; } catch(_){}
+    try { const r = await fetch('/api/guest-mixes?id='+encodeURIComponent(id), { method:'DELETE' }); if (r.ok) return true; } catch(_){}
+    try { const r = await fetch('/api/delete-guest-mix', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id}) }); if (r.ok) return true; } catch(_){}
+    return false;
+  }
+  function wireAdminDeleteButtons(){
+    try{
+      if (!isAdmin()){
+        document.querySelectorAll('[data-del]').forEach(b=>b.remove());
+        return;
+      }
+      document.querySelectorAll('[data-like]').forEach(likeBtn=>{
+        const id = likeBtn.getAttribute('data-like');
+        if (!id) return;
+        const container = likeBtn.parentElement || likeBtn;
+        if (container.querySelector('[data-del="'+CSS.escape(id)+'"]')) return;
+        const del = document.createElement('button');
+        del.setAttribute('data-del', id);
+        del.className = 'tap text-xs px-2 py-1 rounded-lg border border-red-700/70 hover:bg-red-600/10 ml-2';
+        del.textContent = 'Удалить';
+        del.addEventListener('click', async function(e){
+          e.stopPropagation();
+          if (!confirm('Удалить этот микс?')) return;
+          const card = likeBtn.closest('.ui-card') || likeBtn.closest('[data-card]') || null;
+          if (card) card.style.opacity = '0.5';
+          const ok = await apiDeleteMix(id);
+          if (ok){
+            try { if (Array.isArray(state.guestMixes)) state.guestMixes = state.guestMixes.filter(x=> x && String(x.id)!==String(id)); } catch(_){}
+            if (card) card.remove();
+          } else {
+            if (card) card.style.opacity = '';
+            alert('Не удалось удалить. Проверьте права и API.');
+          }
+        });
+        container.appendChild(del);
+      });
+    }catch(err){ console && console.warn && console.warn('[admin-delete]', err); }
+  }
+
+  (function installRenderHook(){
+    if (window.__addonHooked) return;
+    window.__addonHooked = true;
+    function afterRender(){ renderThirdPanel(); wireAdminDeleteButtons(); }
+    function tryInstall(){
+      if (typeof window.render !== 'function') return false;
+      if (window.render.__wrappedAddon) return true;
+      const _render = window.render;
+      window.render = function(){
+        const x = window.scrollX, y = window.scrollY;
+        const res = _render.apply(this, arguments);
+        requestAnimationFrame(function(){ try { afterRender(); } catch(_){ } window.scrollTo(x,y); });
+        return res;
+      };
+      window.render.__wrappedAddon = true;
+      return true;
+    }
+    if (!tryInstall()){
+      let tries = 0;
+      const t = setInterval(function(){ tries++; if (tryInstall() || tries > 40) clearInterval(t); }, 100);
+    }
+    document.addEventListener('DOMContentLoaded', function(){ requestAnimationFrame(function(){ try { afterRender(); } catch(_){ } }); });
+  })();
+
+  (function injectStyle(){
+    const s = document.createElement('style');
+    s.textContent = '#thirdRecPanel{ will-change: opacity, transform; contain: layout paint; } .ui-card{ backface-visibility: hidden; }';
+    document.head.appendChild(s);
+  })();
+})();
+</script>
+
 </body>
 </html>
