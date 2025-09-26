@@ -16,8 +16,8 @@
     "use strict";
 
     // ===== Utils =====
-    // ВАЖНО: делаем запросы на ТОТ ЖЕ хост, что отдал index.html
-    const API_BASE = ""; // relative base — /api/...
+    // важный момент: ходим на тот же хост → относительный путь
+    const API_BASE = "";
     const qs = (s, r=document)=>r.querySelector(s);
     const qsa = (s, r=document)=>Array.prototype.slice.call(r.querySelectorAll(s));
     const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -302,7 +302,7 @@
           const fl = state.flavors.find(x=> String(x.id)===String(pp.flavorId));
           return '<div class="flex items-center gap-2"><span class="truncate mr-2">'+esc(fl?fl.name:pp.flavorId)+'</span><span class="opacity-70">'+(Number(pp.percent)||0)+'%</span></div>';
         }).join('');
-        // ✅ админ тоже видит кнопку «Удалить»
+        // админ тоже видит «Удалить»
         const canDelete = !!((state.user && m.authorId && String(m.authorId)===String(state.user.id)) || isAdmin());
         const delBtn = canDelete ? '<button data-del="'+escAttr(m.id)+'" class="ml-auto inline-flex items-center justify-center rounded-lg bg-rose-900/20 border border-rose-700 text-rose-300 hover:bg-rose-900/40">Удалить</button>' : '';
         return (
@@ -348,11 +348,6 @@
           '</div>' +
         '</div>';
 
-      const container =
-        '<div class="space-y-3">' +
-          form +
-        '</div>';
-
       setTimeout(()=>{
         const root = document.getElementById('root');
         const tokBtn = qs('#admSaveToken', root);
@@ -363,20 +358,18 @@
         if (logoutBtn) logoutBtn.onclick = () => { localStorage.removeItem('admin_token'); state.adminToken = ''; render(); };
       }, 0);
 
-      return container;
+      return '<div class="space-y-3">'+form+'</div>';
     }
 
-    // ===== Удаление микса =====
+    // ===== удаление микса =====
     async function deleteMixOnServer(id, user, adminToken){
       const uid = String(user && user.id || '');
       const headers = { 'X-Author-Id': uid, 'X-User-Id': uid };
-      if (adminToken) headers['X-Admin-Token'] = adminToken; // ключевая строка
+      if (adminToken) headers['X-Admin-Token'] = adminToken;
 
-      // основной маршрут
       let r = await api('/api/mixes/'+encodeURIComponent(id), { method:'DELETE', headers }).catch(()=>null);
       if (r && (r.ok || r.status===204)) return true;
 
-      // запасные (могут отсутствовать — это нормально)
       r = await api('/api/mixes/'+encodeURIComponent(id)+'?authorId='+encodeURIComponent(uid), { method:'DELETE', headers }).catch(()=>null);
       if (r && (r.ok || r.status===204)) return true;
 
