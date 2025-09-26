@@ -1,4 +1,4 @@
-// server.js — Hookah backend
+// server.js — Hookah backend (fixed: admin delete + likes)
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
@@ -11,39 +11,50 @@ const PORT = process.env.PORT || 8080;
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 
-// ===== статика =====
+// ===== static (optional) =====
 const PUBLIC_DIR = path.join(__dirname, "public");
 if (fs.existsSync(PUBLIC_DIR)) {
   app.use(express.static(PUBLIC_DIR));
 }
 
-// ===== файлы данных =====
+// ===== data files =====
 const FLAVORS_FILE = path.join(__dirname, "flavors.json");
 const MIXES_FILE   = path.join(__dirname, "guest_mixes.json");
 
 function readJSON(file, fallback = []) {
-  try {
-    return JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch {
-    return fallback;
-  }
+  try { return JSON.parse(fs.readFileSync(file, "utf8")); }
+  catch { return fallback; }
 }
 function writeJSON(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
 }
+
+// ensure files
 if (!fs.existsSync(FLAVORS_FILE)) writeJSON(FLAVORS_FILE, []);
 if (!fs.existsSync(MIXES_FILE))   writeJSON(MIXES_FILE, []);
 
-// ===== утилиты =====
-const ADMIN_TOKEN = "MySuperSecretToken_2025"; // <<<< ваш токен
+// ===== auth helpers =====
+const ADMIN_TOKEN = "MySuperSecretToken_2025"; // ваш токен
 
-function requireAdmin(req, res) {
-  const token = req.header("X-Admin-Token");
-  if (token && token === ADMIN_TOKEN) return true;
-  res.status(403).json({ error: "Forbidden (bad admin token)" });
-  return false;
+function isAdminReq(req) {
+  const tok = req.header("X-Admin-Token");
+  return !!tok && tok === ADMIN_TOKEN;
 }
-function makeId(brand, name) {
+function getUserId(req) {
+  const h1 = req.header("X-User-Id");
+  const h2 = req.header("X-Author-Id");
+  if (h1) return String(h1);
+  if (h2) return String(h2);
+  if (req.query && (req.query.userId || req.query.authorId)) {
+    return String(req.query.userId || req.query.authorId);
+  }
+  if (req.body && (req.body.userId || req.body.authorId)) {
+    return String(req.body.userId || req.body.authorId);
+  }
+  return null;
+}
+
+function normalizeId(brand, name) {
   return (String(brand) + "-" + String(name))
     .toLowerCase()
     .trim()
@@ -62,60 +73,39 @@ app.get("/api/flavors", (req, res) => {
 });
 
 app.post("/api/flavors", (req, res) => {
-  const body = req.body || {};
-  if (!requireAdmin(req, res)) return;
-
-  // удаление
-  if (String(body.action || "").toLowerCase() === "delete") {
-    const brand = String(body.brand || "").trim();
-    const name  = String(body.name  || "").trim();
-    if (!brand || !name) {
-      return res.status(400).json({ error: "brand and name are required for delete" });
-    }
-    const id = makeId(brand, name);
-    const flavors = readJSON(FLAVORS_FILE, []);
-    const next = flavors.filter(f => String(f.id || makeId(f.brand, f.name)) !== id);
-    if (next.length === flavors.length) {
-      return res.status(404).json({ error: "Flavor not found" });
-    }
-    writeJSON(FLAVORS_FILE, next);
-    return res.json({ ok: true, deletedId: id });
+  if (!isAdminReq(req)) {
+    return res.status(403).json({ error: "Forbidden (bad admin token)" });
   }
-
-  // добавление
-  const brand = String(body.brand || "").trim();
-  const name  = String(body.name  || "").trim();
+  const flavor = req.body || {};
+  const brand = String(flavor.brand || "").trim();
+  const name  = String(flavor.name  || "").trim();
   if (!brand || !name) {
     return res.status(400).json({ error: "brand and name are required" });
   }
-
   const flavors = readJSON(FLAVORS_FILE, []);
-  const id = String(body.id || makeId(brand, name));
-  if (flavors.some(f => String(f.id || makeId(f.brand, f.name)) === id)) {
+  if (!flavor.id) flavor.id = normalizeId(brand, name);
+  if (flavors.some(f => String(f.id || normalizeId(f.brand, f.name)) === String(flavor.id))) {
     return res.status(409).json({ error: "id already exists" });
   }
-
-  const record = {
-    id,
+  flavors.push({
+    id: String(flavor.id),
     brand,
     name,
-    description: body.description ? String(body.description) : undefined,
-    tags: Array.isArray(body.tags)
-      ? body.tags.map(s => String(s)).filter(Boolean)
-      : (body.tags ? String(body.tags).split(",").map(s => s.trim()).filter(Boolean) : undefined),
-    strength10: (Number.isFinite(body.strength10) ? Number(body.strength10)
-               : Number.isFinite(body.strength)   ? Number(body.strength) : undefined)
-  };
-
-  flavors.push(record);
+    description: flavor.description ? String(flavor.description) : undefined,
+    tags: Array.isArray(flavor.tags)
+      ? flavor.tags.map(s => String(s)).filter(Boolean)
+      : (flavor.tags ? String(flavor.tags).split(",").map(s => s.trim()).filter(Boolean) : undefined),
+    strength10: (Number.isFinite(flavor.strength10) ? Number(flavor.strength10)
+               : Number.isFinite(flavor.strength)   ? Number(flavor.strength) : undefined)
+  });
   writeJSON(FLAVORS_FILE, flavors);
-  res.json({ ok: true, flavor: record });
+  res.json({ ok: true, flavor: flavors[flavors.length - 1] });
 });
 
 // ===== mixes =====
 app.get("/api/mixes", (req, res) => {
   const mixes = readJSON(MIXES_FILE, []);
-  mixes.sort((a, b) => (b?.createdAt || 0) - (a?.createdAt || 0));
+  mixes.sort((a,b) => (b?.createdAt||0) - (a?.createdAt||0));
   res.json(mixes);
 });
 
@@ -132,51 +122,128 @@ app.post("/api/mixes", (req, res) => {
     authorId: body.authorId == null ? null : String(body.authorId),
     createdAt: Date.now(),
     taste: body.taste ?? null,
-    strength10: body.strength10 ?? null
+    strength10: body.strength10 ?? null,
+    likes: Number.isFinite(body.likes) ? Number(body.likes) : 0,
+    likedBy: Array.isArray(body.likedBy) ? body.likedBy.map(String) : []
   };
   mixes.push(mix);
   writeJSON(MIXES_FILE, mixes);
   res.json(mix);
 });
 
-app.delete("/api/mixes/:id", (req, res) => {
-  const id = String(req.params.id);
-  const userId = req.header("X-User-Id") || null;
-  const adminToken = req.header("X-Admin-Token") || null;
+function findMixIndexById(mixes, id) {
+  return mixes.findIndex(m => String(m.id) === String(id));
+}
 
-  // админ — если токен совпадает с зашитым
-  const isAdmin = adminToken && adminToken === ADMIN_TOKEN;
-
+// --- delete (author → свой; admin → любой; legacy: X-User-Id: admin)
+function handleDeleteById(req, res, id) {
   const mixes = readJSON(MIXES_FILE, []);
-  const idx = mixes.findIndex(m => String(m.id) === id);
+  const idx = findMixIndexById(mixes, id);
   if (idx === -1) return res.status(404).json({ error: "Not found" });
 
   const mix = mixes[idx];
+  const admin = isAdminReq(req);
+  const uid = getUserId(req);
 
-  // 1) админ может удалять любой микс
-  if (isAdmin) {
+  if (admin) {
     mixes.splice(idx, 1);
     writeJSON(MIXES_FILE, mixes);
     return res.json({ ok: true, deletedBy: "admin" });
   }
 
-  // 2) автор может удалить свой
-  if (mix.authorId && userId && String(mix.authorId) === String(userId)) {
+  if (mix.authorId && uid && String(mix.authorId) === String(uid)) {
     mixes.splice(idx, 1);
     writeJSON(MIXES_FILE, mixes);
     return res.json({ ok: true, deletedBy: "author" });
   }
 
-  // 3) обратная совместимость: старые записи без authorId
-  // разрешим удалить «админу» по старой схеме X-User-Id: admin
-  if (!mix.authorId && userId === "admin") {
+  if (!mix.authorId && (uid === "admin")) {
     mixes.splice(idx, 1);
     writeJSON(MIXES_FILE, mixes);
     return res.json({ ok: true, deletedBy: "admin-legacy", note: "deleted legacy mix by admin (X-User-Id)" });
   }
 
   return res.status(403).json({ error: "Forbidden" });
+}
+
+// Primary DELETE
+app.delete("/api/mixes/:id", (req, res) => {
+  const id = String(req.params.id);
+  return handleDeleteById(req, res, id);
 });
+
+// Fallbacks for фронта, который пробует разные пути
+app.post("/api/mixes/delete", (req, res) => {
+  const id = String((req.body && req.body.id) || "");
+  if (!id) return res.status(400).json({ error: "id is required" });
+  return handleDeleteById(req, res, id);
+});
+app.post("/api/mixes/:id", (req, res) => {
+  if (String(req.query._method || "").toUpperCase() === "DELETE") {
+    const id = String(req.params.id);
+    return handleDeleteById(req, res, id);
+  }
+  return res.status(405).json({ error: "Method Not Allowed" });
+});
+
+// ===== likes =====
+// Поддерживаем несколько форматов вызова:
+// 1) POST /api/mixes/:id/like        { action?: "like"|"unlike"|"toggle", userId? }
+// 2) POST /api/mixes/:id/likes       — alias
+// 3) PATCH /api/mixes/:id/like       — alias
+// 4) POST /api/mixes/like            { id, action?, userId? }
+// userId берём также из X-User-Id / X-Author-Id / ?userId / body.userId
+
+function applyLike(mix, uid, action) {
+  if (!Array.isArray(mix.likedBy)) mix.likedBy = [];
+  if (!Number.isFinite(mix.likes)) mix.likes = 0;
+
+  const has = mix.likedBy.includes(uid);
+
+  if (action === "like" || (action === "toggle" && !has)) {
+    if (!has) {
+      mix.likedBy.push(uid);
+      mix.likes = (mix.likes || 0) + 1;
+    }
+    return { liked: true, likes: mix.likes };
+  }
+  if (action === "unlike" || (action === "toggle" && has)) {
+    if (has) {
+      mix.likedBy = mix.likedBy.filter(x => x !== uid);
+      mix.likes = Math.max(0, (mix.likes || 0) - 1);
+    }
+    return { liked: false, likes: mix.likes };
+  }
+  // default → like
+  if (!has) {
+    mix.likedBy.push(uid);
+    mix.likes = (mix.likes || 0) + 1;
+  }
+  return { liked: true, likes: mix.likes };
+}
+
+function likeHandler(req, res, idFromParam) {
+  const mixes = readJSON(MIXES_FILE, []);
+  const id = String(idFromParam || (req.body && req.body.id) || "");
+  if (!id) return res.status(400).json({ error: "id is required" });
+
+  const idx = findMixIndexById(mixes, id);
+  if (idx === -1) return res.status(404).json({ error: "Not found" });
+
+  const uid = getUserId(req);
+  if (!uid) return res.status(400).json({ error: "userId is required" });
+
+  const action = String((req.query && req.query.action) || (req.body && req.body.action) || "toggle").toLowerCase();
+
+  const result = applyLike(mixes[idx], String(uid), action);
+  writeJSON(MIXES_FILE, mixes);
+  return res.json({ ok: true, id, ...result });
+}
+
+app.post("/api/mixes/:id/like",  (req, res) => likeHandler(req, res, req.params.id));
+app.post("/api/mixes/:id/likes", (req, res) => likeHandler(req, res, req.params.id));
+app.patch("/api/mixes/:id/like", (req, res) => likeHandler(req, res, req.params.id));
+app.post("/api/mixes/like",      (req, res) => likeHandler(req, res, null));
 
 // ===== SPA fallback =====
 if (fs.existsSync(PUBLIC_DIR)) {
