@@ -1,98 +1,107 @@
-// server.js — минимальные правки, аккуратно
-// - Admin delete mix: POST /api/mixes { action:'delete', id } + X-Admin-Token
-// - Остальная логика сохранена
-
+// server.js — Hookah backend
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
 const cors = require("cors");
 
+// ===== app/bootstrap =====
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-// ==== middleware
-app.use(cors());
+app.use(cors()); // разрешаем CORS (в т.ч. для фронта на другом домене)
 app.use(express.json({ limit: "1mb" }));
 
-// ==== static (если у вас лежит фронт рядом)
+// ===== статика (если фронт деплоится рядом) =====
 const PUBLIC_DIR = path.join(__dirname, "public");
 if (fs.existsSync(PUBLIC_DIR)) {
   app.use(express.static(PUBLIC_DIR));
 }
 
-// ==== файлы данных
+// ===== файлы данных =====
 const FLAVORS_FILE = path.join(__dirname, "flavors.json");
 const MIXES_FILE   = path.join(__dirname, "guest_mixes.json");
 
-// вспомогательные функции
 function readJSON(file, fallback = []) {
-  try { return JSON.parse(fs.readFileSync(file, "utf8")); }
-  catch { return fallback; }
+  try {
+    const raw = fs.readFileSync(file, "utf8");
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
 }
 function writeJSON(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
 }
+
+// создаём пустые файлы, если их нет
 if (!fs.existsSync(FLAVORS_FILE)) writeJSON(FLAVORS_FILE, []);
 if (!fs.existsSync(MIXES_FILE))   writeJSON(MIXES_FILE, []);
 
-const ADMIN_TOKEN = "MySuperSecretToken_2025"; // ваш токен
-function isAdminReq(req) {
-  return (req.header("X-Admin-Token") || "") === ADMIN_TOKEN;
+// ===== утилиты =====
+const ADMIN_TOKEN = process.env.ADMIN_TOKEN || null;
+function requireAdmin(req, res) {
+  // Если ADMIN_TOKEN не задан — проверку отключаем
+  if (!ADMIN_TOKEN) return true;
+  const token = req.header("X-Admin-Token");
+  if (token && token === ADMIN_TOKEN) return true;
+  res.status(403).json({ error: "Forbidden (bad admin token)" });
+  return false;
 }
-function getUserId(req) {
-  const h = req.header("X-User-Id") || req.header("X-Author-Id");
-  const q = req.query ? (req.query.userId || req.query.authorId) : null;
-  const b = req.body  ? (req.body.userId  || req.body.authorId)  : null;
-  const v = (h || q || b || "").toString().trim();
-  return v || null;
-}
-function makeFlavorId(brand, name) {
+function makeId(brand, name) {
   return (String(brand) + "-" + String(name))
-    .toLowerCase().trim().replace(/\s+/g, "-").replace(/[^a-z0-9\-._]+/g, "");
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9\-._]+/g, ""); // чуть-чуть нормализуем
 }
 
-// health
-app.get("/healthz", (_req, res) => {
+// ===== health =====
+app.get("/healthz", (req, res) => {
   res.json({ ok: true, time: Date.now(), uptime: process.uptime() });
 });
 
-// ===================== FLAVORS =====================
-
-// список вкусов
-app.get("/api/flavors", (_req, res) => {
+// ===== flavors =====
+app.get("/api/flavors", (req, res) => {
   res.json(readJSON(FLAVORS_FILE, []));
 });
 
-// создание вкуса ИЛИ удаление через action:'delete' (как у вас работало)
 app.post("/api/flavors", (req, res) => {
+  // поддерживаем два сценария:
+  // 1) создание вкуса { brand, name, ... }
+  // 2) удаление вкуса { action:'delete', brand, name }
   const body = req.body || {};
-  const action = String(body.action || "").toLowerCase();
 
-  // удалить вкус: POST { action:'delete', brand, name } + X-Admin-Token
-  if (action === "delete") {
-    if (!isAdminReq(req)) return res.status(403).json({ error: "Forbidden (bad admin token)" });
+  // обе операции — только для админа (если ADMIN_TOKEN задан)
+  if (!requireAdmin(req, res)) return;
+
+  // Удаление
+  if (String(body.action || "").toLowerCase() === "delete") {
     const brand = String(body.brand || "").trim();
     const name  = String(body.name  || "").trim();
-    if (!brand || !name) return res.status(400).json({ error: "brand and name are required" });
+    if (!brand || !name) {
+      return res.status(400).json({ error: "brand and name are required for delete" });
+    }
+    const id = makeId(brand, name);
 
-    const id = makeFlavorId(brand, name);
-    const all = readJSON(FLAVORS_FILE, []);
-    const next = all.filter(f => String(f.id || makeFlavorId(f.brand, f.name)) !== id);
-    if (next.length === all.length) return res.status(404).json({ error: "Flavor not found" });
+    const flavors = readJSON(FLAVORS_FILE, []);
+    const next = flavors.filter(f => String(f.id || makeId(f.brand, f.name)) !== id);
+    if (next.length === flavors.length) {
+      return res.status(404).json({ error: "Flavor not found" });
+    }
     writeJSON(FLAVORS_FILE, next);
     return res.json({ ok: true, deletedId: id });
   }
 
-  // создать вкус
-  if (!isAdminReq(req)) return res.status(403).json({ error: "Forbidden (bad admin token)" });
-
+  // Создание
   const brand = String(body.brand || "").trim();
   const name  = String(body.name  || "").trim();
-  if (!brand || !name) return res.status(400).json({ error: "brand and name are required" });
+  if (!brand || !name) {
+    return res.status(400).json({ error: "brand and name are required" });
+  }
 
-  const all = readJSON(FLAVORS_FILE, []);
-  const id = String(body.id || makeFlavorId(brand, name));
-  if (all.some(f => String(f.id || makeFlavorId(f.brand, f.name)) === id)) {
+  const flavors = readJSON(FLAVORS_FILE, []);
+  const id = String(body.id || makeId(brand, name));
+  if (flavors.some(f => String(f.id || makeId(f.brand, f.name)) === id)) {
     return res.status(409).json({ error: "id already exists" });
   }
 
@@ -102,53 +111,28 @@ app.post("/api/flavors", (req, res) => {
     name,
     description: body.description ? String(body.description) : undefined,
     tags: Array.isArray(body.tags)
-      ? body.tags.map(String).filter(Boolean)
+      ? body.tags.map(s => String(s)).filter(Boolean)
       : (body.tags ? String(body.tags).split(",").map(s => s.trim()).filter(Boolean) : undefined),
     strength10: (Number.isFinite(body.strength10) ? Number(body.strength10)
-               : Number.isFinite(body.strength)   ? Number(body.strength)   : undefined)
+               : Number.isFinite(body.strength)   ? Number(body.strength) : undefined)
   };
 
-  all.push(record);
-  writeJSON(FLAVORS_FILE, all);
+  flavors.push(record);
+  writeJSON(FLAVORS_FILE, flavors);
   res.json({ ok: true, flavor: record });
 });
 
-// ===================== MIXES =====================
-
-// НОВОЕ: админ-удаление микса тем же способом, что и вкусы.
-// POST /api/mixes  { action:'delete', id }  + X-Admin-Token
-app.post("/api/mixes", (req, res, next) => {
-  const body = req.body || {};
-  const action = String(body.action || "").toLowerCase();
-
-  if (action !== "delete") return next(); // не удаление — пусть обработает следующий хендлер (создание)
-
-  if (!isAdminReq(req)) return res.status(403).json({ error: "Forbidden (bad admin token)" });
-  const id = String(body.id || "").trim();
-  if (!id) return res.status(400).json({ error: "id is required" });
-
-  const mixes = readJSON(MIXES_FILE, []);
-  const idx = mixes.findIndex(m => String(m.id) === id);
-  if (idx === -1) return res.status(404).json({ error: "Mix not found" });
-
-  mixes.splice(idx, 1);
-  writeJSON(MIXES_FILE, mixes);
-  return res.json({ ok: true, deletedId: id, deletedBy: "admin" });
-});
-
-// список миксов
-app.get("/api/mixes", (_req, res) => {
+// ===== mixes =====
+app.get("/api/mixes", (req, res) => {
   const mixes = readJSON(MIXES_FILE, []);
   mixes.sort((a, b) => (b?.createdAt || 0) - (a?.createdAt || 0));
   res.json(mixes);
 });
 
-// создать микс (гость)
 app.post("/api/mixes", (req, res) => {
   const body = req.body || {};
   const mixes = readJSON(MIXES_FILE, []);
   const id = String(Date.now()) + Math.random().toString(16).slice(2);
-
   const mix = {
     id,
     title: String(body.title || "Без названия").slice(0, 120),
@@ -160,49 +144,38 @@ app.post("/api/mixes", (req, res) => {
     taste: body.taste ?? null,
     strength10: body.strength10 ?? null
   };
-
   mixes.push(mix);
   writeJSON(MIXES_FILE, mixes);
   res.json(mix);
 });
 
-// удалить микс автором (и допускаем удаление админом и тут — это безопасно)
+// удаление микса — автор может удалять свой
 app.delete("/api/mixes/:id", (req, res) => {
-  const id = String(req.params.id || "");
+  const id = String(req.params.id);
+  const userId = req.header("X-User-Id") || null;
+
   const mixes = readJSON(MIXES_FILE, []);
   const idx = mixes.findIndex(m => String(m.id) === id);
   if (idx === -1) return res.status(404).json({ error: "Not found" });
 
-  // если пришёл админ-токен — разрешаем без проверки автора
-  if (isAdminReq(req)) {
-    mixes.splice(idx, 1);
-    writeJSON(MIXES_FILE, mixes);
-    return res.json({ ok: true, deletedBy: "admin" });
-  }
-
   const mix = mixes[idx];
-  const uid = getUserId(req);
-
-  // автор может удалить свой
-  if (mix.authorId && uid && String(mix.authorId) === String(uid)) {
+  if (mix.authorId && userId && String(mix.authorId) === String(userId)) {
     mixes.splice(idx, 1);
     writeJSON(MIXES_FILE, mixes);
-    return res.json({ ok: true, deletedBy: "author" });
+    return res.json({ ok: true });
   }
-
-  // обратная совместимость: старые записи без authorId — допускаем userId=admin
-  if (!mix.authorId && uid === "admin") {
+  // старые записи без authorId — разрешим удалить «админу» по X-User-Id: admin (как в исходном коде)
+  if (!mix.authorId && userId === "admin") {
     mixes.splice(idx, 1);
     writeJSON(MIXES_FILE, mixes);
-    return res.json({ ok: true, deletedBy: "admin-legacy" });
+    return res.json({ ok: true, note: "deleted legacy mix by admin" });
   }
-
   return res.status(403).json({ error: "Forbidden" });
 });
 
-// ==== SPA fallback (опционально)
+// ===== SPA fallback =====
 if (fs.existsSync(PUBLIC_DIR)) {
-  app.get("*", (_req, res) => {
+  app.get("*", (req, res) => {
     res.sendFile(path.join(PUBLIC_DIR, "index.html"));
   });
 }
