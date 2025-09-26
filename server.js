@@ -142,20 +142,39 @@ app.post("/api/mixes", (req, res) => {
 app.delete("/api/mixes/:id", (req, res) => {
   const id = String(req.params.id);
   const userId = req.header("X-User-Id") || null;
+  const adminToken = req.header("X-Admin-Token") || null;
+
+  // админ — если токен совпадает с зашитым
+  const isAdmin = adminToken && adminToken === ADMIN_TOKEN;
+
   const mixes = readJSON(MIXES_FILE, []);
   const idx = mixes.findIndex(m => String(m.id) === id);
   if (idx === -1) return res.status(404).json({ error: "Not found" });
+
   const mix = mixes[idx];
+
+  // 1) админ может удалять любой микс
+  if (isAdmin) {
+    mixes.splice(idx, 1);
+    writeJSON(MIXES_FILE, mixes);
+    return res.json({ ok: true, deletedBy: "admin" });
+  }
+
+  // 2) автор может удалить свой
   if (mix.authorId && userId && String(mix.authorId) === String(userId)) {
     mixes.splice(idx, 1);
     writeJSON(MIXES_FILE, mixes);
-    return res.json({ ok: true });
+    return res.json({ ok: true, deletedBy: "author" });
   }
+
+  // 3) обратная совместимость: старые записи без authorId
+  // разрешим удалить «админу» по старой схеме X-User-Id: admin
   if (!mix.authorId && userId === "admin") {
     mixes.splice(idx, 1);
     writeJSON(MIXES_FILE, mixes);
-    return res.json({ ok: true, note: "deleted legacy mix by admin" });
+    return res.json({ ok: true, deletedBy: "admin-legacy", note: "deleted legacy mix by admin (X-User-Id)" });
   }
+
   return res.status(403).json({ error: "Forbidden" });
 });
 
