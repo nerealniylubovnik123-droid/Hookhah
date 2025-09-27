@@ -4,22 +4,22 @@ const fs = require("fs");
 const path = require("path");
 const cors = require("cors");
 
-const app = express();                    // корректная инициализация
+const app = express();
 const PORT = process.env.PORT || 8080;
 
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 
-// ---- файлы данных ----
+// ---------- файлы данных ----------
 const DATA_DIR = __dirname;
 const FLAVORS_FILE = path.join(DATA_DIR, "flavors.json");
 const MIXES_FILE   = path.join(DATA_DIR, "guest_mixes.json");
 
-// создадим пустые json при первом запуске
+// создаём пустые json при первом запуске
 if (!fs.existsSync(FLAVORS_FILE)) fs.writeFileSync(FLAVORS_FILE, "[]", "utf8");
 if (!fs.existsSync(MIXES_FILE))   fs.writeFileSync(MIXES_FILE,   "[]", "utf8");
 
-// ---- утилиты ----
+// ---------- helpers ----------
 function readJSON(file, fallback) {
   try {
     if (!fs.existsSync(file)) return fallback;
@@ -37,19 +37,16 @@ function writeJSON(file, data) {
   }
 }
 
-// ---- health ----
+// ---------- health ----------
 app.get("/healthz", (_req, res) => {
   res.json({ ok: true, ts: new Date().toISOString() });
 });
 
-// ===================== FLAVORS =====================
-
-// Список вкусов
+// ================= FLAVORS =================
 app.get("/api/flavors", (_req, res) => {
   res.json(readJSON(FLAVORS_FILE, []));
 });
 
-// Добавление вкуса (как было; удаление вкусов не трогаем)
 app.post("/api/flavors", (req, res) => {
   const adminHeader = req.header("X-Admin-Token");
   const isAdmin = adminHeader && adminHeader === (process.env.ADMIN_TOKEN || "");
@@ -80,9 +77,7 @@ app.post("/api/flavors", (req, res) => {
   res.json(item);
 });
 
-// ===================== MIXES =====================
-
-// Список миксов (новые сверху)
+// ================= MIXES =================
 app.get("/api/mixes", (_req, res) => {
   const list = readJSON(MIXES_FILE, []);
   const arr = Array.isArray(list) ? list.slice() : [];
@@ -90,7 +85,6 @@ app.get("/api/mixes", (_req, res) => {
   res.json(arr);
 });
 
-// Создание микса
 app.post("/api/mixes", (req, res) => {
   const b = req.body || {};
   const list = readJSON(MIXES_FILE, []);
@@ -110,7 +104,7 @@ app.post("/api/mixes", (req, res) => {
   res.json(item);
 });
 
-// Удаление микса: автор — только свой; АДМИН — любой (через X-Admin-Token)
+// удаление микса: автор — свой; АДМИН — любой (через X-Admin-Token)
 app.delete("/api/mixes/:id", (req, res) => {
   const id = String(req.params.id);
   const userId = req.header("X-User-Id") || null;
@@ -137,7 +131,7 @@ app.delete("/api/mixes/:id", (req, res) => {
     return res.json({ ok: true });
   }
 
-  // legacy: без authorId — разрешим удалить, если X-User-Id === "admin"
+  // legacy: без authorId — можно удалить, если X-User-Id === "admin"
   if (!mix.authorId && userId === "admin") {
     mixes.splice(idx, 1);
     writeJSON(MIXES_FILE, mixes);
@@ -147,14 +141,44 @@ app.delete("/api/mixes/:id", (req, res) => {
   return res.status(403).json({ error: "Forbidden" });
 });
 
-// ===================== FRONT (SPA) =====================
-// Отдаём index.html из КОРНЯ проекта
+// ================= FRONT (SPA) =================
+// Функция, которая КАЖДЫЙ РАЗ ищет index.html (в корне или в /public).
+function resolveIndex() {
+  const root = path.join(__dirname, "index.html");
+  const pub  = path.join(__dirname, "public", "index.html");
+  if (fs.existsSync(root)) return root;
+  if (fs.existsSync(pub))  return pub;
+  return null;
+}
+
+// раздаём статику, если есть папка рядом с найденным index.html
+(function mountStatic() {
+  const idx = resolveIndex();
+  if (idx) {
+    const dir = path.dirname(idx);
+    app.use(express.static(dir));
+    console.log("🔎 Serving index.html from:", idx);
+  } else {
+    console.log("⚠️  index.html not found. Put it next to server.js or in /public/index.html");
+  }
+})();
+
+// корень
 app.get("/", (_req, res) => {
-  res.type("html").sendFile(path.join(__dirname, "index.html"));
+  const idx = resolveIndex();
+  if (idx) return res.sendFile(idx);
+  res.status(200).type("text/plain").send(
+    "index.html not found.\nPlace it next to server.js or in /public/index.html."
+  );
 });
-// Любой GET, КРОМЕ /api/*, тоже на index.html (без звёздочки)
+
+// все GET, кроме /api/* — на SPA (без звёздочки)
 app.get(/^\/(?!api\/).*/, (_req, res) => {
-  res.type("html").sendFile(path.join(__dirname, "index.html"));
+  const idx = resolveIndex();
+  if (idx) return res.sendFile(idx);
+  res.status(200).type("text/plain").send(
+    "index.html not found.\nPlace it next to server.js or in /public/index.html."
+  );
 });
 
 app.listen(PORT, () => {
