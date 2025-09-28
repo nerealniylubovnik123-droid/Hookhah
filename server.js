@@ -4,7 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const cors = require("cors");
 
-const app = express();
+const app = app.use(express.json());
 const PORT = process.env.PORT || 8080;
 
 app.use(cors()); // разрешаем CORS со всех источников
@@ -45,20 +45,13 @@ app.get("/api/flavors", (req, res) => {
 app.post("/api/flavors", (req, res) => {
   const token = req.header("X-Admin-Token");
   if (!token || token !== (process.env.ADMIN_TOKEN || "")) {
-    return res.status(403).json({ error: "Forbidden" });
+    return res.status(403).json({ error: "Forbidden (bad admin token)" });
   }
-  const flavors = readJSON(FLAVORS_FILE, []);
-  const flavor = {
-    id: String(req.body?.id || "").trim(),
-    brand: String(req.body?.brand || "").trim(),
-    name: String(req.body?.name || "").trim(),
-    description: String(req.body?.description || ""),
-    tags: Array.isArray(req.body?.tags) ? req.body.tags : String(req.body?.tags || "").split(",").map(s=>s.trim()).filter(Boolean),
-    strength10: Number(req.body?.strength10 || 0),
-  };
+  const flavor = req.body || {};
   if (!flavor.brand || !flavor.name) {
     return res.status(400).json({ error: "brand and name are required" });
   }
+  const flavors = readJSON(FLAVORS_FILE, []);
   if (!flavor.id) {
     flavor.id = (String(flavor.brand) + "-" + String(flavor.name))
       .toLowerCase().replace(/\s+/g, "-");
@@ -90,15 +83,15 @@ app.post("/api/mixes", (req, res) => {
     author: String(body.author || ""),
     authorId: body.authorId == null ? null : String(body.authorId),
     createdAt: Date.now(),
-    taste: String(body.taste || ""),
-    strength10: Number(body.strength10 || 0),
+    taste: body.taste ?? null,
+    strength10: body.strength10 ?? null
   };
   mixes.push(mix);
   writeJSON(MIXES_FILE, mixes);
   res.json(mix);
 });
 
-// Удаление микса: автор — свой; АДМИН — любой (через X-Admin-Token)
+// Удаление — только автор (совпадает X-User-Id и authorId)
 app.delete("/api/mixes/:id", (req, res) => {
   const id = String(req.params.id);
   const userId = req.header("X-User-Id") || null;
@@ -107,18 +100,6 @@ app.delete("/api/mixes/:id", (req, res) => {
   if (idx === -1) return res.status(404).json({ error: "Not found" });
 
   const mix = mixes[idx];
-
-  // ✅ Админ с валидным X-Admin-Token может удалить ЛЮБОЙ микс
-  {
-    const token = req.header("X-Admin-Token");
-    if (token && token === (process.env.ADMIN_TOKEN || "")) {
-      mixes.splice(idx, 1);
-      writeJSON(MIXES_FILE, mixes);
-      return res.json({ ok: true, by: "admin" });
-    }
-  }
-
-  // Автор удаляет только свой
   if (mix.authorId && userId && String(mix.authorId) === String(userId)) {
     mixes.splice(idx, 1);
     writeJSON(MIXES_FILE, mixes);
