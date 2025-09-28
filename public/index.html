@@ -894,5 +894,132 @@
 })();
 </script>
 
+
+<!-- ==== Banned Words Admin (BW2) — self-contained ==== -->
+<style>
+  .bw2-fab{position:fixed;right:calc(16px + env(safe-area-inset-right));bottom:calc(16px + env(safe-area-inset-bottom));z-index:9999;border:none;border-radius:9999px;padding:12px 16px;font-weight:700;background:#111;color:#fff;box-shadow:0 10px 24px rgba(0,0,0,.25)}
+  .bw2-fab:active{transform:translateY(1px);opacity:.9}
+  .bw2-back{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;z-index:9998}
+  .bw2-modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:10000}
+  .bw2-card{width:min(800px,92vw);max-height:90vh;overflow:auto;background:#fff;color:#111;border-radius:16px;box-shadow:0 12px 36px rgba(0,0,0,.35)}
+  .bw2-head{padding:16px 20px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center}
+  .bw2-body{padding:16px 20px}
+  .bw2-foot{padding:12px 20px;border-top:1px solid #eee;display:flex;gap:12px;justify-content:flex-end}
+  .bw2-input,.bw2-text{width:100%;border:1px solid #ddd;border-radius:10px;padding:10px 12px;font:inherit;background:#fff;color:#111}
+  .bw2-text{min-height:220px;resize:vertical;white-space:pre}
+  .bw2-btn{border:none;border-radius:10px;padding:10px 14px;font-weight:700}
+  .bw2-btn.primary{background:#111;color:#fff}
+  .bw2-btn.secondary{background:#f2f2f2}
+  .bw2-note{font-size:12px;color:#666;margin-top:6px}
+</style>
+
+<button id="bw2-fab" class="bw2-fab" type="button" aria-label="Запрещённые слова">Слова 🚫</button>
+
+<div id="bw2-back" class="bw2-back"></div>
+<div id="bw2-modal" class="bw2-modal" aria-hidden="true" role="dialog" aria-modal="true">
+  <div class="bw2-card">
+    <div class="bw2-head">
+      <div style="font-weight:800">Запрещённые слова</div>
+      <button class="bw2-btn secondary" id="bw2-close" type="button">Закрыть</button>
+    </div>
+    <div class="bw2-body">
+      <p>Каждое слово — с новой строки. Проверка идёт по <em>вхождению</em> (регистр игнорируется).</p>
+      <textarea id="bw2-words" class="bw2-text" placeholder="пример:&#10;спайс&#10;наркотик"></textarea>
+      <div class="bw2-note">Не добавляйте слишком общие подстроки (например «а»), чтобы избежать ложных срабатываний.</div>
+      <div style="margin-top:14px">
+        <label style="font-size:12px;color:#666">Admin Token (для сохранения)</label>
+        <input id="bw2-token" class="bw2-input" type="password" placeholder="X-Admin-Token">
+      </div>
+      <div style="margin-top:14px">
+        <label style="font-size:12px;color:#666">API URL (если бэкенд на другом домене)</label>
+        <input id="bw2-api" class="bw2-input" type="text" placeholder="https://your-backend.onrender.com">
+        <div class="bw2-note">Если фронт и бэкенд на одном домене — оставьте пустым.</div>
+      </div>
+    </div>
+    <div class="bw2-foot">
+      <button class="bw2-btn secondary" id="bw2-save-api" type="button">Сохранить API</button>
+      <button class="bw2-btn secondary" id="bw2-reload"   type="button">Обновить из сервера</button>
+      <button class="bw2-btn primary"   id="bw2-save"     type="button">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  'use strict';
+  // Elements
+  var fab   = document.getElementById('bw2-fab');
+  var back  = document.getElementById('bw2-back');
+  var modal = document.getElementById('bw2-modal');
+  var closeB= document.getElementById('bw2-close');
+  var words = document.getElementById('bw2-words');
+  var token = document.getElementById('bw2-token');
+  var apiI  = document.getElementById('bw2-api');
+  var save  = document.getElementById('bw2-save');
+  var reload= document.getElementById('bw2-reload');
+  var saveApi=document.getElementById('bw2-save-api');
+
+  function apiBase(){
+    try{ return window.API_BASE || localStorage.getItem('apiBase') || ''; }catch(_){ return '';}
+  }
+  function apiUrl(path){
+    try{
+      var base = apiBase();
+      if (base && path[0]=='/') return base.replace(/\/+$/,'') + path;
+      return path;
+    }catch(_){ return path; }
+  }
+  function show(){ modal.style.display='flex'; back.style.display='block'; modal.setAttribute('aria-hidden','false'); try{ apiI.value = apiBase(); }catch(_){} }
+  function hide(){ modal.style.display='none'; back.style.display='none'; modal.setAttribute('aria-hidden','true'); }
+
+  async function reloadServer(){
+    try{
+      const r = await fetch(apiUrl('/api/banned-words'));
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      const data = await r.json();
+      const arr = Array.isArray(data.words) ? data.words : [];
+      words.value = arr.join('\\n');
+      alert('Загружено: ' + arr.length + ' шт.');
+    }catch(e){
+      alert('Ошибка загрузки: ' + (e && e.message || e));
+    }
+  }
+  async function saveWords(){
+    var list = String(words.value||'').split(/\\r?\\n/).map(function(s){return s.trim();}).filter(Boolean);
+    var tok  = String(token.value||'').trim();
+    if(!tok){ alert('Введите Admin Token'); return; }
+    try{
+      const r = await fetch(apiUrl('/api/banned-words'), {
+        method:'POST',
+        headers:{ 'Content-Type':'application/json', 'X-Admin-Token': tok },
+        body: JSON.stringify({ words: list })
+      });
+      if(!r.ok){
+        let err={}; try{ err = await r.json(); }catch(_){}
+        throw new Error(err && err.error || ('HTTP '+r.status));
+      }
+      alert('Сохранено: ' + list.length + ' шт.'); location.reload();
+    }catch(e){
+      alert('Ошибка сохранения: ' + (e && e.message || e));
+    }
+  }
+  function saveApiUrl(){
+    var v = String(apiI.value||'').trim();
+    try{
+      if (v){ localStorage.setItem('apiBase', v); alert('API URL сохранён. Перезагрузите страницу.'); }
+      else  { localStorage.removeItem('apiBase'); alert('API URL очищён. Перезагрузите страницу.'); }
+    }catch(e){ alert('Не удалось сохранить API URL'); }
+  }
+
+  // Wire
+  if (fab)    fab.addEventListener('click', function(){ reloadServer().finally(show); });
+  if (closeB) closeB.addEventListener('click', hide);
+  if (back)   back.addEventListener('click', hide);
+  if (reload) reload.addEventListener('click', reloadServer);
+  if (save)   save.addEventListener('click', saveWords);
+  if (saveApi)saveApi.addEventListener('click', saveApiUrl);
+})();
+</script>
+
 </body>
 </html>
