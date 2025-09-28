@@ -3,539 +3,13 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#0a0b0d" />
+  <meta name="theme-color" content="#020617" />
   <title>Hookah Mixes</title>
   <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- ВИЗУАЛ ТОЛЬКО: тёплая тёмная тема + анимации (логика НЕ менялась) -->
-  <style id="anim-pack">
-/* ===== Themes page animations & active highlight ===== */
-@keyframes slideFadeIn {
-  0% { opacity: 0; transform: translateY(-10px); }
-  100% { opacity: 1; transform: none; }
-}
-#themesPage { animation: slideFadeIn .28s cubic-bezier(.2,.6,.2,1); }
-#themesGrid .brand-chip{ transition: transform .18s cubic-bezier(.2,.6,.2,1), box-shadow .18s, outline .18s; }
-#themesGrid .brand-chip.active{
-  background: linear-gradient(180deg, color-mix(in oklab, var(--accent1) 12%, var(--chip)), var(--chip));
-  box-shadow: 0 0 0 2px var(--ring) inset, 0 10px 22px color-mix(in oklab, var(--accent1) 20%, transparent);
-  transform: translateY(-1px);
-}
-#themesGrid .brand-chip:active{ transform: translateY(0); }
-
-/* ===== Theme sheet: top anchored ===== */
-#themeSheet{
-  position: fixed !important;
-  inset: 0 !important;
-  z-index: 9999 !important;
-  display: flex !important;
-  align-items: flex-start !important; /* open from top */
-  justify-content: center !important;
-  background: color-mix(in oklab, var(--bg) 70%, black) !important;
-  backdrop-filter: blur(2px) !important;
-}
-#themeSheet[hidden]{ display:none !important; }
-#themeSheet .sheet{
-  position: relative !important;
-  width: 100% !important;
-  max-width: 700px !important;
-  background: var(--card) !important;
-  border: 1px solid var(--border) !important;
-  border-radius: 0 0 16px 16px !important; /* dropdown feel */
-  padding: 14px 16px 16px !important;
-  max-height: 70dvh !important;
-  overflow: auto !important;
-  margin: calc(env(safe-area-inset-top, 0) + 58px) 8px 8px !important; /* below header */
-  box-shadow: 0 20px 50px rgba(0,0,0,.35);
-}
-#themeSheet .grid{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px; }
-@media (max-width: 480px){
-  #themeSheet .sheet{ max-width: 100% !important; }
-  #themeSheet .grid{ grid-template-columns:repeat(2, minmax(0,1fr)); }
-}
-
-/* ===== Robust fullscreen theme sheet positioning ===== */
-#themeSheet{
-  position: fixed !important;
-  inset: 0 !important;
-  z-index: 9999 !important;
-  display: flex !important;
-  align-items: flex-end !important;
-  justify-content: center !important;
-  background: color-mix(in oklab, var(--bg) 70%, black) !important;
-  backdrop-filter: blur(2px) !important;
-}
-#themeSheet[hidden]{ display:none !important; }
-#themeSheet .sheet{
-  position: relative !important;
-  width: 100% !important;
-  max-width: 520px !important;
-  background: var(--card) !important;
-  border-top: 1px solid var(--border) !important;
-  border-radius: 16px 16px 0 0 !important;
-  padding: 14px 12px 16px !important;
-  max-height: 85dvh !important;
-  overflow: auto !important;
-  margin: 0 8px 8px !important;
-}
-#themeSheet .grid{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px; }
-@media (max-width: 420px){
-  #themeSheet .grid{ grid-template-columns:repeat(2, minmax(0,1fr)); }
-}
-
-/* ===== Theme Sheet Responsive Fix ===== */
-#themeSheet{
-  position: fixed;
-  inset: 0;
-  z-index: 80;
-  background: color-mix(in oklab, var(--bg) 70%, black);
-  backdrop-filter: blur(2px);
-}
-#themeSheet[hidden]{ display:none; }
-#themeSheet .sheet{
-  position: absolute;
-  left: 0; right: 0; bottom: 0;
-  width: 100%;
-  background: var(--card);
-  border-top: 1px solid var(--border);
-  border-radius: 16px 16px 0 0;
-  padding: 14px 12px 16px;
-  max-height: 85dvh;
-  overflow: auto;
-}
-@media (min-width: 520px){
-  #themeSheet .sheet{
-    left: 50%; right: auto; bottom: 50%;
-    transform: translate(-50%, 50%);
-    width: min(520px, 92vw);
-    border-radius: 16px;
-  }
-}
-#themeSheet .grid{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:10px; }
-@media (max-width: 420px){
-  #themeSheet .grid{ grid-template-columns:repeat(2, minmax(0,1fr)); }
-}
-#themeSheet .opt{
-  border:1px solid var(--border);
-  border-radius: 12px;
-  padding: 12px;
-  text-align:center;
-  cursor:pointer;
-  background: color-mix(in oklab, var(--card) 92%, transparent);
-}
-#themeSheet .opt.active{ outline:2px solid var(--ring); }
-#themeSheet .opt:active{ transform: scale(.98); }
-
-/* ===== Minimal Light stronger overrides ===== */
-body[data-theme="minimal-light"]{
-  --text:#0b0c0e;
-  --muted:#4b5563;
-  --card:#ffffff;
-  --border:rgba(0,0,0,.12);
-  --chip:#f3f4f6;
-}
-/* Force key text utilities to dark in minimal-light */
-body[data-theme="minimal-light"] .text-slate-100,
-body[data-theme="minimal-light"] .text-slate-200,
-body[data-theme="minimal-light"] .text-slate-300,
-body[data-theme="minimal-light"] .text-slate-900{
-  color:#0b0c0e !important;
-}
-body[data-theme="minimal-light"] .opacity-60,
-body[data-theme="minimal-light"] .text-slate-400,
-body[data-theme="minimal-light"] .text-slate-300\/70,
-body[data-theme="minimal-light"] .text-slate-300\/80{
-  color:#4b5563 !important;
-}
-/* Inputs and badges readable on light */
-body[data-theme="minimal-light"] .bg-slate-900,
-body[data-theme="minimal-light"] .bg-slate-800,
-body[data-theme="minimal-light"] .bg-slate-700{
-  background:#ffffff !important;
-}
-body[data-theme="minimal-light"] .border-slate-900,
-body[data-theme="minimal-light"] .border-slate-800,
-body[data-theme="minimal-light"] .border-slate-700{
-  border-color: rgba(0,0,0,.12) !important;
-}
-body[data-theme="minimal-light"] .hover\:bg-white\/10:hover{
-  background: rgba(0,0,0,.06) !important;
-}
-
-/* ===== Mobile & Readability Fixes ===== */
-
-/* 1) Stabilize layout on touch: disable hover translate on touch devices */
-@media (hover:none){
-  .ui-card:hover{ transform:none !important; }
-  .brand-chip:hover{ transform:none !important; }
-}
-
-/* 2) Header actions as a horizontal scroller on small screens */
-@media (max-width: 480px){
-  header > div:last-child{
-    display:flex;
-    gap:.5rem;
-    overflow-x:auto;
-    -webkit-overflow-scrolling:touch;
-    padding-bottom: 2px;
-  }
-  header > div:last-child > *{
-    flex:0 0 auto;
-  }
-}
-
-/* 3) Prevent page "jumping" on focus rings by reserving outline space */
-:focus-visible{ outline-offset: 2px; }
-.tap:active{ transform: translateY(0) scale(.997); } /* keep subtle but not shift */
-
-
-/* 4) Minimal-light theme readability: ensure foregrounds are dark on light surfaces */
-body[data-theme="minimal-light"] .text-slate-100,
-body[data-theme="minimal-light"] .text-slate-200,
-body[data-theme="minimal-light"] .text-slate-300{
-  color:#0b0c0e !important;
-}
-body[data-theme="minimal-light"] .opacity-60,
-body[data-theme="minimal-light"] .text-slate-400{
-  color:#4b5563 !important;
-}
-/* Lighten heavy dark backgrounds that were mapped from bg-slate-9xx */
-body[data-theme="minimal-light"] .bg-slate-900,
-body[data-theme="minimal-light"] .bg-slate-800,
-body[data-theme="minimal-light"] .bg-slate-700{
-  background-color:#ffffff !important;
-}
-/* Softer borders for light theme */
-body[data-theme="minimal-light"] .border-slate-900,
-body[data-theme="minimal-light"] .border-slate-800,
-body[data-theme="minimal-light"] .border-slate-700{
-  border-color: rgba(0,0,0,.12) !important;
-}
-/* Active tabs: keep readable */
-body[data-theme="minimal-light"] .bg-slate-100{ background:#e5e7eb !important; }
-body[data-theme="minimal-light"] .text-slate-900{ color:#0b0c0e !important; }
-
-/* 5) Card internal separators not too harsh on light */
-body[data-theme="minimal-light"] .ui-card{
-  box-shadow: 0 6px 16px rgba(0,0,0,.08), inset 0 1px 0 rgba(255,255,255,.6);
-}
-
-/* 6) Avoid full-viewport wobble on iOS address bar changes */
-.min-h-\[100svh\]{ min-height: 100dvh; } /* prefer dynamic viewport unit */
-
-/* === THEME OVERRIDES (map Tailwind-like classes to tokens) ================ */
-/* Borders */
-body[data-theme] .border-slate-700{ border-color: var(--border) !important; }
-body[data-theme] .border-slate-800{ border-color: color-mix(in oklab, var(--border) 85%, black) !important; }
-body[data-theme] .border-slate-900{ border-color: color-mix(in oklab, var(--border) 70%, black) !important; }
-/* Backgrounds */
-body[data-theme] .bg-slate-900{ background-color: color-mix(in oklab, var(--card) 80%, black) !important; }
-body[data-theme] .bg-slate-800{ background-color: color-mix(in oklab, var(--card) 88%, black) !important; }
-body[data-theme] .bg-slate-700{ background-color: color-mix(in oklab, var(--card) 92%, black) !important; }
-/* Text */
-body[data-theme] .text-slate-100, 
-body[data-theme] .text-slate-200,
-body[data-theme] .text-slate-300{ color: var(--text) !important; }
-/* Muted text replacements */
-body[data-theme] .text-slate-300\/70, 
-body[data-theme] .text-slate-300\/80,
-body[data-theme] .text-slate-400,
-body[data-theme] .opacity-60{ color: var(--muted) !important; }
-/* Badges that used border-slate & bg-slate */
-body[data-theme] .badge, 
-body[data-theme] .inline-flex.rounded-full.border{ border-color: var(--border) !important; background: color-mix(in oklab, var(--card) 85%, transparent) !important; }
-/* Inputs & textarea (already themed, make specific) */
-body[data-theme] input.h-9, 
-body[data-theme] textarea{ background-color: color-mix(in oklab, var(--card) 86%, black) !important; border-color: var(--border) !important; color: var(--text) !important; }
-/* Focus rings */
-body[data-theme] .focus\:ring-slate-600:focus{ box-shadow: 0 0 0 2px var(--ring) !important; outline: none; border-color: var(--ring) !important; }
-/* Header tab active buttons (bg-slate-100 text-slate-900) remap for light/dark) */
-body[data-theme] .text-slate-900{ color: #0b0c0e !important; } /* fine for most themes */
-body[data-theme="minimal-light"] .bg-slate-100{ background:#e5e7eb !important; }
-body[data-theme]:not([data-theme="minimal-light"]) .bg-slate-100{ background: var(--text) !important; color:#0b0c0e !important; }
-/* Hover overlay tweak */
-body[data-theme] .hover\:bg-white\/10:hover{ background: color-mix(in oklab, var(--text) 10%, transparent) !important; }
-/* Generic button borders */
-body[data-theme] .border{ border-color: var(--border) !important; }
-/* Brand-chip inherent */
-body[data-theme] .brand-chip{ background: var(--chip) !important; border-color: var(--border) !important; }
-/* Guest cards mini badges */
-body[data-theme] .bg-slate-900.border-slate-700{ background: color-mix(in oklab, var(--card) 85%, transparent) !important; border-color: var(--border) !important; }
-
-/* === THEME TOKENS ======================================================= */
-:root{
-  --bg:#0a0b0d; --card:#111216; --text:#e5e7eb; --muted:#9aa4b2; --ring:rgba(245,158,11,.55);
-  --accent1:#F59E0B; --accent2:#FDBA74; --accent3:#FCA5A5;
-  --chip:#0f1013; --border:rgba(148,163,184,.18);
-  --seg1:#F59E0B; --seg2:#f97316; --seg3:#22c55e; --seg4:#a78bfa;
-}
-body[data-theme="warm-dark"]{
-  --bg:#0a0b0d; --card:rgba(17,18,22,.82); --text:#e5e7eb; --muted:#9aa4b2; --ring:rgba(245,158,11,.55);
-  --accent1:#F59E0B; --accent2:#FDBA74; --accent3:#FCA5A5;
-  --chip:#0f1013; --border:rgba(148,163,184,.18);
-  --seg1:#F59E0B; --seg2:#f97316; --seg3:#22c55e; --seg4:#a78bfa;
-}
-body[data-theme="frosted-glass"]{
-  --bg:#0a1117; --card:rgba(13,23,33,.7); --text:#e6f0ff; --muted:#9fb3c8; --ring:rgba(125,211,252,.55);
-  --accent1:#60a5fa; --accent2:#7dd3fc; --accent3:#a78bfa;
-  --chip:rgba(15,25,35,.6); --border:rgba(147,197,253,.22);
-  --seg1:#60a5fa; --seg2:#22d3ee; --seg3:#a78bfa; --seg4:#34d399;
-  backdrop-filter: blur(8px);
-}
-body[data-theme="cyber-neon"]{
-  --bg:#07060a; --card:#0c0a13; --text:#e6e1ff; --muted:#b7a8ff; --ring:rgba(168,85,247,.6);
-  --accent1:#22d3ee; --accent2:#a78bfa; --accent3:#06b6d4;
-  --chip:#0d0a17; --border:rgba(167,139,250,.25);
-  --seg1:#22d3ee; --seg2:#a78bfa; --seg3:#06b6d4; --seg4:#67e8f9;
-}
-body[data-theme="minimal-light"]{
-  --bg:#f7f7f8; --card:#ffffff; --text:#0b0c0e; --muted:#4b5563; --ring:rgba(59,130,246,.35);
-  --accent1:#111827; --accent2:#6b7280; --accent3:#1f2937;
-  --chip:#f3f4f6; --border:rgba(0,0,0,.08);
-  --seg1:#111827; --seg2:#6b7280; --seg3:#1f2937; --seg4:#9ca3af;
-}
-body[data-theme="earth-sepia"]{
-  --bg:#0e0c0a; --card:#151310; --text:#f3efe8; --muted:#cbbba4; --ring:rgba(234,179,8,.45);
-  --accent1:#d97706; --accent2:#f59e0b; --accent3:#a16207;
-  --chip:#14110e; --border:rgba(250,204,21,.18);
-  --seg1:#d97706; --seg2:#f59e0b; --seg3:#a16207; --seg4:#84cc16;
-}
-body[data-theme="high-contrast"]{
-  --bg:#000; --card:#000; --text:#fff; --muted:#d1d5db; --ring:rgba(255,255,0,.8);
-  --accent1:#fff; --accent2:#fff; --accent3:#fff;
-  --chip:#000; --border:rgba(255,255,255,.8);
-  --seg1:#fff; --seg2:#d1d5db; --seg3:#9ca3af; --seg4:#6b7280;
-}
-
-/* Background flourishes adjusted to themes */
-body{ background: var(--bg); color: var(--text); }
-body[data-theme="warm-dark"]{
-  background:
-    radial-gradient(900px 600px at 10% -10%, rgba(245,158,11,.12), transparent 60%),
-    radial-gradient(700px 500px at 95% 0%, rgba(253,186,116,.07), transparent 55%),
-    var(--bg);
-}
-body[data-theme="frosted-glass"]{
-  background:
-    radial-gradient(900px 600px at 0% -20%, rgba(125,211,252,.16), transparent 60%),
-    radial-gradient(700px 500px at 85% 0%, rgba(96,165,250,.12), transparent 55%),
-    var(--bg);
-}
-body[data-theme="cyber-neon"]{
-  background:
-    radial-gradient(900px 600px at 10% -10%, rgba(167,139,250,.16), transparent 60%),
-    radial-gradient(700px 500px at 90% 0%, rgba(34,211,238,.12), transparent 55%),
-    var(--bg);
-}
-/* Inputs respect tokens */
-input[type=text], input[type=number], textarea{
-  background-color: color-mix(in oklab, var(--card) 86%, black);
-  border-color: var(--border);
-  color: var(--text);
-}
-
-/* Mix bar segments use tokenized gradients */
-#mixBar .mix-seg:nth-child(1){ background:linear-gradient(90deg,var(--seg1),var(--seg2)); }
-#mixBar .mix-seg:nth-child(2){ background:linear-gradient(90deg,var(--seg3),var(--seg4)); }
-#mixBar .mix-seg:nth-child(3){ background:linear-gradient(90deg,var(--seg2),var(--seg1)); }
-#mixBar .mix-seg:nth-child(4){ background:linear-gradient(90deg,var(--seg4),var(--seg3)); }
-
-/* Small floating theme button */
-#themeFab{
-  position:fixed; right:12px; bottom:12px; z-index:50;
-  background:linear-gradient(90deg,var(--accent1),var(--accent2));
-  color:#0b0b0b; border-radius:999px; height:40px; padding:0 14px; font-size:12px;
-  box-shadow:0 14px 30px rgba(0,0,0,.35);
-}
-#themeFab[hidden]{ display:none; }
-
-/* Simple sheet */
-#themeSheet[hidden]{ display:none; }
-#themeSheet .sheet{
-  position:fixed; left:0; right:0; bottom:0; z-index:60;
-  background:var(--card); border-top:1px solid var(--border);
-  border-radius:16px 16px 0 0; padding:12px;
-  box-shadow:0 -20px 40px rgba(0,0,0,.4);
-}
-#themeSheet .grid{ display:grid; grid-template-columns:repeat(3, minmax(0,1fr)); gap:8px; }
-#themeSheet .opt{ border:1px solid var(--border); border-radius:12px; padding:10px; text-align:center; cursor:pointer; }
-#themeSheet .opt.active{ outline:2px solid var(--ring); }
-
-    /* ---------- Visual Tweaks (patch) ---------- */
-    .ui-card{
-      position: relative;
-      background: rgba(17,18,22,.82);
-      border: 1px solid rgba(148,163,184,.18);
-      border-radius: 1rem;
-      overflow: hidden;
-      isolation: isolate;
-    }
-    .ui-card::before{
-      content:"";
-      position:absolute; inset:0;
-      pointer-events:none;
-      opacity:0;
-      background: conic-gradient(from 180deg at 50% 50%, rgba(245,158,11,.35), rgba(253,186,116,.25), rgba(148,163,184,.15), rgba(245,158,11,.35));
-      mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-      -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-      mask-composite: exclude; -webkit-mask-composite: xor;
-      padding: 1px; border-radius: 1rem;
-      transition: opacity .25s ease;
-    }
-    .ui-card:hover::before{ opacity:.55; }
-
-    .brand-chip{
-      position: relative;
-      background: rgba(15,16,19,.75);
-    }
-    .brand-chip.active{
-      background: linear-gradient(180deg, rgba(245,158,11,.08), rgba(15,16,19,.75));
-      box-shadow: 0 0 0 2px rgba(245,158,11,.35) inset, 0 6px 14px rgba(245,158,11,.12);
-    }
-    .brand-chip:focus-visible{
-      box-shadow: 0 0 0 2px var(--ring), 0 0 0 4px rgba(245,158,11,.15);
-    }
-
-    /* Smooth scrollbar */
-    .brands-rail{
-      scrollbar-width: thin;
-      scrollbar-color: rgba(148,163,184,.35) transparent;
-    }
-    .brands-rail::-webkit-scrollbar{ height:8px; }
-    .brands-rail::-webkit-scrollbar-track{ background: transparent; }
-    .brands-rail::-webkit-scrollbar-thumb{ background: rgba(148,163,184,.35); border-radius: 999px; }
-
-    /* Mix bar segments subtle separation */
-    #mixBar .mix-seg{ box-shadow: inset -1px 0 0 rgba(0,0,0,.25); }
-
-    /* Inputs higher contrast */
-    input[type=text], input[type=number], textarea{
-      background-color: #0f1115;
-      border-color: rgba(148,163,184,.28);
-    }
-    input[type=text]:focus, input[type=number]:focus, textarea:focus{
-      box-shadow: 0 0 0 2px var(--ring), 0 0 0 1px rgba(245,158,11,.25) inset;
-    }
-
-    :root{
-      --bg:#0a0b0d; --card:#111216; --ring:rgba(245,158,11,.55);
-      --warm1:#F59E0B; --warm2:#FDBA74; --warm3:#FCA5A5; --soft:#1a1b1f;
-    }
-    /* -------------------- БАЗА -------------------- */
-    html,body{ height:100%; }
-    body{
-      background:
-        radial-gradient(900px 600px at 10% -10%, rgba(245,158,11,.12), transparent 60%),
-        radial-gradient(700px 500px at 95% 0%, rgba(253,186,116,.07), transparent 55%),
-        var(--bg);
-      color: #e5e7eb;
-      -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
-    }
-    /* Мягкий шум */
-    body::after{
-      content:""; position:fixed; inset:0; pointer-events:none; opacity:.07;
-      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.7' numOctaves='2'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-      mix-blend-mode:soft-light;
-    }
-    /* Водяной знак-лого (не перекрывает контент) */
-    .wm{position:fixed;inset:0;pointer-events:none;opacity:.08;background-repeat:no-repeat;background-position:center 30%;background-size:min(70vmin,560px);filter:blur(.2px);}
-    body::before{
-      content:""; position:fixed; inset:0; pointer-events:none; opacity:.065;
-      background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Cdefs%3E%3ClinearGradient id='g' x1='0' x2='1'%3E%3Cstop offset='0' stop-color='%23F59E0B'/%3E%3Cstop offset='1' stop-color='%23FDBA74'/%3E%3C/linearGradient%3E%3C/defs%3E%3Ccircle cx='256' cy='256' r='230' fill='url(%23g)' opacity='.35'/%3E%3Cpath d='M256 60c-34 34-34 68 0 102s34 68 0 102-34 68 0 102' stroke='%23fde68a' stroke-width='28' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='256' cy='420' r='22' fill='%23fde68a'/%3E%3C/svg%3E");
-      background-repeat:no-repeat; background-position:center 30%; background-size:min(70vmin,560px);
-      filter: blur(0.2px);
-    }
-
-    /* -------------------- КАРТОЧКИ -------------------- */
-    .ui-card{
-      border-radius: 1rem;
-      background:rgba(17,18,22,.82);
-      border:1px solid rgba(148,163,184,.18);
-      box-shadow:0 10px 25px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.03);
-      backdrop-filter:blur(6px);
-      transition: transform .25s cubic-bezier(.2,.6,.2,1), box-shadow .25s cubic-bezier(.2,.6,.2,1);
-    }
-    .ui-card:hover{ transform:translateY(-1px); box-shadow:0 14px 30px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,255,255,.03); }
-
-    /* -------------------- ЛОГО (дыхание) -------------------- */
-    header svg{
-      filter: drop-shadow(0 0 12px rgba(245,158,11,.25));
-      animation: glowPulse .9s ease-out 1, breath 10s ease-in-out infinite 1.2s;
-      transform-origin:center;
-    }
-    @keyframes glowPulse{0%{transform:scale(.92);filter:drop-shadow(0 0 0 rgba(245,158,11,0))}100%{transform:scale(1);filter:drop-shadow(0 0 18px rgba(245,158,11,.5))}}
-    @keyframes breath{0%,100%{filter:drop-shadow(0 0 10px rgba(245,158,11,.25))}50%{filter:drop-shadow(0 0 16px rgba(245,158,11,.44))}}
-
-    /* -------------------- БРЕНД-ЧИПСЫ -------------------- */
-    .brand-chip{
-      white-space:nowrap; transition:transform .18s cubic-bezier(.2,.6,.2,1), box-shadow .18s cubic-bezier(.2,.6,.2,1), border-color .18s;
-      border:1px solid rgba(148,163,184,.2);
-      padding:0 .75rem; height:2.25rem; display:inline-flex; align-items:center; border-radius:.9rem;
-      background: rgba(15,16,19,.75);
-      will-change:transform;
-    }
-    .brand-chip:hover{ transform:translateY(-1px); box-shadow:0 0 0 2px rgba(245,158,11,.18) inset; }
-    .brand-chip.active{ box-shadow:0 0 0 2px rgba(245,158,11,.35) inset; border-color:rgba(245,158,11,.45); }
-    .brand-chip:active{ transform:translateY(0); }
-
-    /* -------------------- ПОЯВЛЕНИЯ (stagger) -------------------- */
-    .reveal{ opacity:0; transform:translateY(8px); }
-    .reveal.in{ opacity:1; transform:none; transition:opacity .22s cubic-bezier(.3,.7,.2,1) var(--d,0ms), transform .22s cubic-bezier(.3,.7,.2,1) var(--d,0ms); }
-    .reveal-up{ opacity:0; transform:translateY(10px); }
-    .reveal-up.in{ opacity:1; transform:none; transition:opacity .22s cubic-bezier(.3,.7,.2,1) var(--d,0ms), transform .22s cubic-bezier(.3,.7,.2,1) var(--d,0ms); }
-
-    /* -------------------- ИНПУТЫ/СЛАЙДЕРЫ -------------------- */
-    input[type=text], input[type=number], textarea{
-      transition: box-shadow .18s, border-color .18s, background-color .18s;
-    }
-    input[type=text]:focus, input[type=number]:focus, textarea:focus{
-      outline: none; box-shadow: 0 0 0 2px var(--ring); border-color: rgba(245,158,11,.35);
-    }
-    input[type=range]{ background:linear-gradient(90deg, rgba(245,158,11,.35), rgba(253,186,116,.35)); height:6px; border-radius:999px; }
-    input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; width:18px; height:18px; border-radius:50%; background:#fff; border:3px solid #cbd5e1; box-shadow:0 2px 8px rgba(0,0,0,.45); transition: transform .12s ease; }
-    input[type=range]:active::-webkit-slider-thumb{ transform: scale(1.08); }
-    input[type=range]:active{ box-shadow:0 0 0 6px rgba(245,158,11,.12); }
-
-    /* -------------------- ПОЛОСА МИКСА -------------------- */
-    .mix-seg{ transition:width .25s cubic-bezier(.2,.6,.2,1); }
-
-    /* -------------------- КНОПКИ -------------------- */
-    .btn-primary{
-      position:relative; color:#0b0b0b;
-      background:linear-gradient(90deg,var(--warm1),var(--warm2));
-      box-shadow:0 0 0 1px rgba(245,158,11,.35) inset, 0 8px 20px rgba(245,158,11,.15);
-      transition: transform .18s cubic-bezier(.2,.6,.2,1), box-shadow .18s cubic-bezier(.2,.6,.2,1);
-    }
-    .btn-primary:hover{ transform: translateY(-1px); box-shadow:0 0 0 1px rgba(245,158,11,.45) inset, 0 12px 28px rgba(245,158,11,.22); }
-    .btn-primary:active{ transform: translateY(0); }
-    .btn-primary.shimmer::before{
-      content:""; position:absolute; inset:0;
-      background:linear-gradient(120deg,transparent,rgba(255,255,255,.18),transparent);
-      transform:translateX(-100%); animation:shimmer 3s linear infinite;
-    }
-    @keyframes shimmer{0%{transform:translateX(-100%)}100%{transform:translateX(100%)}}
-
-    /* Ripple на клике */
-    .tap{ position:relative; overflow:hidden; transition: transform .06s ease; }
-    .tap:active{ transform: translateY(0.5px) scale(.997); }
-    .tap::after{
-      content:""; position:absolute; left:var(--rx,50%); top:var(--ry,50%); width:0; height:0; border-radius:999px;
-      transform:translate(-50%,-50%); background:radial-gradient(circle, rgba(253,186,116,.35) 0, rgba(253,186,116,0) 60%); opacity:0; pointer-events:none;
-    }
-    .tap.rippling::after{ animation:ripple .6s ease-out; }
-    @keyframes ripple{0%{opacity:.35; width:0; height:0}100%{opacity:0; width:220px; height:220px}}
-
-    /* -------------------- ДОСТУПНОСТЬ -------------------- */
-    :focus-visible{ outline:2px solid transparent; box-shadow:0 0 0 2px var(--ring); border-color:rgba(245,158,11,.45)!important; }
-
-    /* Уважение к reduced motion */
-    @media (prefers-reduced-motion:reduce){
-      *{animation:none!important; transition:none!important}
-    }
-  </style>
-
-  <!-- Ранний дружелюбный экран ошибок -->
+  <style>body{background:#020617}</style>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+  <!-- Ранний экран ошибок -->
   <script>
     (function(){
       function showFatal(msg){
@@ -564,69 +38,42 @@ input[type=text], input[type=number], textarea{
   <div id="root" class="min-h-[100svh]"></div>
 
   <script>
-  
-// === THEME RUNTIME =======================================================
-const THEMES = ['warm-dark','frosted-glass','cyber-neon','minimal-light','earth-sepia','high-contrast'];
-function getSavedTheme(){ try{ return localStorage.getItem('theme') || ''; }catch(_){ return ''; } }
-function applyTheme(t){
-  if(!THEMES.includes(t)) t = 'warm-dark';
-  document.body.setAttribute('data-theme', t);
-  try{ localStorage.setItem('theme', t); }catch(_){}
-}
-// initial apply before app render
-(function initTheme(){
-  const qpTheme=new URLSearchParams(location.search).get('theme');
-  const t = qpTheme && THEMES.includes(qpTheme) ? qpTheme : (getSavedTheme() || 'warm-dark');
-  applyTheme(t);
-})();
-
   // ========================= API ============================================
-  const API_BASE = location.origin;
-  const api = (path, opts={}) => fetch(API_BASE + path, {
-    cache: 'no-store',
-    ...opts,
-    headers: { 'Content-Type':'application/json; charset=UTF-8', ...(opts.headers||{}) }
-  });
+  const API_BASE = "https://hookhah.onrender.com";
+  function api(path, opts={}) {
+    const headers = { Accept: "application/json", ...(opts.headers||{}) };
+    // Авто-Content-Type для JSON body
+    if (opts.body && !headers["Content-Type"] && !(opts.body instanceof FormData)) {
+      headers["Content-Type"] = "application/json; charset=UTF-8";
+    }
+    return fetch(API_BASE + path, { cache: "no-store", ...opts, headers });
+  }
 
   // ========================= УТИЛИТЫ ========================================
-  const escAttr = s => String(s).replace(/"/g,'&quot;');
-  const escHTML = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const safeNum = (v,d=0)=>{const n=Number(v);return Number.isFinite(n)?n:d;};
-  const safePercent = v => Math.max(0, Math.min(100, safeNum(v,0)));
-  const percentSum = parts => Array.isArray(parts) ? parts.reduce((a,b)=>a+safePercent(b&&b.percent),0) : 0;
-  const isMixValid = (parts,title)=>(Array.isArray(parts) && parts.length>0 && percentSum(parts)===100 && String(title||'').trim().length>=3);
-  const uuidv4 = ()=>{let dt=Date.now(); if(typeof performance!='undefined'&&performance.now) dt+=performance.now(); return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=(dt+Math.random()*16)%16|0;dt=Math.floor(dt/16);return (c==='x'?r:(r&0x3|0x8)).toString(16);});};
-
-  const BRAND_STRENGTH10_DEFAULTS = {darkside:5,blackburn:6,musthave:5,overdose:6,bonch:7,starline:3};
-  const normalizeBrand=b=>(b||'').trim();
-  const getStrength10=f=>{ if(!f) return 5; if(typeof f.strength10==='number'&&Number.isFinite(f.strength10)) return Math.max(1,Math.min(10,f.strength10)); return BRAND_STRENGTH10_DEFAULTS[ brandKey(f.brand) ] ?? 5;};
-  const strengthColor=v=>{
-    if(v==null) return {bg:'bg-slate-800',text:'text-slate-200',border:'border-slate-700'};
-    if(v<4)  return {bg:'bg-emerald-950',text:'text-emerald-300',border:'border-emerald-800'};
-    if(v<7)  return {bg:'bg-amber-950',text:'text-amber-300',border:'border-amber-800'};
-    return     {bg:'bg-rose-950',text:'text-rose-300',border:'border-rose-800'};
-  };
-  function clampPercentForPart(parts,targetId,newVal){
+  const safeNum = (v, d=0) => { const n = Number(v); return Number.isFinite(n)?n:d; };
+  const safePercent = (v) => Math.max(0, Math.min(100, safeNum(v, 0)));
+  const percentSum = (parts=[]) => (Array.isArray(parts)?parts.reduce((a,b)=>a+safePercent(b && b.percent),0):0);
+  const isMixValid = (parts,title) => (Array.isArray(parts)?(parts.length>0 && percentSum(parts)===100 && String(title||'').trim().length>=3):false);
+  const clampPercentForPart=(parts,targetId,newVal)=>{
     const other=percentSum(parts.filter(x=>x&&x.flavorId!==targetId));
     return Math.max(0,Math.min(safePercent(newVal),100-other));
-  }
-  function filterFlavorsByQueryAdv(flavors, query){
-    function normalize(s){ return String(s||'').toLowerCase().replace(/ё/g,'е').trim(); }
-    const q = normalize(query); if(!q) return flavors||[];
-    const SYN = {"киви":["kiwi"],"банан":["banana"],"манго":["mango"],"лимон":["lemon","citrus"],"апельсин":["orange"],"грейпфрут":["grapefruit"],"арбуз":["watermelon"],"дыня":["melon"],"виноград":["grape"],"персик":["peach"],"яблок":["apple"],"маракуй":["passion"],"клубник":["strawberry"],"черник":["blueberry"],"мята":["mint"],"лед":["ice","freeze","frost","cold"],"ваниль":["vanilla"],"печень":["cookie","bisc"],"шоколад":["choco","chocolate"],"кисл":["sour"],"слад":["sweet"]};
-    const tokens = q.split(/\s+/).filter(Boolean);
-    function textOf(f){ return normalize([f?.name, f?.description, Array.isArray(f?.tags)?f.tags.join(' '):''].join(' ')); }
-    return (flavors||[]).filter(f=>{
-      const text = textOf(f);
-      return tokens.every(t=>{
-        const vars = new Set([t]);
-        Object.entries(SYN).forEach(([ru, arr])=>{ if(t.indexOf(ru)!==-1) arr.forEach(v=>vars.add(v)); });
-        let hit=false; vars.forEach(v=>{ if(text.indexOf(v)!==-1) hit=true; }); return hit;
-      });
-    });
-  }
-  function tasteWordFromTag(tag){
-    if(tag==null) return null; const t=String(tag).toLowerCase().trim(); if(!t) return null;
+  };
+  const uuidv4=()=>{let dt=Date.now();if(typeof performance!='undefined'&&typeof performance.now==='function')dt+=performance.now();return'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=(dt+Math.random()*16)%16|0;dt=Math.floor(dt/16);const v=c==='x'?r:(r&0x3)|0x8;return v.toString(16);});};
+  const normalizeBrand=(b)=>(b||'').trim();
+  const BRAND_STRENGTH10_DEFAULTS={Darkside:5,"Black Burn":6,BlackBurn:6,MustHave:5,Overdose:6,Bonch:7,Starline:3};
+  const getStrength10=(f)=>{
+    if(!f) return 5;
+    if(typeof f.strength10==='number'&&Number.isFinite(f.strength10)) return Math.max(1,Math.min(10,f.strength10));
+    return BRAND_STRENGTH10_DEFAULTS[normalizeBrand(f.brand)]??5;
+  };
+  const strengthColor=(v)=>{
+    if(v==null)return{bg:"bg-slate-800",text:"text-slate-200",border:"border-slate-700"};
+    if(v<4)return{bg:"bg-emerald-950",text:"text-emerald-300",border:"border-emerald-800"};
+    if(v<7)return{bg:"bg-amber-950",text:"text-amber-300",border:"border-amber-800"};
+    return{bg:"bg-rose-950",text:"text-rose-300",border:"border-rose-800"};
+  };
+  const tasteWordFromTag=(tag)=>{
+    if(tag==null)return null;const t=String(tag).toLowerCase().trim();if(!t)return null;
     const rules=[
       [/(кисл|sour|лимон|lime|грейпфрут)/,"кислый"],
       [/(сладк|sweet|sugar|мед|honey)/,"сладкий"],
@@ -637,257 +84,300 @@ function applyTheme(t){
     ];
     for (const [re,w] of rules){ if(re.test(t)) return w; }
     return null;
-  }
-  function getMixTasteLabel(parts,flavors){
-    if(!Array.isArray(parts)||!Array.isArray(flavors)||parts.length===0) return null;
-    const total=percentSum(parts); if(total<=0) return null;
+  };
+  const getMixTasteLabel=(parts,flavors)=>{
+    if(!Array.isArray(parts)||!Array.isArray(flavors)||parts.length===0)return null;
+    const total=percentSum(parts); if(total<=0)return null;
     const scores=new Map();
-    const add=(raw,w)=>{ const word=tasteWordFromTag(raw); if(word) scores.set(word,(scores.get(word)||0)+w); };
+    const add=(raw,w)=>{const word=tasteWordFromTag(raw);if(word)scores.set(word,(scores.get(word)||0)+w);};
     for (const p of parts){
-      const w=safePercent(p?.percent); if(w<=0) continue;
-      const fl=flavors.find(f=>f&&f.id===(p&&p.flavorId)); if(!fl) continue;
+      const w=safePercent(p&&p.percent); if(w<=0)continue;
+      const fl=flavors.find(f=>f&&f.id===(p&&p.flavorId)); if(!fl)continue;
       if(fl.tags) for(const t of fl.tags) add(t,w);
       if(fl.name) for(const tk of String(fl.name).toLowerCase().split(/[^a-zа-я0-9]+/i)) add(tk,Math.max(1,w*0.6));
       if(fl.description) for(const tk of String(fl.description).toLowerCase().split(/[^a-zа-я0-9]+/i)) add(tk,Math.max(1,w*0.3));
     }
-    if(!scores.size) return null;
+    if(!scores.size)return null;
     return Array.from(scores.entries()).sort((a,b)=>b[1]-a[1])[0][0]||null;
-  }
+  };
+  const escAttr=(s)=>String(s).replace(/"/g,'&quot;');
+  const escHTML=(s)=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
   // ========================= СОСТОЯНИЕ ======================================
   const qp = new URLSearchParams(location.search);
-  const state = {
-    user: null,
-    flavors: [],
-    guestMixes: [],
-    activeBrand: '',
-    search: '',
-    parts: [],
-    title: '',
-    notes: '',
-    activeTab: 'builder',
-    adminToken: localStorage.getItem('admin_token') || '',
-    adminPrompt: qp.get('admin')==='1',
-    logoUrl: null,
-
-    recTaste: null,
-    recStrength: 5,
-    recList: [],
-    recError: ''
+  const state={
+    flavors:[],
+    activeBrand:"",
+    search:"",
+    parts:[],
+    title:"",
+    notes:"",
+    guestMixes:[],
+    activeTab:"builder",
+    user:null,
+    showSplash:false,
+    logoUrl:null,
+    adminToken: (localStorage.getItem('admin_token') || ""),
+    adminPrompt: qp.get('admin') === '1'
   };
-  state.prevTab = 'builder';
-  state.theme = getSavedTheme() || 'warm-dark';
-  state.themePickerVisible = !getSavedTheme();
-  state.theme = getSavedTheme() || 'warm-dark';
-  const isAdmin = ()=> !!(state.adminToken && state.adminToken.length>=6);
+  const isAdmin=()=> !!(state.adminToken && state.adminToken.length>=6);
 
-  // ========================= AUTH / INIT =====================================
+  // ========================= ИНИЦИАЛИЗАЦИЯ ===================================
   function initAuth(){
     try{
-      const u = window?.Telegram?.WebApp?.initDataUnsafe?.user;
+      var u=window?.Telegram?.WebApp?.initDataUnsafe?.user;
       if(u){
-        const name=[u.first_name,u.last_name].filter(Boolean).join(' ')||u.username||('User '+u.id);
-        state.user={ id:String(u.id), name, username:u.username };
+        var name=[u.first_name,u.last_name].filter(Boolean).join(' ')||u.username||('User '+u.id);
+        state.user={id:String(u.id),name,username:u.username};
+        state.showSplash = true;
         return;
       }
     }catch(_){}
-    state.user={ id:'anon', name:'Гость' };
-  }
-  async function detectLogo(){
-    async function exists(url){ try{ const r=await fetch(url,{method:'HEAD',cache:'no-store'}); return r.ok; }catch(_){ return false; } }
-    const cand=['./logo.png','logo.png','/logo.png','./logo.jpg','logo.jpg','/logo.jpg','./logo.jpeg','logo.jpeg','/logo.jpeg','./AKGpihYIdG2xycCNV3hAm2gVxkuF4tS5.jpg'];
-    for(const c of cand){ if(await exists(c)){ state.logoUrl=c; return; } }
-    state.logoUrl=null;
+    state.user = { id:"anon", name:"Гость" };
+    state.showSplash = true;
   }
 
-  // ========================= API CALLS =======================================
+  // ========================= ДАННЫЕ ТОЛЬКО ИЗ API ===========================
   async function loadFlavors(){
     try{
       const r = await api('/api/flavors');
-      if(!r.ok) throw new Error('flavors '+r.status);
-      const data = await r.json();
-      state.flavors = Array.isArray(data) ? data : [];
-      const brands = Array.from(new Set(state.flavors.map(f=>normalizeBrand(f.brand))).values()).filter(Boolean).sort();
-      if (!brands.includes(state.activeBrand)) state.activeBrand = brands[0] || '';
-    }catch(e){ console.error('loadFlavors',e); state.flavors = []; }
+      if (r.ok){
+        const data = await r.json();
+        state.flavors = Array.isArray(data) ? data.map(normalizeFlavorRecord) : [];
+        state.activeBrand = state.activeBrand || (state.flavors[0]?.brand) || "";
+        return;
+      }
+    }catch(_){}
+    state.flavors = [];
   }
+  function normalizeFlavorRecord(f){
+    const brand = String(f?.brand || '').trim();
+    const name  = String(f?.name  || '').trim();
+    const id = String((f && (f._id || f.id)) || (brand+'-'+name).toLowerCase().replace(/\s+/g,'-')).trim();
+    const tags = Array.isArray(f?.tags)
+      ? f.tags
+      : (f?.tags ? String(f.tags).split(',').map(s=>s.trim()).filter(Boolean) : undefined);
+    const strength10 = (Number.isFinite(f?.strength10) ? Number(f.strength10)
+                      : Number.isFinite(f?.strength)   ? Number(f.strength) : undefined);
+    const description = f?.description ? String(f.description) : undefined;
+    return { id, brand, name, description, tags, strength10 };
+  }
+
   async function loadGuestMixes(){
     try{
       const r = await api('/api/mixes');
-      state.guestMixes = r.ok ? (await r.json()) : [];
-      state.guestMixes.sort((a,b)=>(b?.createdAt||0)-(a?.createdAt||0));
-    }catch(_){ state.guestMixes=[]; }
+      if (r.ok){
+        const arr = await r.json();
+        state.guestMixes = Array.isArray(arr) ? arr : [];
+        state.guestMixes.sort((a,b)=>(b?.createdAt||0)-(a?.createdAt||0));
+      } else {
+        state.guestMixes = [];
+      }
+    }catch(_){ state.guestMixes = []; }
   }
-  async function saveMixOnServer(mix){
-    const r = await api('/api/mixes', { method:'POST', body: JSON.stringify(mix) });
-    if(!r.ok) throw new Error('save mix '+r.status+': '+await r.text().catch(()=>'')); 
-    return true;
-  }
-  async function deleteMixOnServer(id, user){
-    const uid = String(user && user.id || '');
-    const headers = { 'X-User-Id': uid, 'X-Author-Id': uid, 'Content-Type':'application/json; charset=UTF-8' };
-    const r = await api('/api/mixes/'+encodeURIComponent(id), { method:'DELETE', headers });
-    if (r.ok || r.status===204) return true;
-    throw new Error('Не удалось удалить микс: '+r.status+' — '+await r.text().catch(()=>'')); 
-  }
-  async function createFlavorOnServer(payload, token){
-    const r = await api('/api/flavors', { method:'POST', headers:{ 'X-Admin-Token': token||'' }, body: JSON.stringify(payload) });
-    if(!r.ok) throw new Error('Не удалось добавить вкус: '+r.status+' — '+await r.text().catch(()=>'')); 
-    return true;
-  }
-  async function deleteFlavorOnServer(id, token){
-    const r = await fetch(API_BASE + '/api/flavors/' + encodeURIComponent(id), {
-      method: 'DELETE',
-      headers: { 'X-Admin-Token': token || '' }
-    }).catch(()=>null);
-    const txt = r ? (await r.text().catch(()=>'')) : '';
-    if (r && r.status===204) return true;
-    if (r && r.status===403) throw new Error('Неверный админ-токен');
-    throw new Error('Удаление вкуса не удалось: ' + (txt || (r && r.status)));
-  }
-  // Лайки
-  async function likeMixOnServer(id){
-    const uid = String(state.user?.id || 'anon');
-    const r = await api('/api/mixes/'+encodeURIComponent(id)+'/like', { method:'POST', headers:{ 'X-User-Id': uid } });
-    if(!r.ok) throw new Error('like '+r.status);
-    return await r.json();
-  }
-  async function unlikeMixOnServer(id){
-    const uid = String(state.user?.id || 'anon');
-    const r = await api('/api/mixes/'+encodeURIComponent(id)+'/like', { method:'DELETE', headers:{ 'X-User-Id': uid } });
-    if(!r.ok) throw new Error('unlike '+r.status);
-    return await r.json();
-  }
-  // Рекомендатор
-  
-async function fetchRecommendations(){
-  const q = new URLSearchParams();
-  if (state.recTaste) q.set('taste', state.recTaste);
-  if (Number.isFinite(state.recStrength)) q.set('strength', String(state.recStrength));
-  q.set('limit','10');
-  state.recError = '';
-  try{
-    if (location.protocol === 'file:' || location.origin === 'null') {
-      // No backend in file:// mode
-      state.recError = 'Рекомендации недоступны без сервера.';
-      state.recList = [];
-      return;
-    }
-    const r = await api('/api/mixes/recommend?' + q.toString());
-    if (!r.ok) {
-      state.recError = 'Сервер рекомендаций недоступен (' + r.status + ').';
-      state.recList = [];
-      return;
-    }
-    state.recList = await r.json();
-  }catch(e){
-    state.recError = 'Не удалось получить рекомендации.';
-    state.recList = [];
-  }
-}
 
-
+  async function detectLogo(){
+    async function exists(url){ try{ const r=await fetch(url,{method:'HEAD',cache:'no-store'}); return r.ok; }catch(_){ return false; } }
+    const candidates=[ './logo.jpg','./logo.jpeg','./logo.JPG','./logo.JPEG','./AKGpihYIdG2xycCNV3hAm2gVxkuF4tS5.jpg' ];
+    for(const c of candidates){ if(await exists(c)){ state.logoUrl=c; return; } }
+    state.logoUrl=null;
+  }
   function LogoSVG(cls){
     return (
       '<svg class="'+(cls||'w-8 h-8')+'" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">' +
-      '  <defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#F59E0B"/><stop offset="1" stop-color="#FDBA74"/></linearGradient></defs>' +
-      '  <circle cx="32" cy="32" r="30" fill="url(#g)" opacity="0.18"/>' +
-      '  <path d="M32 10c-4 4-4 8 0 12 4 4 4 8 0 12-4 4-4 8 0 12" stroke="#fde68a" stroke-width="3" fill="none" stroke-linecap="round"/>' +
-      '  <circle cx="32" cy="50" r="3" fill="#fde68a"/>' +
+      '  <defs><linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#38bdf8"/><stop offset="1" stop-color="#a78bfa"/></linearGradient></defs>' +
+      '  <circle cx="32" cy="32" r="30" fill="url(#g)" opacity="0.2"/>' +
+      '  <path d="M32 10c-4 4-4 8 0 12 4 4 4 8 0 12-4 4-4 8 0 12" stroke="#c7d2fe" stroke-width="3" fill="none" stroke-linecap="round"/>' +
+      '  <circle cx="32" cy="50" r="3" fill="#c7d2fe"/>' +
       '</svg>'
     );
   }
 
+  // ========================= FLAVORS API HELPERS =============================
+  const flavorsApi = {
+    async create(payload, token){
+      const r = await api('/api/flavors', {
+        method: 'POST',
+        headers: { 'X-Admin-Token': token || '' },
+        body: JSON.stringify(payload) // {brand,name,tags?,strength10?,description?}
+      });
+      if (!r.ok) throw new Error('Не удалось добавить вкус: '+(await r.text().catch(()=>r.status)));
+      return true;
+    },
+    async removeByBrandName(brand, name, token){
+      // Единственный рабочий маршрут по твоему тесту: POST /api/flavors { action:'delete', brand, name }
+      const r = await api('/api/flavors', {
+        method: 'POST',
+        headers: { 'X-Admin-Token': token || '' },
+        body: JSON.stringify({ action:'delete', brand: String(brand).trim(), name: String(name).trim() })
+      });
+      if (!r.ok) throw new Error('Удаление вкуса не удалось: '+(await r.text().catch(()=>r.status)));
+      return true;
+    }
+  };
+
+  // ========================= УДАЛЕНИЕ ВКУСА (использует helpers) ============
+  async function deleteFlavorOnServer(flavorId, token){
+    let fl = (state.flavors || []).find(f => f && f.id === flavorId);
+    if (!fl) { await loadFlavors(); fl = (state.flavors || []).find(f => f && f.id === flavorId); }
+    if (!fl || !fl.brand || !fl.name) throw new Error('Не удалось определить brand/name для вкуса "'+flavorId+'". Обновите список вкусов.');
+    return flavorsApi.removeByBrandName(String(fl.brand).trim(), String(fl.name).trim(), token);
+  }
+
+  // ========================= УДАЛЕНИЕ МИКСА (без создания) ===================
+  async function deleteMixOnServer(id, user){
+    const uid = String(user && user.id || '');
+    const headers = { 'X-Author-Id': uid, 'X-User-Id': uid };
+
+    // 1) DELETE /api/mixes/:id
+    let t = await api('/api/mixes/'+encodeURIComponent(id), { method:'DELETE', headers }).catch(()=>null);
+    if (t && (t.ok || t.status===204)) return true;
+
+    // 2) DELETE /api/mixes/:id?authorId=...
+    t = await api('/api/mixes/'+encodeURIComponent(id)+'?authorId='+encodeURIComponent(uid), { method:'DELETE', headers }).catch(()=>null);
+    if (t && (t.ok || t.status===204)) return true;
+
+    // 3) POST /api/mixes/delete { id, authorId }
+    t = await api('/api/mixes/delete', { method:'POST', headers, body: JSON.stringify({ id, authorId: uid }) }).catch(()=>null);
+    if (t && (t.ok || t.status===204)) return true;
+
+    // 4) POST override
+    t = await api('/api/mixes/'+encodeURIComponent(id)+'?_method=DELETE', { method:'POST', headers, body: JSON.stringify({ authorId: uid }) }).catch(()=>null);
+    if (t && (t.ok || t.status===204)) return true;
+
+    // 5) DELETE с body
+    t = await api('/api/mixes/'+encodeURIComponent(id), { method:'DELETE', headers, body: JSON.stringify({ authorId: uid }) }).catch(()=>null);
+    if (t && (t.ok || t.status===204)) return true;
+
+    let status = t ? t.status : 'нет ответа';
+    let body = '';
+    try {
+      const ct = t && t.headers ? (t.headers.get('content-type')||'') : '';
+      body = t ? (ct.includes('json') ? JSON.stringify(await t.json()) : await t.text()) : '';
+    } catch(_) {}
+    throw new Error('Удаление микса не удалось: ' + status + (body ? ' — ' + body : ''));
+  }
+
+  // ========================= ПОИСК ==========================================
+  function filterFlavorsByQueryAdv(flavors, query){
+    function normalize(s){ return String(s||'').toLowerCase().replace(/ё/g,'е').trim(); }
+    var q = normalize(query);
+    if(!q) return flavors||[];
+    var SYN = {"киви":["kiwi"],"банан":["banana"],"манго":["mango"],"лимон":["lemon","citrus"],"апельсин":["orange"],"грейпфрут":["grapefruit"],"арбуз":["watermelon"],"дыня":["melon"],"виноград":["grape"],"персик":["peach"],"яблок":["apple"],"маракуй":["passion"],"клубник":["strawberry"],"черник":["blueberry"],"мята":["mint"],"лед":["ice","freeze","frost","cold"],"ваниль":["vanilla"],"печень":["cookie","bisc"],"шоколад":["choco","chocolate"],"кисл":["sour"],"слад":["sweet"]};
+    var tokens = q.split(/\s+/).filter(Boolean);
+    function textOf(f){ return normalize([f && f.name, f && f.description, Array.isArray(f && f.tags)? (f.tags.join(' ')) : '' ].join(' ')); }
+    return (flavors||[]).filter(function(f){
+      var text = textOf(f);
+      return tokens.every(function(t){
+        var vars = new Set([t]);
+        Object.entries(SYN).forEach(function(pair){ var ru=pair[0], arr=pair[1]; if(t.indexOf(ru) !== -1){ arr.forEach(function(v){ vars.add(v); }); } });
+        var hit = false; vars.forEach(function(v){ if(text.indexOf(v) !== -1) hit = true; });
+        return hit;
+      });
+    });
+  }
+
   // ========================= РЕНДЕР =========================================
   function render(){
-    const root = document.getElementById('root'); if(!root) return;
+    var root=document.getElementById('root');
+    if(!root) return;
 
-    const brands = Array.from(new Set((state.flavors||[]).map(f=>normalizeBrand(f.brand)))).filter(Boolean).sort();
-    const flavorsOfActive = (state.flavors||[]).filter(f=>normalizeBrand(f.brand)===state.activeBrand);
-    const searchedFlavors = filterFlavorsByQueryAdv(state.flavors, state.search);
-    const listFlavors = state.search ? searchedFlavors : flavorsOfActive;
+    if(!state.user){
+      root.innerHTML = '<div class="min-h-[100svh] flex items-center justify-center p-6 text-sm">Инициализация…</div>';
+      return;
+    }
 
-    const total = percentSum(state.parts);
-    const mixStrength10 = (function(parts,flavors){
-      if(!Array.isArray(parts)||!Array.isArray(flavors)||!parts.length) return null;
-      const t=percentSum(parts); if(t<=0) return null; let w=0;
-      for(const p of parts){
-        const pr=safePercent(p?.percent); if(pr<=0) continue;
-        const fl=flavors.find(x=>x&&x.id===(p&&p.flavorId)); if(!fl) continue;
-        w += getStrength10(fl)*(pr/t);
+    if(state.showSplash){
+      const logoBlock = state.logoUrl ? '<img src="'+state.logoUrl+'" alt="logo" class="w-24 h-24 rounded-xl object-cover shadow"/>' : (LogoSVG('w-24 h-24'));
+      root.innerHTML =
+        '<div class="min-h-[100svh] bg-slate-950 text-slate-100 flex items-center justify-center p-6">' +
+        '  <div class="w-full max-w-sm text-center shadow rounded-2xl border border-slate-800 bg-slate-900 p-6 space-y-4">' +
+        '    <div class="flex items-center justify-center">'+logoBlock+'</div>' +
+        '    <div class="text-lg font-bold">готовы стать кальянным миксологом</div>' +
+        '    <button id="goApp" class="inline-flex items-center justify-center rounded-xl h-10 px-4 text-[14px] bg-slate-100 text-slate-900 hover:bg-white">поехали</button>' +
+        '  </div>' +
+        '</div>';
+      var go=document.getElementById('goApp');
+      if(go){ go.addEventListener('click', function(){ state.showSplash=false; render(); }); }
+      return;
+    }
+
+    var brands = Array.from(new Set((state.flavors||[]).map(function(f){return normalizeBrand(f.brand);}))).filter(Boolean).sort();
+    var flavorsOfActive = (state.flavors||[]).filter(function(f){return normalizeBrand(f.brand)===state.activeBrand;});
+    var searchedFlavors = filterFlavorsByQueryAdv(state.flavors, state.search);
+    var listFlavors = state.search ? searchedFlavors : flavorsOfActive;
+    var total = percentSum(state.parts);
+
+    var mixStrength10 = (function(parts, flavors){
+      if(!Array.isArray(parts)||!Array.isArray(flavors)) return null;
+      var t=percentSum(parts); if(!parts.length||t<=0) return null;
+      var w=0; for(var i=0;i<parts.length;i++){
+        var p=parts[i]; var pr=safePercent(p && p.percent); if(pr<=0) continue;
+        var fl=flavors.find(function(x){return x && x.id===(p && p.flavorId);}); if(!fl) continue;
+        w += getStrength10(fl) * (pr/t);
       }
       return w? Math.round(w*10)/10 : null;
-    })(state.parts,state.flavors);
-    const mixTaste = getMixTasteLabel(state.parts,state.flavors);
+    })(state.parts, state.flavors);
+    var mixTaste = getMixTasteLabel(state.parts, state.flavors);
 
-    const strengthBadge = (function(){
-      if(typeof mixStrength10!=='number') return '';
-      const c=strengthColor(mixStrength10);
-      return '<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+mixStrength10.toFixed(1)+'</span>';
-    })();
+    var strengthBadge='';
+    if(typeof mixStrength10==='number'){
+      var c=strengthColor(mixStrength10);
+      strengthBadge='<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+mixStrength10.toFixed(1)+'</span>';
+    }
 
-    // --- бренды
-    const brandsHTML = brands.map(b =>
-      '<button data-brand="'+escAttr(b)+'" class="brand-chip tap '+(state.activeBrand===b?'active':'')+'">'+escHTML(b)+'</button>'
-    ).join('');
+    var brandsHTML = brands.map(function(b){
+      return '<button data-brand="'+escAttr(b)+'" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] '+(state.activeBrand===b?'bg-slate-100 text-slate-900':'border border-slate-700 hover:bg-slate-800')+'">'+escHTML(b)+'</button>';
+    }).join('');
 
-    // --- список вкусов
-    const flavorsHTML = listFlavors.map(f=>{
-      const inMix = state.parts.some(p=>p.flavorId===f.id);
-      const s = getStrength10(f); const c = strengthColor(s);
-      const desc = f.description ? '<div class="text-[11px] text-slate-300/80 line-clamp-2">'+escHTML(f.description)+'</div>' : '';
+    var flavorsHTML = listFlavors.map(function(f){
+      var inMix = state.parts.some(function(p){return p.flavorId===f.id;});
+      var s = getStrength10(f);
+      var c = strengthColor(s);
+      var desc = f.description ? '<div class="text-[11px] text-slate-400 truncate">'+escHTML(f.description)+'</div>' : '';
       return (
-        '<div class="flex items-center justify-between gap-2 text-sm hover:bg-white/5 rounded-lg px-2 py-1">' +
+        '<div class="flex items-center justify-between gap-2 text-sm">' +
           '<div class="min-w-0">' +
             '<div class="flex items-center gap-2">' +
-              '<div class="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center text-[11px] opacity-80">'+escHTML((f.brand||'?').slice(0,1).toUpperCase())+'</div>' +
               '<div class="font-medium truncate" title="'+escAttr((f.brand||'')+' • '+(f.name||''))+'">'+escHTML(f.name)+' <span class="opacity-60">('+escHTML(f.brand)+')</span></div>' +
               '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+s.toFixed(1)+'</span>' +
             '</div>' +
             desc +
           '</div>' +
-          '<button data-add="'+escAttr(f.id)+'" class="tap inline-flex items-center justify-center rounded-xl h-8 px-3 text-[12px] '+(inMix?'opacity-50 cursor-not-allowed border border-slate-700':'border border-slate-700 hover:bg-white/10')+'">'+(inMix?'✓':'+')+'</button>' +
+          '<button data-add="'+escAttr(f.id)+'" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] '+(inMix?'opacity-50 cursor-not-allowed border border-slate-700':'border border-slate-700 hover:bg-slate-800')+'">'+(inMix?'✓':'+')+'</button>' +
         '</div>'
       );
     }).join('');
 
-    // --- части микса
-    const partsHTML = state.parts.map(p=>{
-      const fl = state.flavors.find(x=>x.id===p.flavorId);
-      const name = (fl && fl.name) || p.flavorId;
+    var partsHTML = state.parts.map(function(p){
+      var fl = state.flavors.find(function(x){return x.id===p.flavorId;});
+      var name = (fl && fl.name) || p.flavorId;
       return (
         '<div class="flex items-center gap-2 text-sm">' +
           '<span class="truncate w-36" title="'+escAttr(name)+'">'+escHTML(name)+'</span>' +
           '<input type="range" min="0" max="100" step="5" class="w-28" value="'+safePercent(p.percent)+'" data-range="'+escAttr(p.flavorId)+'"/>' +
           '<span class="w-10 text-right" data-percent-for="'+escAttr(p.flavorId)+'">'+safePercent(p.percent)+'%</span>' +
-          '<button data-remove="'+escAttr(p.flavorId)+'" class="tap inline-flex items-center justify-center rounded-xl h-8 px-3 text-[12px] hover:bg-white/10 border border-slate-700">Удалить</button>' +
+          '<button data-remove="'+escAttr(p.flavorId)+'" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] hover:bg-slate-800">Удалить</button>' +
         '</div>'
       );
     }).join('');
 
-    // --- карточки миксов гостей
-    const guestHTML = state.guestMixes.map(m=>{
-      const c = typeof m.strength10==='number' ? strengthColor(m.strength10) : strengthColor(null);
-      const sBadge = typeof m.strength10==='number' ? '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+m.strength10.toFixed(1)+'</span>' : '';
-      const tBadge = m.taste ? '<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">'+escHTML(m.taste)+'</span>' : '';
-      const notes = m.notes ? '<div class="text-[12px] opacity-80 mt-1">'+escHTML(m.notes)+'</div>' : '';
-      const parts = (m.parts||[]).map(pp=>{
-        const fl = state.flavors.find(x=>x.id===pp.flavorId);
+    var guestHTML = state.guestMixes.map(function(m){
+      var c = typeof m.strength10==='number' ? strengthColor(m.strength10) : strengthColor(null);
+      var sBadge = typeof m.strength10==='number' ? '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+m.strength10.toFixed(1)+'</span>' : '';
+      var tBadge = m.taste ? '<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">'+escHTML(m.taste)+'</span>' : '';
+      var notes = m.notes ? '<div class="text-[12px] opacity-80 mt-1">'+escHTML(m.notes)+'</div>' : '';
+      var parts = (m.parts||[]).map(function(pp){
+        var fl = state.flavors.find(function(x){return x.id===pp.flavorId;});
         return '<div class="flex items-center justify-between text-[12px]"><span class="truncate mr-2">'+escHTML(fl?fl.name:pp.flavorId)+'</span><span class="opacity-70">'+safePercent(pp.percent)+'%</span></div>';
       }).join('');
-      const canDelete = !!(state.user && (m.authorId && String(m.authorId)===String(state.user.id)));
-      const delBtn = canDelete ? '<button data-del="'+escAttr(m.id)+'" class="tap ml-auto inline-flex items-center justify-center rounded-full h-7 px-3 text-[11px] border border-rose-700 text-rose-300 hover:bg-rose-900/40">Удалить</button>' : '';
-      const likes = Array.isArray(m.likers) ? m.likers.length : 0;
-      const iLiked = Array.isArray(m.likers) && state.user && m.likers.includes(String(state.user.id));
-      const likeBtn =
-        '<button data-like="'+escAttr(m.id)+'" class="tap inline-flex items-center gap-1 rounded-full h-7 px-3 text-[11px] border '+(iLiked?'border-pink-500 text-pink-200 bg-pink-900/30':'border-slate-700 text-slate-200 hover:bg-white/10')+'">'+
-        (iLiked?'❤':'♡')+' <span class="tabular-nums">'+likes+'</span></button>';
-
+      var canDelete = !!(state.user && (m.authorId && String(m.authorId)===String(state.user.id)));
+      var delBtn = canDelete ? '<button data-del="'+escAttr(m.id)+'" class="ml-auto inline-flex items-center justify-center rounded-xl h-7 px-2 text-[11px] border border-rose-700 text-rose-300 hover:bg-rose-900/40">Удалить</button>' : '';
       return (
-        '<div class="ui-card p-2 text-sm">' +
+        '<div class="border border-slate-800 rounded-xl p-2 text-sm">' +
           '<div class="flex items-center gap-2">' +
             '<div class="font-semibold truncate">'+escHTML(m.title)+'</div>' +
-            sBadge + tBadge + delBtn + likeBtn +
+            sBadge + tBadge + delBtn +
           '</div>' +
           '<div class="text-[11px] text-slate-400">микс от '+escHTML(m.author||'Гость')+'</div>' +
           notes +
@@ -896,47 +386,36 @@ async function fetchRecommendations(){
       );
     }).join('');
 
-    // --- заголовок
-    
     const headerHTML =
       '<header class="flex items-center justify-between">' +
-        '<div class="flex items-center gap-2 min-w-0">'+(state.logoUrl?('<img src="'+escAttr(state.logoUrl)+'" alt="logo" class="w-8 h-8 rounded-md ring-1 ring-white/10"/>'):LogoSVG())+'<h1 class="text-lg font-bold truncate">Hookah Mixes</h1></div>' +
+        '<div class="flex items-center gap-2 min-w-0">'+LogoSVG()+'<h1 class="text-lg font-bold truncate">Hookah Mixes</h1></div>' +
         '<div class="flex items-center gap-2">' +
-          '<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">Здравствуйте, '+escHTML(state.user?.name || 'Гость')+'</span>' +
-          '<button data-tab="builder" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] '+(state.activeTab==='builder'?'bg-slate-100 text-slate-900 shadow-[inset_0_-2px_0_rgba(245,158,11,.7)]':'border border-slate-700 hover:bg-white/10')+'">Конструктор</button>' +
-          '<button data-tab="guest" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] '+(state.activeTab==='guest'?'bg-slate-100 text-slate-900 shadow-[inset_0_-2px_0_rgba(245,158,11,.7)]':'border border-slate-700 hover:bg-white/10')+'">Миксы гостей</button>' +
-          '<button id="themeBtn" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-white/10">Тема</button>' +
-          (isAdmin()?('<button data-tab="admin" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] '+(state.activeTab==='admin'?'bg-slate-100 text-slate-900 shadow-[inset_0_-2px_0_rgba(245,158,11,.7)]':'border border-slate-700 hover:bg-white/10')+'">Админ</button>'):'') +
+          '<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">Здравствуйте, '+escHTML(state.user && state.user.name ? state.user.name : 'Гость')+'</span>' +
+          '<button data-tab="builder" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] '+(state.activeTab==='builder'?'bg-slate-100 text-slate-900':'border border-slate-700 hover:bg-slate-800')+'">Конструктор</button>' +
+          '<button data-tab="guest" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] '+(state.activeTab==='guest'?'bg-slate-100 text-slate-900':'border border-slate-700 hover:bg-slate-800')+'">Миксы гостей</button>' +
+          (isAdmin()?('<button data-tab="admin" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] '+(state.activeTab==='admin'?'bg-slate-100 text-slate-900':'border border-slate-700 hover:bg-slate-800')+'">Админ</button>'):'') +
         '</div>' +
       '</header>';
-// --- блок брендов
+
     const brandsBlock =
-      '<div class="ui-card">' +
-        '<div class="px-3 pt-3">' +
-          '<div class="text-[10px] tracking-wider uppercase text-slate-300/70">Каталог</div>' +
-          '<div class="text-base font-semibold">Бренды и вкусы</div>' +
-        '</div>' +
+      '<div class="rounded-2xl border border-slate-800 bg-slate-900">' +
+        '<div class="px-3 pt-3"><div class="text-xs font-semibold">Бренды</div></div>' +
         '<div class="p-3 space-y-2">' +
           '<div class="space-y-2">' +
-            '<input id="search" placeholder="Поиск вкуса…" value="'+escAttr(state.search||'')+'" class="h-9 w-full rounded-xl border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-400 px-3 text-sm outline-none focus:ring-2 focus:ring-slate-600" />' +
-            '<div class="flex gap-2 overflow-auto scrollbar-none brands-rail">'+brandsHTML+(brands.length===0?'<div class="text-[12px] text-slate-400">Нет брендов</div>':'')+'</div>' +
+            '<input id="search" placeholder="Поиск вкуса по названию…" value="'+escAttr(state.search||'')+'" class="h-9 w-full rounded-xl border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-400 px-3 text-sm outline-none focus:ring-2 focus:ring-slate-600" />' +
+            '<div class="grid grid-cols-2 gap-1">'+brandsHTML+(brands.length===0?'<div class="text-[12px] text-slate-400">Нет брендов (добавьте вкусы)</div>':'')+'</div>' +
           '</div>' +
           '<div id="flavorsMeta" class="text-[11px] text-slate-400">'+(state.search ? ('Найдено: '+listFlavors.length) : (state.activeBrand ? ('Вкусы бренда: '+escHTML(state.activeBrand)) : ''))+'</div>' +
-          '<div id="flavorsList" class="space-y-1">'+flavorsHTML+(listFlavors.length===0?('<div class="text-[12px] text-slate-400">'+(state.search?'Ничего не найдено':'Нет вкусов для этого бренда')+'</div>'):'')+'</div>' +
+          '<div id="flavorsList">'+flavorsHTML+(listFlavors.length===0?('<div class="text-[12px] text-slate-400">'+(state.search?'Ничего не найдено':'Нет вкусов для этого бренда')+'</div>'):'')+'</div>' +
         '</div>' +
       '</div>';
 
-    // --- блок микса
     const mixBlock =
-      '<div class="ui-card" id="mixBlock">' +
-        '<div class="px-3 pt-3">' +
-          '<div class="text-[10px] tracking-wider uppercase text-slate-300/70">Сборка</div>' +
-          '<div class="text-base font-semibold">Ваш микс</div>' +
-        '</div>' +
+      '<div class="rounded-2xl border border-slate-800 bg-slate-900" id="mixBlock">' +
+        '<div class="px-3 pt-3"><div class="text-xs font-semibold">Микс</div></div>' +
         '<div class="p-3 space-y-2">' +
           (state.parts.length===0?'<div class="text-[12px] text-slate-400">Добавьте вкусы из списка</div>':'') +
           partsHTML +
-          '<div class="h-3 rounded-md bg-slate-900 border border-slate-700 overflow-hidden my-2" id="mixBar"></div>' +
           '<div class="flex items-center justify-between text-[12px]">' +
             '<span>Итог: <b id="mixTotal">'+total+'</b>%</span>' +
             '<div class="flex items-center gap-2">' +
@@ -944,73 +423,27 @@ async function fetchRecommendations(){
               '<span id="mixTaste">'+(mixTaste?('<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">'+escHTML(mixTaste)+'</span>'):'')+'</span>' +
             '</div>' +
           '</div>' +
-          (state.parts.length===2 ? '<button id="autoThird" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-white/10 w-full">Подобрать 3-й компонент</button>' : '') +
         '</div>' +
       '</div>';
 
-    // --- название/описание
-    const saveEnabled = isMixValid(state.parts,state.title);
-    const saveBtnClass = saveEnabled
-      ? 'tap btn-primary shimmer inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px]'
-      : 'tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] opacity-50 cursor-not-allowed border border-slate-700';
-
     const titleBlock =
-      '<div class="ui-card">' +
-        '<div class="px-3 pt-3">' +
-          '<div class="text-[10px] tracking-wider uppercase text-slate-300/70">Оформление</div>' +
-          '<div class="text-base font-semibold">Название и заметки</div>' +
-        '</div>' +
+      '<div class="rounded-2xl border border-slate-800 bg-slate-900">' +
+        '<div class="px-3 pt-3"><div class="text-xs font-semibold">Название и описание</div></div>' +
         '<div class="p-3 space-y-2">' +
           '<input id="title" placeholder="Название микса" value="'+escAttr(state.title||'')+'" class="h-9 w-full rounded-xl border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-400 px-3 text-sm outline-none focus:ring-2 focus:ring-slate-600" />' +
           '<textarea id="notes" placeholder="Описание / заметки…" class="min-h-[72px] w-full rounded-xl border border-slate-700 bg-slate-900 text-slate-100 placeholder-slate-400 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-600">'+escHTML(state.notes||'')+'</textarea>' +
           '<div class="flex gap-2">' +
-            '<button id="reset" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-white/10">Сброс</button>' +
-            '<button id="save" class="'+saveBtnClass+'">Сохранить</button>' +
+            '<button id="reset" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-slate-800">Сброс</button>' +
+            '<button id="save" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] '+(isMixValid(state.parts,state.title)?'bg-slate-100 text-slate-900':'opacity-50 cursor-not-allowed border border-slate-700')+'">Сохранить</button>' +
           '</div>' +
         '</div>' +
       '</div>';
 
-    // --- рекомендации
-    const tasteChips = ['фруктовый','ледяной','сладкий','пряный','десертный','кислый'].map(t =>
-      '<button data-taste="'+t+'" class="tap inline-flex items-center rounded-full h-8 px-3 text-[12px] '+(state.recTaste===t?'bg-slate-100 text-slate-900':'border border-slate-700 hover:bg-white/10')+'">'+t+'</button>'
-    ).join(' ');
-    const recItems = (state.recList||[]).map(m=>{
-      const likes = Array.isArray(m.likers) ? m.likers.length : 0;
-      const c = typeof m.strength10==='number' ? strengthColor(m.strength10) : strengthColor(null);
-      const sBadge = typeof m.strength10==='number' ? '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+m.strength10.toFixed(1)+'</span>' : '';
-      const tBadge = m.taste ? '<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">'+escHTML(m.taste)+'</span>' : '';
-      return '<div class="flex items-center justify-between gap-2 text-sm border border-slate-800 rounded-lg px-2 py-1">'+
-        '<div class="min-w-0"><div class="truncate font-medium">'+escHTML(m.title)+'</div><div class="text-[11px] opacity-70">❤ '+likes+'</div></div>'+
-        '<div class="flex items-center gap-2">'+sBadge+tBadge+'<button data-apply="'+escAttr(m.id)+'" class="tap inline-flex items-center rounded-xl h-8 px-3 text-[12px] border border-slate-700 hover:bg-white/10">Загрузить</button></div>'+
-      '</div>';
-    }).join('');
-    const recBlock = '<div class="ui-card">' +
-        '<div class="px-3 pt-3">' +
-          '<div class="text-[10px] tracking-wider uppercase text-slate-300/70">Подсказки</div>' +
-          '<div class="text-base font-semibold">Рекомендации</div>' +
-        '</div>' +
-        '<div class="p-3 space-y-2">' +
-          '<div class="text-[12px] text-slate-400">Выберите вкус и целевую крепость — покажем подходящие миксы.</div>' +
-          '<div class="flex flex-wrap gap-2">'+tasteChips+'</div>' +
-          '<div class="flex items-center gap-2">' +
-            '<span class="text-[12px] opacity-80">Крепость:</span>' +
-            '<input id="recStrength" type="range" min="1" max="10" step="1" value="'+(state.recStrength||5)+'" class="w-full" />' +
-            '<span class="text-[12px] w-6 text-right">'+(state.recStrength||5)+'</span>' +
-          '</div>' +
-          '<button id="recFetch" class="tap btn-primary shimmer inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] w-full">Показать рекомендации</button>' +
-          '<div id="recList" class="space-y-1">'+(recItems||'')+'</div>' +
-        '</div>' +
-      '</div>';
-
-    // --- админка
     const adminBlock = (!isAdmin() ? '' :
-      ('<div class="ui-card">' +
-       '  <div class="px-3 pt-3">' +
-       '    <div class="text-[10px] tracking-wider uppercase text-slate-300/70">Управление</div>' +
-       '    <div class="text-base font-semibold">Админ</div>' +
-       '  </div>' +
+      ('<div class="rounded-2xl border border-slate-800 bg-slate-900">' +
+       '  <div class="px-3 pt-3"><div class="text-xs font-semibold">Админ</div></div>' +
        '  <div class="p-3 space-y-4 text-sm">' +
-       '    <div class="text-[11px] text-slate-400">Токен сохранён. Можно добавлять и удалять вкусы. Ниже — статистика.</div>' +
+       '    <div class="text-[11px] text-slate-400">Токен сохранён. Можно добавлять и удалять вкусы.</div>' +
        '    <div class="grid grid-cols-1 gap-2">' +
        '      <input id="admBrand" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Бренд" />' +
        '      <input id="admName" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Название" />' +
@@ -1019,9 +452,9 @@ async function fetchRecommendations(){
        '      <textarea id="admDesc" class="min-h-[72px] rounded-xl border border-slate-700 bg-slate-900 px-3 py-2" placeholder="Описание (необязательно)"></textarea>' +
        '    </div>' +
        '    <div class="flex gap-2">' +
-       '      <button id="admAddFlavor" class="tap btn-primary shimmer inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px]">Добавить вкус</button>' +
-       '      <button id="admReload" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-white/10">Обновить список</button>' +
-       '      <button id="admClearToken" class="tap ml-auto inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-rose-700 text-rose-300 hover:bg-rose-900/40">Выйти</button>' +
+       '      <button id="admAddFlavor" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] bg-slate-100 text-slate-900 hover:bg-white">Добавить вкус</button>' +
+       '      <button id="admReload" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-slate-800">Обновить список</button>' +
+       '      <button id="admClearToken" class="ml-auto inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-rose-700 text-rose-300 hover:bg-rose-900/40">Выйти из админки</button>' +
        '    </div>' +
        '    <div>' +
        '      <div class="text-xs font-semibold mb-2">Все вкусы</div>' +
@@ -1032,13 +465,13 @@ async function fetchRecommendations(){
     );
 
     const adminLoginBlock = (!isAdmin() && state.adminPrompt) ? (
-      '<div class="ui-card">' +
-        '<div class="px-3 pt-3"><div class="text-[10px] tracking-wider uppercase text-slate-300/70">Админ-доступ</div><div class="text-base font-semibold">Введите токен</div></div>' +
+      '<div class="rounded-2xl border border-slate-800 bg-slate-900">' +
+        '<div class="px-3 pt-3"><div class="text-xs font-semibold">Админ-доступ</div></div>' +
         '<div class="p-3 space-y-2">' +
           '<input id="admToken" class="h-9 w-full rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Вставьте X-Admin-Token" />' +
           '<div class="flex gap-2">' +
-            '<button id="admSaveToken" class="tap btn-primary shimmer inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px]">Сохранить токен</button>' +
-            '<button id="admCancel" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-white/10">Скрыть</button>' +
+            '<button id="admSaveToken" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] bg-slate-100 text-slate-900 hover:bg-white">Сохранить токен</button>' +
+            '<button id="admCancel" class="inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-slate-800">Скрыть</button>' +
           '</div>' +
           '<div id="admMsg" class="text-[11px] text-slate-400">После сохранения появится вкладка «Админ».</div>' +
         '</div>' +
@@ -1046,892 +479,451 @@ async function fetchRecommendations(){
     ) : '';
 
     const guestBlock =
-      '<div class="ui-card">' +
-        '<div class="px-3 pt-3"><div class="text-[10px] tracking-wider uppercase text-slate-300/70">Комьюнити</div><div class="text-base font-semibold">Миксы гостей</div></div>' +
+      '<div class="rounded-2xl border border-slate-800 bg-slate-900">' +
+        '<div class="px-3 pt-3"><div class="text-xs font-semibold">Миксы гостей</div></div>' +
         '<div class="p-3 space-y-2">' +
           (state.guestMixes.length===0?'<div class="text-[12px] text-slate-400">Пока нет сохранённых миксов</div>':'') +
           guestHTML +
         '</div>' +
       '</div>';
 
-
-      
-const themesBlock =
-  '<div class="ui-card" id="themesPage">' +
-    '<div class="px-3 pt-3">' +
-      '<div class="text-[10px] tracking-wider uppercase text-slate-300/70">Оформление</div>' +
-      '<div class="flex items-center justify-between">' +
-        '<div class="text-base font-semibold">Выбор темы</div>' +
-        '<button id="themesBack" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-white/10">← Назад</button>' +
-      '</div>' +
-    '</div>' +
-    '<div class="p-3 space-y-3">' +
-      '<div class="grid grid-cols-2 sm:grid-cols-3 gap-2" id="themesGrid">' +
-        THEMES.map(t => ('<button class="brand-chip h-12 justify-center text-sm '+(state.theme===t?'active':'')+'" data-theme="'+t+'">'+t.replace(/-/g,' ').replace(/\b\w/g,c=>c.toUpperCase())+'</button>')).join('') +
-      '</div>' +
-      '<div class="text-[12px] text-slate-400">Нажмите на вариант — тема применится и вы вернётесь назад.</div>' +
-    '</div>' +
-  '</div>';
-
-
     const bodyHTML =
-      '</div></div></div><div class="min-h-[100svh] p-3">' + (state.logoUrl?('<div id="wm" class="wm" style="background-image:url(\''+escAttr(state.logoUrl)+'\')"></div>'):'') +
-        '<div class="mx-auto w-full max-w-lg space-y-5">' +
+      '<div class="min-h-[100svh] bg-slate-950 text-slate-100 p-3">' +
+        '<div class="mx-auto w-full max-w-md space-y-3">' +
           headerHTML +
-          (state.activeTab==='builder' ? (brandsBlock + mixBlock + titleBlock + recBlock) : '') +
-          (state.activeTab==='themes'  ? (themesBlock) : '') +
+          (state.activeTab==='builder' ? (adminLoginBlock + brandsBlock + mixBlock + titleBlock) : '') +
           (state.activeTab==='guest'   ? (guestBlock) : '') +
           (state.activeTab==='admin'   ? (adminBlock) : '') +
-          (state.activeTab==='builder' && (!isAdmin() && state.adminPrompt) ? adminLoginBlock : '') +
         '</div>' +
       '</div>';
 
     root.innerHTML = bodyHTML;
 
-    
-
-    
-
-    
-
-    
-
-    
-
-    
-
-    // === THEMES PAGE NAVIGATION ===
-    const headerThemeBtn = root.querySelector('#themeBtn');
-    if(headerThemeBtn){
-      headerThemeBtn.addEventListener('click', ()=>{
-        state.prevTab = state.activeTab || 'builder';
-        state.activeTab = 'themes';
-        render();
-      });
-    }
-    if(state.activeTab==='themes'){
-      const back = document.getElementById('themesBack');
-      if(back) back.addEventListener('click', ()=>{ state.activeTab = state.prevTab || 'builder'; render(); });
-      const grid = document.getElementById('themesGrid');
-      if(grid){
-        grid.querySelectorAll('[data-theme]').forEach(btn=>{
-          btn.addEventListener('click', ()=>{
-            const t = btn.getAttribute('data-theme');
-            state.theme = t;
-            applyTheme(t);
-            try{ localStorage.setItem('theme', t); }catch(_){}
-            state.activeTab = state.prevTab || 'builder';
-            render();
-          });
-        });
-      }
-    }
-// Ensure the theme sheet hides on selection (reinforced)
-    (function enforceThemeAutoHide(){
-      const sheet = document.getElementById('themeSheet');
-      if(!sheet) return;
-      sheet.querySelectorAll('[data-theme]').forEach(opt=>{
-        opt.addEventListener('click', ()=>{ sheet.hidden = true; }, { once:false });
-      });
-    })();
-// Refresh active theme option highlight
-    (function markActiveTheme(){
-      const sheet=document.getElementById('themeSheet');
-      if(!sheet) return;
-      sheet.querySelectorAll('.opt').forEach(el=>{
-        const t = el.getAttribute('data-theme');
-        if(t===state.theme) el.classList.add('active'); else el.classList.remove('active');
-      });
-    })();
-// Header theme button opens sheet
-    const themeBtn = root.querySelector('#themeBtn');
-    if(themeBtn){
-      themeBtn.addEventListener('click', ()=>{
-        const sheet = document.getElementById('themeSheet');
-        if(sheet) sheet.hidden = false;
-      });
-    }
-// === THEME PICKER HANDLERS
-    const fab=document.getElementById('themeFab');
-    const sheet=document.getElementById('themeSheet');
-    function updateThemeFab(){ if(!fab) return; fab.hidden = !state.themePickerVisible; }
-    updateThemeFab();
-    if(fab){
-      fab.addEventListener('click', ()=>{ sheet.hidden=false; });
-    }
-    if(sheet){
-      sheet.querySelectorAll('[data-theme]').forEach(opt=>{
-        if(opt.getAttribute('data-theme')===state.theme) opt.classList.add('active');
-        opt.addEventListener('click', ()=>{
-          const t=opt.getAttribute('data-theme');
-          state.theme = t;
-          applyTheme(t);
-          state.themePickerVisible = false; // hide after selection
-          sheet.hidden=true;
-          render();
-        });
-      });
-    }
-    // Hidden gesture: long-press on logo to reopen picker
-    const logoEl = root.querySelector('header img, header svg');
-    if(logoEl){
-      let timer=null;
-      const start=()=>{ timer=setTimeout(()=>{ state.themePickerVisible=true; render(); }, 650); };
-      const clear=()=>{ if(timer){ clearTimeout(timer); timer=null; } };
-      logoEl.addEventListener('mousedown', start); logoEl.addEventListener('touchstart', start);
-      ['mouseup','mouseleave','touchend','touchcancel'].forEach(ev=>logoEl.addEventListener(ev, clear));
-    }
-// Ensure save button state is correct after first render
-    updateSaveButtonUI();
-
-    // === анимации и ripple после каждого render
-    if(!window.__skipReveal){ applyAnimationsAfterRender(); window.__skipReveal=true; }
-    attachRipples(root);
-
     // ===== События =====
-    root.querySelectorAll('[data-tab]').forEach(btn=>{
-      btn.addEventListener('click', async ()=>{
-        state.activeTab = btn.getAttribute('data-tab');
-        if (state.activeTab==='guest') await loadGuestMixes();
-        if (state.activeTab==='admin')  buildAdminFlavorList(root);
+    Array.prototype.forEach.call(root.querySelectorAll('[data-tab]'), function(btn){
+      btn.addEventListener('click', async function(){
+        state.activeTab = this.getAttribute('data-tab');
+        if (state.activeTab === 'guest') { await loadGuestMixes(); }
         render();
       });
     });
-    root.querySelectorAll('[data-brand]').forEach(btn=>{
-      btn.addEventListener('click', ()=>{ state.activeBrand=btn.getAttribute('data-brand'); state.search=''; render(); });
+    Array.prototype.forEach.call(root.querySelectorAll('[data-brand]'), function(btn){
+      btn.addEventListener('click', function(){ state.activeBrand = this.getAttribute('data-brand'); state.search=''; render(); });
     });
+    var search = root.querySelector('#search');
+    if(search){ search.addEventListener('input', function(e){ state.search = e.target.value; updateSearchUI(); }); }
+    bindAddButtons();
+    attachMixEvents();
 
-    const search = root.querySelector('#search');
-    if(search){ search.addEventListener('input', e=>{ state.search=e.target.value; updateSearchUI(); }); }
+    var titleEl=root.querySelector('#title'); if(titleEl){ titleEl.addEventListener('input', function(e){ state.title = e.target.value; }); }
+    var notesEl=root.querySelector('#notes'); if(notesEl){ notesEl.addEventListener('input', function(e){ state.notes = e.target.value; }); }
+    var resetEl=root.querySelector('#reset'); if(resetEl){ resetEl.addEventListener('click', function(){ state.title=''; state.notes=''; state.parts=[]; render(); }); }
 
-    bindAddButtons(); attachMixEvents();
-
-    const titleEl=root.querySelector('#title'); if(titleEl){ titleEl.addEventListener('input', e=>{ state.title=e.target.value; updateSaveButtonUI(); }); }
-    const notesEl=root.querySelector('#notes'); if(notesEl){ notesEl.addEventListener('input', e=>{ state.notes=e.target.value; }); }
-    const resetEl=root.querySelector('#reset'); if(resetEl){ resetEl.addEventListener('click', ()=>{ state.title=''; state.notes=''; state.parts=[]; render(); }); }
-
-    const saveEl=root.querySelector('#save');
+    // Сохранение микса
+    var saveEl=root.querySelector('#save');
     if(saveEl){
-      saveEl.addEventListener('click', async ()=>{
-        if(!isMixValid(state.parts,state.title)) return;
+      saveEl.addEventListener('click', async function(){
+        if(!isMixValid(state.parts, state.title)) return;
         if(!state.user) return;
-        const mix={
-          id: uuidv4(),
-          title: String(state.title).trim(),
+
+        var mix={
+          id:uuidv4(),
+          title:String(state.title).trim(),
           parts: state.parts.slice(),
-          notes: String(state.notes||'').trim(),
+          notes:String(state.notes||'').trim(),
           author: state.user.name || 'Гость',
           authorId: state.user.id || null,
           createdAt: Date.now(),
           taste: getMixTasteLabel(state.parts, state.flavors) || null,
-          strength10: (function(){ const t=percentSum(state.parts); if(!t) return null; let w=0; for(const p of state.parts){ const pr=safePercent(p.percent); if(pr<=0) continue; const fl=state.flavors.find(x=>x&&x.id===p.flavorId); if(!fl) continue; w+=getStrength10(fl)*(pr/t);} return w?Math.round(w*10)/10:null; })(),
-          likers: []
+          strength10: (function(){ var t=percentSum(state.parts); if(!t) return null; var w=0; for(var i=0;i<state.parts.length;i++){ var p=state.parts[i]; var pr=safePercent(p.percent); if(pr<=0) continue; var fl=state.flavors.find(function(x){return x && x.id===p.flavorId;}); if(!fl) continue; w+=getStrength10(fl)*(pr/t);} return w?Math.round(w*10)/10:null; })()
         };
+
         try{
-          await saveMixOnServer(mix);
+          var r=await api('/api/mixes',{method:'POST',body:JSON.stringify(mix)});
+          if(!r.ok){ alert('Не удалось сохранить микс ('+r.status+'): '+(await r.text().catch(()=>''))); return; }
           await loadGuestMixes();
           state.title=''; state.notes=''; state.parts=[]; state.activeTab='guest';
           render();
-        }catch(e){ alert(e.message||'Не удалось сохранить микс'); }
+        }catch(e){
+          console.error(e); alert('Ошибка сети при сохранении');
+        }
       });
     }
 
-    // Удаление микса (свой)
-    root.querySelectorAll('[data-del]').forEach(btn=>{
-      btn.addEventListener('click', async ()=>{
-        const id = btn.getAttribute('data-del'); if(!id) return;
-        if(!confirm('Удалить микс?')) return;
+    // Удаление своего микса
+    root.querySelectorAll('[data-del]').forEach(function(btn){
+      btn.addEventListener('click', async function(){
+        const id = btn.getAttribute('data-del');
+        if (!id) return;
+        if (!confirm('Удалить микс?')) return;
         try{
           await deleteMixOnServer(id, state.user);
           await loadGuestMixes();
           render();
-        }catch(e){ alert(e.message||'Ошибка удаления'); }
+        }catch(e){
+          console.error(e); alert((e && e.message) ? e.message : 'Ошибка удаления');
+        }
       });
     });
 
-    // Лайки
-    root.querySelectorAll('[data-like]').forEach(btn=>{
-      btn.addEventListener('click', async ()=>{
-        const id = btn.getAttribute('data-like');
-        const mix = state.guestMixes.find(m=>m.id===id);
-        const liked = Array.isArray(mix?.likers) && state.user && mix.likers.includes(String(state.user.id));
-        try{
-          if (liked) await unlikeMixOnServer(id);
-          else        await likeMixOnServer(id);
-          await loadGuestMixes();
-          render();
-        }catch(e){ alert('Не удалось обновить лайк'); }
-      });
-    });
-
-    // Рекомендатор
-    const rs = root.querySelector('#recStrength');
-    if (rs) rs.addEventListener('input', e=>{ state.recStrength = Number(e.target.value)||5; const out=rs.nextElementSibling; if(out) out.textContent=String(state.recStrength); });
-    root.querySelectorAll('[data-taste]').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        const t = btn.getAttribute('data-taste');
-        state.recTaste = (state.recTaste===t) ? null : t;
-        render();
-      });
-    });
-    const recBtn = root.querySelector('#recFetch');
-    if (recBtn){
-      recBtn.addEventListener('click', async ()=>{
-        await fetchRecommendations();
-        updateRecListUI();
-      });
-    }
-    root.querySelectorAll('[data-apply]').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        const id = btn.getAttribute('data-apply');
-        const m = state.guestMixes.find(x=>x.id===id) || state.recList.find(x=>x.id===id);
-        if (!m) return;
-        state.title = m.title + ' (копия)';
-        state.notes = m.notes || '';
-        state.parts = Array.isArray(m.parts) ? m.parts.map(p=>({ flavorId:p.flavorId, percent:safePercent(p.percent) })) : [];
-        state.activeTab = 'builder';
-        render();
-      });
-    });
-
-    // автоподбор 3-го компонента
-    const autoBtn = root.querySelector('#autoThird');
-    if (autoBtn){
-      autoBtn.addEventListener('click', ()=>{
-        const targetTaste = state.recTaste || getMixTasteLabel(state.parts, state.flavors) || null;
-        const currentStrength = (function(){ const t=percentSum(state.parts); if(!t) return null; let w=0; for(const p of state.parts){ const pr=safePercent(p.percent); if(pr<=0) continue; const fl=state.flavors.find(x=>x&&x.id===p.flavorId); if(!fl) continue; w+=getStrength10(fl)*(pr/t);} return w?Math.round(w*10)/10:null; })();
-        const targetStrength = Number.isFinite(currentStrength) ? currentStrength : (state.recStrength||5);
-        const suggestion = suggestThirdFlavor(state.parts, state.flavors, targetTaste, targetStrength);
-        if (!suggestion) { alert('Не удалось подобрать компонент'); return; }
-        const left = Math.max(0, 100 - percentSum(state.parts));
-        const addPct = Math.min(30, left||20);
-        state.parts = state.parts.concat([{ flavorId:suggestion.id, percent:addPct }]);
+    // Админ-доступ (сохранить/скрыть)
+    var tokBtn = root.querySelector('#admSaveToken');
+    if (tokBtn){
+      tokBtn.addEventListener('click', function(){
+        var v = (root.querySelector('#admToken')||{}).value || '';
+        try{ localStorage.setItem('admin_token', v); }catch(_){}
+        state.adminToken = v || "";
+        state.adminPrompt = false;
+        state.activeTab = 'admin';
         render();
       });
     }
+    var tokCancel = root.querySelector('#admCancel');
+    if (tokCancel){
+      tokCancel.addEventListener('click', function(){ state.adminPrompt = false; render(); });
+    }
 
-    // админ-доступ
-    const tokBtn=root.querySelector('#admSaveToken'); if(tokBtn){ tokBtn.addEventListener('click', ()=>{ const v=(root.querySelector('#admToken')||{}).value||''; try{localStorage.setItem('admin_token',v);}catch(_){ } state.adminToken=v||''; state.adminPrompt=false; render(); }); }
-    const tokCancel=root.querySelector('#admCancel'); if(tokCancel){ tokCancel.addEventListener('click', ()=>{ state.adminPrompt=false; render(); }); }
-
-    if (isAdmin() && state.activeTab==='admin'){
+    // Админ-вкладка
+    if (isAdmin() && state.activeTab === 'admin'){
       buildAdminFlavorList(root);
-      const btnReload=root.querySelector('#admReload'); if(btnReload){ btnReload.addEventListener('click', async ()=>{ await loadFlavors(); render(); }); }
-      const btnLogout=root.querySelector('#admClearToken'); if(btnLogout){ btnLogout.addEventListener('click', ()=>{ try{localStorage.removeItem('admin_token');}catch(_){ } state.adminToken=''; state.activeTab='builder'; render(); }); }
-      const btnAdd=root.querySelector('#admAddFlavor'); if(btnAdd){
-        btnAdd.addEventListener('click', async ()=>{
-          const brand=(root.querySelector('#admBrand')||{}).value||'';
-          const name =(root.querySelector('#admName')||{}).value||'';
-          const tags =(root.querySelector('#admTags')||{}).value||'';
-          const desc =(root.querySelector('#admDesc')||{}).value||'';
-          const str10=(root.querySelector('#admStrength')||{}).value||'';
-          if(!brand.trim()||!name.trim()){ alert('Укажите бренд и название'); return; }
-          const payload={
+
+      var btnReload = root.querySelector('#admReload');
+      if (btnReload){
+        btnReload.addEventListener('click', async function(){
+          await loadFlavors();
+          state.activeBrand = state.activeBrand || (state.flavors[0] && state.flavors[0].brand) || '';
+          render();
+        });
+      }
+      var btnLogout = root.querySelector('#admClearToken');
+      if (btnLogout){
+        btnLogout.addEventListener('click', function(){
+          try{ localStorage.removeItem('admin_token'); }catch(_){}
+          state.adminToken = "";
+          state.activeTab = 'builder';
+          render();
+        });
+      }
+      var btnAdd = root.querySelector('#admAddFlavor');
+      if (btnAdd){
+        btnAdd.addEventListener('click', async function(){
+          var brand = (root.querySelector('#admBrand')||{}).value||'';
+          var name  = (root.querySelector('#admName')||{}).value||'';
+          var tags  = (root.querySelector('#admTags')||{}).value||'';
+          var desc  = (root.querySelector('#admDesc')||{}).value||'';
+          var str10 = (root.querySelector('#admStrength')||{}).value||'';
+          if (!brand.trim() || !name.trim()){ alert('Укажите бренд и название'); return; }
+          var payload = {
+            id: (brand.trim()+'-'+name.trim()).replace(/\s+/g,'-').toLowerCase(),
             brand: brand.trim(),
-            name:  name.trim(),
-            description: String(desc||'').trim() || undefined,
-            tags: tags ? tags.split(',').map(s=>s.trim()).filter(Boolean) : undefined,
+            name: name.trim(),
+            description: desc.trim() || undefined,
+            tags: tags ? tags.split(',').map(function(s){return s.trim();}).filter(Boolean) : undefined,
             strength10: str10 ? Number(str10) : undefined
           };
           try{
-            await createFlavorOnServer(payload, state.adminToken||'');
+            var r = await api('/api/flavors', {
+              method:'POST',
+              headers: { 'X-Admin-Token': state.adminToken || '' },
+              body: JSON.stringify(payload)
+            });
+            if (!r.ok){
+              var txt = await r.text().catch(function(){return '';});
+              alert('Не удалось добавить ('+r.status+'): '+txt);
+              return;
+            }
             await loadFlavors();
+            state.activeBrand = state.activeBrand || (state.flavors[0] && state.flavors[0].brand) || '';
             render();
-          }catch(e){ alert(e.message||'Не удалось добавить вкус'); }
+          }catch(e){
+            console.error(e); alert('Ошибка сети при добавлении вкуса');
+          }
         });
       }
-      buildAdminFlavorList(root);
-    }
-
-    // полоса состава
-    renderMixBar();
-  }
-
-  // ====== Подбор 3-го компонента (простая эвристика) ======
-  function flavorTasteLabel(f){
-    if (!f) return null;
-    const pool = []
-      .concat(Array.isArray(f.tags)?f.tags:[])
-      .concat(String(f.name||'').split(/\s+/));
-    for (const t of pool){
-      const w = tasteWordFromTag(t);
-      if (w) return w;
-    }
-    return null;
-  }
-  function suggestThirdFlavor(parts, flavors, targetTaste, targetStrength){
-    if (!Array.isArray(flavors) || !flavors.length) return null;
-    const used = new Set((parts||[]).map(p=>p.flavorId));
-    const candidates = flavors.filter(f=>!used.has(f.id));
-
-    let best = null, bestScore = -1e9;
-    for (const f of candidates){
-      const s = getStrength10(f);
-      const taste = flavorTasteLabel(f);
-      let score = 0;
-      if (targetTaste && taste){
-        if (taste === targetTaste) score += 2.0;
-        const comp = {
-          'фруктовый': ['ледяной','сладкий','пряный'],
-          'десертный': ['фруктовый','сладкий'],
-          'ледяной':   ['фруктовый','сладкий'],
-          'пряный':    ['фруктовый'],
-          'кислый':    ['сладкий','фруктовый'],
-          'сладкий':   ['кислый','фруктовый','ледяной']
-        };
-        if ((comp[targetTaste]||[]).includes(taste)) score += 1.0;
-      }
-      if (Number.isFinite(targetStrength)){
-        score += (10 - Math.abs(targetStrength - s)) / 10;
-      }
-      const brandCount = parts.reduce((acc,p)=>{
-        const fl = flavors.find(x=>x.id===p.flavorId);
-        return acc + (fl && normalizeBrand(fl.brand)===normalizeBrand(f.brand) ? 1 : 0);
-      }, 0);
-      if (brandCount>=2) score -= 0.5;
-
-      if (score>bestScore){ bestScore=score; best=f; }
-    }
-    return best;
-  }
-
-  // ======= Полоса состава микса =======
-  
-  function updateSaveButtonUI(){
-    const btn=document.getElementById('save');
-    if(!btn) return;
-    const enabled = isMixValid(state.parts,state.title);
-    if(enabled){
-      btn.className='tap btn-primary shimmer inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px]';
-      btn.disabled=false;
-    } else {
-      btn.className='tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] opacity-50 cursor-not-allowed border border-slate-700';
-      btn.disabled=true;
     }
   }
 
-  
-  function updateRecListUI(){
-    const list=document.getElementById('recList'); if(!list) return;
-    const err=document.getElementById('recErr'); if(err) err.textContent = String(state.recError||'');
+  // Построение списка вкусов в админке + удаление
+  function buildAdminFlavorList(root){
+    var list = root.querySelector('#admFlavorList');
+    if (!list) return;
+    var byBrand = {};
+    (state.flavors||[]).forEach(function(f){
+      var b = (f.brand||'').trim() || 'Без бренда';
+      (byBrand[b]||(byBrand[b]=[])).push(f);
+    });
 
-    const items=(state.recList||[]).map(m=>{
-      const likes = Array.isArray(m.likers) ? m.likers.length : 0;
-      const c = typeof m.strength10==='number' ? strengthColor(m.strength10) : strengthColor(null);
-      const sBadge = typeof m.strength10==='number' ? '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+m.strength10.toFixed(1)+'</span>' : '';
-      const tBadge = m.taste ? '<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">'+escHTML(m.taste)+'</span>' : '';
-      return '<div class="flex items-center justify-between gap-2 text-sm border border-slate-800 rounded-lg px-2 py-1">'+
-        '<div class="min-w-0"><div class="truncate font-medium">'+escAttr(m.title)+'</div><div class="text-[11px] opacity-70">❤ '+likes+'</div></div>'+
-        '<div class="flex items-center gap-2">'+sBadge+tBadge+'<button data-apply="'+escAttr(m.id)+'" class="tap inline-flex items-center rounded-xl h-8 px-3 text-[12px] border border-slate-700 hover:bg-white/10">Загрузить</button></div>'+
-      '</div>';
-    }).join('');
-    list.innerHTML=items||'';
-    // rebind apply buttons
-    list.querySelectorAll('[data-apply]').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        const id = btn.getAttribute('data-apply');
-        const m = state.guestMixes.find(x=>x.id===id) || state.recList.find(x=>x.id===id);
-        if (!m) return;
-        state.title = m.title + ' (копия)';
-        state.notes = m.notes || '';
-        state.parts = Array.isArray(m.parts) ? m.parts.map(p=>({ flavorId:p.flavorId, percent:safePercent(p.percent) })) : [];
-        state.activeTab = 'builder';
-        render();
+    var html = Object.keys(byBrand).sort().map(function(brand){
+      var rows = byBrand[brand].sort(function(a,b){ return a.name.localeCompare(b.name, 'ru'); })
+        .map(function(f){
+          return (
+            '<div class="flex items-center justify-between gap-2 text-[12px] border border-slate-800 rounded-lg px-2 py-1">' +
+              '<div class="min-w-0 truncate"><span class="opacity-70">'+escHTML(brand)+'</span> • '+escHTML(f.name)+'</div>' +
+              '<button data-del-flavor="'+escAttr(f.id)+'" class="inline-flex items-center justify-center h-7 px-2 rounded-md border border-rose-700 text-rose-300 hover:bg-rose-900/40">Удалить</button>' +
+            '</div>'
+          );
+        }).join('');
+      return (
+        '<div class="space-y-1">' +
+          '<div class="text-[11px] uppercase tracking-wide text-slate-400">'+escHTML(brand)+'</div>' +
+          rows +
+        '</div>'
+      );
+    }).join('') || '<div class="text-[12px] text-slate-400">Пока нет вкусов</div>';
+    list.innerHTML = html;
+
+    root.querySelectorAll('[data-del-flavor]').forEach(function(btn){
+      btn.addEventListener('click', async function(){
+        var id = btn.getAttribute('data-del-flavor');
+        if (!id) return;
+        if (!confirm('Удалить вкус "'+id+'"? Это действие необратимо.')) return;
+        try{
+          await deleteFlavorOnServer(id, state.adminToken || '');
+          await loadFlavors();
+          if (!state.flavors.some(function(f){ return normalizeBrand(f.brand)===state.activeBrand; })) {
+            state.activeBrand = (state.flavors[0] && state.flavors[0].brand) || '';
+          }
+          render();
+        } catch(e){
+          console.error(e);
+          alert('Не удалось удалить вкус. ' + (e && e.message ? e.message : ''));
+        }
       });
     });
-  }
-
-  function renderMixBar(){
-    const bar = document.getElementById('mixBar'); if(!bar) return;
-    if(!state.parts.length){ bar.innerHTML=''; return; }
-    function colorFor(fl){
-      const b = (fl?.brand||'').toLowerCase();
-      if (b.includes('dark'))   return 'linear-gradient(90deg,#F59E0B,#FDBA74)';
-      if (b.includes('black'))  return 'linear-gradient(90deg,#f43f5e,#f97316)';
-      if (b.includes('must'))   return 'linear-gradient(90deg,#22c55e,#84cc16)';
-      if (b.includes('bonch'))  return 'linear-gradient(90deg,#a78bfa,#38bdf8)';
-      if (b.includes('star'))   return 'linear-gradient(90deg,#eab308,#f59e0b)';
-      return 'linear-gradient(90deg,#94a3b8,#cbd5e1)';
-    }
-    const total = percentSum(state.parts) || 1;
-    const segs = state.parts.map(p=>{
-      const fl = state.flavors.find(x=>x.id===p.flavorId);
-      const w = Math.max(0, Math.min(100, (p.percent/total)*100));
-      const bg = colorFor(fl);
-      return '<div class="mix-seg" style="width:'+w+'%; background:'+bg+'"></div>';
-    }).join('');
-    bar.innerHTML = segs;
   }
 
   // ======= Частичные обновления UI =======
   function updateMixStatsUI(){
-    const total = percentSum(state.parts);
-    const totalEl=document.getElementById('mixTotal'); if(totalEl) totalEl.textContent=String(total);
-    let strength=null; const t=percentSum(state.parts); if(t>0){ let w=0; for(const p of state.parts){ const pr=safePercent(p.percent); if(pr<=0) continue; const fl=state.flavors.find(x=>x&&x.id===p.flavorId); if(fl) w+=getStrength10(fl)*(pr/t);} strength=w?Math.round(w*10)/10:null; }
-    const sEl=document.getElementById('mixStrength'); if(sEl){ if(typeof strength==='number'){ const c=strengthColor(strength); sEl.innerHTML='<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+strength.toFixed(1)+'</span>'; } else { sEl.innerHTML=''; } }
-    const taste=getMixTasteLabel(state.parts,state.flavors);
-    const tEl=document.getElementById('mixTaste'); if(tEl){ tEl.innerHTML = taste ? ('<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">'+escHTML(taste)+'</span>') : ''; }
-    renderMixBar();
+    var total = percentSum(state.parts);
+    var totalEl = document.getElementById('mixTotal'); if(totalEl) totalEl.textContent = String(total);
+    var t = percentSum(state.parts); var w=0; if(t>0){ for(var i=0;i<state.parts.length;i++){ var p=state.parts[i]; var pr=safePercent(p.percent); if(pr<=0) continue; var fl=state.flavors.find(function(x){return x && x.id===p.flavorId;}); if(fl) w += getStrength10(fl) * (pr/t); } }
+    var strength = w? Math.round(w*10)/10 : null;
+    var sEl = document.getElementById('mixStrength'); if(sEl){ if(typeof strength==='number'){ var c=strengthColor(strength); sEl.innerHTML = '<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+strength.toFixed(1)+'</span>'; } else { sEl.innerHTML=''; } }
+    var taste = getMixTasteLabel(state.parts, state.flavors);
+    var tEl = document.getElementById('mixTaste'); if(tEl){ tEl.innerHTML = taste ? ('<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">'+escHTML(taste)+'</span>') : ''; }
   }
+
+  function bindAddButtons(){
+    var list = document.getElementById('flavorsList'); if(!list) return;
+    Array.prototype.forEach.call(list.querySelectorAll('[data-add]'), function(btn){
+      btn.addEventListener('click', function(){
+        var id=this.getAttribute('data-add');
+        if(!id) return; if(state.parts.some(function(p){return p.flavorId===id;})) return;
+        var def=Math.min(30, Math.max(0, 100 - percentSum(state.parts)));
+        state.parts = state.parts.concat([{ flavorId:id, percent:def }]);
+        rerenderMixBlock();
+        updateSearchUI();
+      });
+    });
+  }
+
+  function attachMixEvents(){
+    Array.prototype.forEach.call(document.querySelectorAll('[data-range]'), function(sl){
+      sl.addEventListener('input', function(){
+        var id=this.getAttribute('data-range');
+        var req=safePercent(this.value);
+        var newParts = state.parts.map(function(p){ return p.flavorId===id ? { flavorId:p.flavorId, percent: clampPercentForPart(state.parts, id, req) } : p; });
+        var newVal = newParts.find(function(p){return p.flavorId===id;}).percent;
+        state.parts = newParts;
+        if (newVal !== req) { this.value = newVal; }
+        updateMixStatsUI();
+        var span = document.querySelector('[data-percent-for="'+id+'"]');
+        if(span) span.textContent = newVal + '%';
+      });
+    });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-remove]'), function(btn){
+      btn.addEventListener('click', function(){ var id=this.getAttribute('data-remove'); state.parts = state.parts.filter(function(p){return p.flavorId!==id;}); rerenderMixBlock(); });
+    });
+  }
+
   function rerenderMixBlock(){
-    const container=document.getElementById('mixBlock'); if(!container) return;
-    const total=percentSum(state.parts);
-    const strength=(function(){ const t=percentSum(state.parts); if(!t) return null; let w=0; for(const p of state.parts){ const pr=safePercent(p.percent); if(pr<=0) continue; const fl=state.flavors.find(x=>x&&x.id===p.flavorId); if(!fl) continue; w+=getStrength10(fl)*(pr/t);} return w?Math.round(w*10)/10:null; })();
-    const strengthBadge= (typeof strength==='number') ? (function(){ const c=strengthColor(strength); return '<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+strength.toFixed(1)+'</span>'; })() : '';
-    const mixTaste=getMixTasteLabel(state.parts,state.flavors);
-    const partsHTML=state.parts.map(p=>{ const fl=state.flavors.find(x=>x.id===p.flavorId); const name=(fl&&fl.name)||p.flavorId; return (
-      '<div class="flex items-center gap-2 text-sm">' +
+    var container = document.getElementById('mixBlock'); if(!container) return;
+    var total = percentSum(state.parts);
+    var strength = (function(){ var t=percentSum(state.parts); if(!t) return null; var w=0; for(var i=0;i<state.parts.length;i++){ var p=state.parts[i]; var pr=safePercent(p.percent); if(pr<=0) continue; var fl=state.flavors.find(function(x){return x && x.id===p.flavorId;}); if(!fl) continue; w+=getStrength10(fl)*(pr/t);} return w?Math.round(w*10)/10:null; })();
+    var strengthBadge=''; if(typeof strength==='number'){ var c=strengthColor(strength); strengthBadge='<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+strength.toFixed(1)+'</span>'; }
+    var mixTaste = getMixTasteLabel(state.parts, state.flavors);
+    var partsHTML = state.parts.map(function(p){ var fl = state.flavors.find(function(x){return x.id===p.flavorId;}); var name=(fl && fl.name)||p.flavorId; return (
+      '<div class="flex items_center gap-2 text-sm">'.replace('items_center','items-center') +
         '<span class="truncate w-36" title="'+escAttr(name)+'">'+escHTML(name)+'</span>' +
         '<input type="range" min="0" max="100" step="5" class="w-28" value="'+safePercent(p.percent)+'" data-range="'+escAttr(p.flavorId)+'"/>' +
         '<span class="w-10 text-right" data-percent-for="'+escAttr(p.flavorId)+'">'+safePercent(p.percent)+'%</span>' +
-        '<button data-remove="'+escAttr(p.flavorId)+'" class="tap inline-flex items-center justify-center rounded-xl h-8 px-3 text-[12px] hover:bg-white/10 border border-slate-700">Удалить</button>' +
+        '<button data-remove="'+escAttr(p.flavorId)+'" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] hover:bg-slate-800">Удалить</button>' +
       '</div>'
     ); }).join('');
-    const html =
-      '<div class="px-3 pt-3"><div class="text-[10px] tracking-wider uppercase text-slate-300/70">Сборка</div><div class="text-base font-semibold">Ваш микс</div></div>' +
+    var html =
+      '<div class="px-3 pt-3"><div class="text-xs font-semibold">Микс</div></div>' +
       '<div class="p-3 space-y-2">' +
         (state.parts.length===0?'<div class="text-[12px] text-slate-400">Добавьте вкусы из списка</div>':'') +
         partsHTML +
-        '<div class="h-3 rounded-md bg-slate-900 border border-slate-700 overflow-hidden my-2" id="mixBar"></div>' +
         '<div class="flex items-center justify-between text-[12px]">' +
           '<span>Итог: <b id="mixTotal">'+total+'</b>%</span>' +
           '<div class="flex items-center gap-2"><span id="mixStrength">'+strengthBadge+'</span><span id="mixTaste">'+(mixTaste?('<span class="inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] border border-slate-700 bg-slate-900">'+escHTML(mixTaste)+'</span>'):'')+'</span></div>' +
         '</div>' +
-        (state.parts.length===2 ? '<button id="autoThird" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-white/10 w-full">Подобрать 3-й компонент</button>' : '') +
       '</div>';
-    container.innerHTML=html;
+    container.innerHTML = html;
     attachMixEvents();
-    const autoBtn = document.getElementById('autoThird');
-    if (autoBtn) autoBtn.addEventListener('click', ()=>{
-      const targetTaste = state.recTaste || getMixTasteLabel(state.parts, state.flavors) || null;
-      const currentStrength = (function(){ const t=percentSum(state.parts); if(!t) return null; let w=0; for(const p of state.parts){ const pr=safePercent(p.percent); if(pr<=0) continue; const fl=state.flavors.find(x=>x&&x.id===p.flavorId); if(!fl) continue; w+=getStrength10(fl)*(pr/t);} return w?Math.round(w*10)/10:null; })();
-      const targetStrength = Number.isFinite(currentStrength) ? currentStrength : (state.recStrength||5);
-      const suggestion = suggestThirdFlavor(state.parts, state.flavors, targetTaste, targetStrength);
-      if (!suggestion) { alert('Не удалось подобрать компонент'); return; }
-      const left = Math.max(0, 100 - percentSum(state.parts));
-      const addPct = Math.min(30, left||20);
-      state.parts = state.parts.concat([{ flavorId:suggestion.id, percent:addPct }]);
-      render();
-    });
-    renderMixBar();
   }
+
   function updateSearchUI(){
-    const meta=document.getElementById('flavorsMeta');
-    const list=document.getElementById('flavorsList');
-    if(!meta||!list) return;
-    const flavorsOfActive=(state.flavors||[]).filter(f=>normalizeBrand(f.brand)===state.activeBrand);
-    const searchedFlavors=filterFlavorsByQueryAdv(state.flavors,state.search);
-    const listFlavors=state.search?searchedFlavors:flavorsOfActive;
+    var meta = document.getElementById('flavorsMeta');
+    var list = document.getElementById('flavorsList');
+    if(!meta || !list) return;
+    var flavorsOfActive = (state.flavors||[]).filter(function(f){return normalizeBrand(f.brand)===state.activeBrand;});
+    var searchedFlavors = filterFlavorsByQueryAdv(state.flavors, state.search);
+    var listFlavors = state.search ? searchedFlavors : flavorsOfActive;
     meta.textContent = state.search ? ('Найдено: '+listFlavors.length) : (state.activeBrand ? ('Вкусы бренда: '+state.activeBrand) : '');
-    list.innerHTML = listFlavors.map(f=>{
-      const inMix = state.parts.some(p=>p.flavorId===f.id);
-      const s=getStrength10(f), c=strengthColor(s);
-      const desc=f.description?'<div class="text-[11px] text-slate-300/80 line-clamp-2">'+escHTML(f.description)+'</div>':'';
+    list.innerHTML = listFlavors.map(function(f){
+      var inMix = state.parts.some(function(p){return p.flavorId===f.id;});
+      var s = getStrength10(f); var c = strengthColor(s);
+      var desc = f.description ? '<div class="text-[11px] text-slate-400 truncate">'+escHTML(f.description)+'</div>':'';
       return (
-        '<div class="flex items-center justify-between gap-2 text-sm hover:bg-white/5 rounded-lg px-2 py-1">' +
+        '<div class="flex items-center justify-between gap-2 text-sm">' +
           '<div class="min-w-0">' +
             '<div class="flex items-center gap-2">' +
-              '<div class="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center text-[11px] opacity-80">'+escHTML((f.brand||'?').slice(0,1).toUpperCase())+'</div>' +
               '<div class="font-medium truncate" title="'+escAttr((f.brand||'')+' • '+(f.name||''))+'">'+escHTML(f.name)+' <span class="opacity-60">('+escHTML(f.brand)+')</span></div>' +
               '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+s.toFixed(1)+'</span>' +
             '</div>' +
             desc +
           '</div>' +
-          '<button data-add="'+escAttr(f.id)+'" class="tap inline-flex items-center justify-center rounded-xl h-8 px-3 text-[12px] '+(inMix?'opacity-50 cursor-not-allowed border border-slate-700':'border border-slate-700 hover:bg-white/10')+'">'+(inMix?'✓':'+')+'</button>' +
+          '<button data-add="'+escAttr(f.id)+'" class="inline-flex items-center justify-center rounded-xl h-8 px-2 text-[12px] '+(inMix?'opacity-50 cursor-not-allowed border border-slate-700':'border border-slate-700 hover:bg-slate-800')+'">'+(inMix?'✓':'+')+'</button>' +
         '</div>'
       );
     }).join('') + (listFlavors.length===0?('<div class="text-[12px] text-slate-400">'+(state.search?'Ничего не найдено':'Нет вкусов для этого бренда')+'</div>'):'');
     bindAddButtons();
   }
 
-  function buildAdminFlavorList(root){
-    const list=root.querySelector('#admFlavorList'); if(!list) return;
-    const byBrand={}; (state.flavors||[]).forEach(f=>{ const b=(f.brand||'').trim()||'Без бренда'; (byBrand[b]||(byBrand[b]=[])).push(f); });
-    const html = Object.keys(byBrand).sort().map(brand=>{
-      const rows = byBrand[brand].sort((a,b)=>a.name.localeCompare(b.name,'ru')).map(f=>{
-        return (
-          '<div class="flex items-center justify-between gap-2 text-[12px] border border-slate-800 rounded-lg px-2 py-1">' +
-            '<div class="min-w-0 truncate"><span class="opacity-70">'+escHTML(brand)+'</span> • '+escHTML(f.name)+'</div>' +
-            '<button data-del-flavor="'+escAttr(f.id)+'" class="tap inline-flex items-center justify-center h-7 px-3 rounded-full border border-rose-700 text-rose-300 hover:bg-rose-900/40">Удалить</button>' +
-          '</div>'
-        );
-      }).join('');
-      return '<div class="space-y-1"><div class="text-[11px] uppercase tracking-wide text-slate-400">'+escHTML(brand)+'</div>'+rows+'</div>';
-    }).join('') || '<div class="text-[12px] text-slate-400">Пока нет вкусов</div>';
-    list.innerHTML = html;
-
-    root.querySelectorAll('[data-del-flavor]').forEach(btn=>{
-      btn.addEventListener('click', async ()=>{
-        const id = btn.getAttribute('data-del-flavor'); if(!id) return;
-        if(!confirm('Удалить вкус "'+id+'"? Это действие необратимо.')) return;
-        try{
-          await deleteFlavorOnServer(id, state.adminToken||'');
-          await loadFlavors();
-          if (!state.flavors.some(f=>normalizeBrand(f.brand)===state.activeBrand)) {
-            state.activeBrand = (state.flavors[0] && state.flavors[0].brand) || '';
-          }
-          render();
-        }catch(e){ alert('Не удалось удалить вкус. '+(e&&e.message?e.message:'')); }
-      });
-    });
-  }
-
-  function bindAddButtons(){
-    const list = document.getElementById('flavorsList'); if(!list) return;
-    list.querySelectorAll('[data-add]').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        const id=btn.getAttribute('data-add'); if(!id) return;
-        if(state.parts.some(p=>p.flavorId===id)) return;
-        const def=Math.min(30, Math.max(0, 100-percentSum(state.parts)));
-        state.parts = state.parts.concat([{ flavorId:id, percent:def }]);
-        rerenderMixBlock(); updateSearchUI();
-      });
-    });
-  }
-  function attachMixEvents(){
-    document.querySelectorAll('[data-range]').forEach(sl=>{
-      sl.addEventListener('input', function(){
-        const id=this.getAttribute('data-range');
-        const req=safePercent(this.value);
-        const newParts=state.parts.map(p=>p.flavorId===id?{ flavorId:p.flavorId, percent:clampPercentForPart(state.parts,id,req)}:p);
-        const newVal=newParts.find(p=>p.flavorId===id).percent;
-        state.parts=newParts;
-        if(newVal!==req) this.value=newVal;
-        updateMixStatsUI();
-        const span=document.querySelector('[data-percent-for="'+id+'"]'); if(span) span.textContent=newVal+'%';
-      });
-    });
-    document.querySelectorAll('[data-remove]').forEach(btn=>{
-      btn.addEventListener('click', ()=>{ const id=btn.getAttribute('data-remove'); state.parts=state.parts.filter(p=>p.flavorId!==id); rerenderMixBlock(); });
-    });
-  }
-
-  // ======= Анимации после render + ripple =======
-  function applyAnimationsAfterRender(){
-    document.querySelectorAll('.ui-card').forEach((el,i)=>{
-      el.classList.add('reveal'); el.style.setProperty('--d', (i*40)+'ms');
-      requestAnimationFrame(()=>el.classList.add('in'));
-    });
-    document.querySelectorAll('.brand-chip').forEach((el,i)=>{
-      el.classList.add('reveal-up'); el.style.setProperty('--d', (i*25)+'ms');
-      requestAnimationFrame(()=>el.classList.add('in'));
-    });
-    document.querySelectorAll('#flavorsList > div').forEach((el,i)=>{
-      el.classList.add('reveal-up'); el.style.setProperty('--d', (i*20)+'ms');
-      requestAnimationFrame(()=>el.classList.add('in'));
-    });
-  }
-  function attachRipples(root){
-    root.querySelectorAll('.tap').forEach(btn=>{
-      if (btn._rippling) return; btn._rippling = true;
-      btn.addEventListener('click', e=>{
-        const r = btn.getBoundingClientRect();
-        btn.style.setProperty('--rx', (e.clientX - r.left)+'px');
-        btn.style.setProperty('--ry', (e.clientY - r.top)+'px');
-        btn.classList.remove('rippling'); void btn.offsetWidth;
-        btn.classList.add('rippling');
-        setTimeout(()=>btn.classList.remove('rippling'), 650);
-      });
-    });
-  }
-
   // ========================= СТАРТ ==========================================
   (async function start(){
-    initAuth();
-    await detectLogo();
-    await loadFlavors();
-    await loadGuestMixes();
-    const ms = (function(parts,flavors){
-      if(!parts.length) return null; const t=percentSum(parts); if(t<=0) return null; let w=0;
-      for(const p of parts){ const pr=safePercent(p?.percent); if(pr<=0) continue; const fl=flavors.find(x=>x&&x.id===(p&&p.flavorId)); if(!fl) continue; w+=getStrength10(fl)*(pr/t); }
-      return w? Math.round(w*10)/10 : null;
-    })(state.parts,state.flavors);
-    const mt = getMixTasteLabel(state.parts,state.flavors);
-    if (ms) state.recStrength = ms;
-    if (mt) state.recTaste = mt;
-
-    render();
-
-    setInterval(async ()=>{
-      const before = JSON.stringify(state.guestMixes?.map(m=>m.id));
+    try{
+      initAuth();
+      await detectLogo();
+      await loadFlavors();
       await loadGuestMixes();
-      const after  = JSON.stringify(state.guestMixes?.map(m=>m.id));
-      if (before !== after) render();
-    }, 10000);
+      render();
+
+      // Поллинг миксов
+      setInterval(async function(){
+        const before = JSON.stringify(state.guestMixes?.map(function(m){return m.id;}));
+        await loadGuestMixes();
+        const after  = JSON.stringify(state.guestMixes?.map(function(m){return m.id;}));
+        if (before !== after) render();
+      }, 10000);
+    }catch(e){ console.error(e); }
   })();
+
+  // ========================= SMOKE TESTS ====================================
+  ;(function(){ try{
+    console.group('HookahMixes – smoke tests');
+    {var p1=[{flavorId:'a',percent:60},{flavorId:'b',percent:40}]; console.assert(percentSum(p1)===100,'sum=100');}
+    {var p2=[{flavorId:'a',percent:60},{flavorId:'b',percent:30}]; console.assert(percentSum(p2)===90,'sum=90');}
+    {var ok=isMixValid([{flavorId:'a',percent:60},{flavorId:'b',percent:40}], 'Mix'); console.assert(ok===true,'valid=100+title');}
+    {var cl=clampPercentForPart([{flavorId:'a',percent:90},{flavorId:'b',percent:0}], 'b', 20); console.assert(cl===10,'clamp remaining');}
+    {var cl2=clampPercentForPart([{flavorId:'a',percent:50}], 'a', 150); console.assert(cl2===100,'clamp max');}
+    {var r=filterFlavorsByQueryAdv([{id:'1',name:'Mango'},{id:'2',name:'Ice'},{id:'3',name:'Ice Mango'}], 'mango'); console.assert(r.length===2,'search across brands');}
+    {var t=getMixTasteLabel([],[]); console.assert(t===null,'taste null');}
+    {var cl3=clampPercentForPart([{flavorId:'a',percent:10}], 'a', -5); console.assert(cl3===0,'clamp to 0');}
+    console.groupEnd();
+  }catch(e){ console.error('Smoke tests error', e); }})();
   </script>
 
-<!-- === ADDON: Safe third-flavor recommendations + Admin delete (non-invasive) === -->
-<script>
-(function(){
-  function _percentSum(parts){
-    try { return (parts||[]).reduce((s,p)=>s + Math.max(0, Math.min(100, Number(p && p.percent) || 0)), 0); }
-    catch(_){ return 0; }
-  }
-  function _getStrength10(f){
-    try { if (typeof getStrength10 === 'function') return getStrength10(f); } catch(_){}
-    const v = Number(f && (f.strength10 ?? f.strength ?? f.power));
-    return isFinite(v) && v>0 ? v : 5;
-  }
-  function renderThirdPanel(){
-    try{
-      if (!window.state || !Array.isArray(state.parts) || !Array.isArray(state.flavors)) return;
-      const parts = state.parts;
-      const haveTwo = parts.length === 2 && !state._hideThirdPanel;
-      const existing = document.getElementById('thirdRecPanel');
-      if (!haveTwo){ if (existing) existing.remove(); return; }
-      let mixS = null;
-      try{
-        const total = _percentSum(parts) || 1;
-        let w = 0;
-        for (const p of parts){
-          const pr = Math.max(0, Math.min(100, Number(p && p.percent) || 0));
-          const f = (state.flavors||[]).find(x => x && String(x.id) === String(p && p.flavorId));
-          if (!f) continue;
-          w += _getStrength10(f) * (pr/total);
-        }
-        mixS = Math.round(w*10)/10;
-      } catch(_){ mixS = null; }
+<!-- === BANNED WORDS ADMIN UI (floating button + modal) === -->
+<style>
+  .bw-fab{position:fixed;right:18px;bottom:18px;z-index:50;border-radius:9999px;padding:10px 14px;font-weight:600;background:#111;color:#fff;box-shadow:0 6px 14px rgba(0,0,0,.15);opacity:.9}
+  .bw-fab:hover{opacity:1}
+  .bw-back{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;z-index:60}
+  .bw-modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:70}
+  .bw-card{width:min(800px,92vw);max-height:90vh;overflow:auto;background:#fff;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+  .bw-head{padding:16px 20px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center}
+  .bw-body{padding:16px 20px}
+  .bw-foot{padding:12px 20px;border-top:1px solid #eee;display:flex;gap:12px;justify-content:flex-end}
+  .bw-input, .bw-textarea{width:100%;border:1px solid #ddd;border-radius:10px;padding:10px 12px;font:inherit}
+  .bw-textarea{min-height:220px;resize:vertical;white-space:pre}
+  .bw-btn{border:none;border-radius:10px;padding:10px 14px;font-weight:600;cursor:pointer}
+  .bw-btn.primary{background:#111;color:#fff}
+  .bw-btn.secondary{background:#f2f2f2}
+  .bw-note{font-size:12px;color:#666;margin-top:6px}
+</style>
 
-      const used = new Set((parts||[]).map(p=> String(p && p.flavorId)));
-      let cands = (state.flavors||[]).filter(f => f && !used.has(String(f.id)));
-      function score(f){
-        const s = Math.abs((typeof mixS==='number'?mixS:5) - _getStrength10(f));
-        let bonus = 0;
-        try{
-          const stags = new Set();
-          for (const p of parts){
-            const fl = state.flavors.find(x => x && String(x.id)===String(p.flavorId));
-            (fl && Array.isArray(fl.tags) ? fl.tags : []).forEach(t => stags.add(String(t).toLowerCase()));
-          }
-          const ft = (Array.isArray(f.tags)?f.tags:[]).map(t=>String(t).toLowerCase());
-          if (ft.some(t => stags.has(t))) bonus -= 0.15;
-        }catch(_){}
-        return s + bonus;
-      }
-      cands.sort((a,b)=> score(a)-score(b));
-      cands = cands.slice(0,6);
+<button id="bw-fab" class="bw-fab" title="Запрещённые слова">Слова 🚫</button>
+<div id="bw-back" class="bw-back"></div>
+<div id="bw-modal" class="bw-modal" aria-hidden="true">
+  <div class="bw-card">
+    <div class="bw-head">
+      <div style="font-weight:700">Запрещённые слова</div>
+      <button class="bw-btn secondary" id="bw-close">Закрыть</button>
+    </div>
+    <div class="bw-body">
+      <p>Каждое слово — с новой строки. Проверка выполняется по <em>вхождению</em> (регистр игнорируется).</p>
+      <textarea id="bw-words" class="bw-textarea" spellcheck="false" placeholder="пример:&#10;спайс&#10;наркотик"></textarea>
+      <div class="bw-note">Совет: не добавляйте слишком общие подстроки, чтобы не блокировать легальные слова.</div>
+      <div style="margin-top:14px">
+        <label style="font-size:12px;color:#666">Admin Token (для сохранения)</label>
+        <input id="bw-token" class="bw-input" type="password" placeholder="X-Admin-Token">
+      </div>
+    </div>
+    <div class="bw-foot">
+      <button class="bw-btn secondary" id="bw-reload">Обновить из сервера</button>
+      <button class="bw-btn primary" id="bw-save">Сохранить</button>
+    </div>
+  </div>
+</div>
 
-      const rest = Math.max(0, 100 - _percentSum(parts));
-      const items = cands.map(f => (
-        '<button class="tap flex items-center justify-between w-full px-3 py-2 rounded-xl border border-slate-800 hover:bg-white/5" data-add-third="'+ String(f.id) +'">'+
-          '<span class="min-w-0 truncate">'+
-            (f.brand ? String(f.brand).replace(/</g,'&lt;')+' — ' : '')+
-            (String(f.name||f.title||'Без названия').replace(/</g,'&lt;'))+
-          '</span>'+
-          '<span class="ml-2 text-xs opacity-70">~'+ _getStrength10(f) +'</span>'+
-        '</button>'
-      )).join('');
-
-      const html = ''
-      + '<div id="thirdRecPanel" class="fixed inset-x-0 bottom-0 z-[60]">'
-      + '  <div class="mx-auto max-w-3xl p-3">'
-      + '    <div class="ui-card rounded-2xl border border-slate-800 bg-[color-mix(in_oklab,var(--bg)_70%,transparent)] backdrop-blur-xs shadow-elevate p-2">'
-      + '      <div class="flex items-center justify-between px-2 py-1">'
-      + '        <div class="text-sm opacity-80">Рекомендуем 3-й компонент</div>'
-      + '        <button id="thirdPanelClose" class="tap text-xs px-2 py-1 rounded-lg border border-slate-700 hover:bg-white/5">Не сейчас</button>'
-      + '      </div>'
-      + '      <div class="grid gap-2 px-2 pb-2">' + (items || '<div class="text-sm opacity-60 px-2 py-2">Нет подходящих вариантов</div>') + '</div>'
-      + '      <div class="px-2 pb-2 text-[11px] opacity-60">Добавится ~'+ rest +'% (до 100%)</div>'
-      + '    </div>'
-      + '  </div>'
-      + '</div>';
-
-      if (existing) existing.outerHTML = html;
-      else document.body.insertAdjacentHTML('beforeend', html);
-
-      const panel = document.getElementById('thirdRecPanel');
-      if (panel){
-        const btnClose = document.getElementById('thirdPanelClose');
-        if (btnClose) btnClose.addEventListener('click', function(){ state._hideThirdPanel = true; const p=document.getElementById('thirdRecPanel'); if(p) p.remove(); });
-        panel.querySelectorAll('[data-add-third]').forEach(btn => {
-          btn.addEventListener('click', function(e){
-            e.preventDefault();
-            e.stopPropagation();
-            const id = btn.getAttribute('data-add-third');
-            const rest = Math.max(0, 100 - _percentSum(state.parts));
-            const p = document.getElementById('thirdRecPanel'); if (p) p.remove();
-            state._hideThirdPanel = true;
-            if (rest > 0){
-              state.parts = (state.parts||[]).concat([{ flavorId: id, percent: rest }]);
-              try { render(); } catch(_){}
-            }
-          }, { once: true });
-        });
-      }
-    }catch(err){ console && console.warn && console.warn('[third-panel]', err); }
-  }
-
-  function isAdmin(){
-    try { if (window.state && (state.user?.isAdmin || String(state.user?.role).toLowerCase()==='admin')) return true; } catch(_){}
-    if (localStorage.getItem('adminMode') === '1') return true;
-    if (/[?&]admin=1(\b|$)/.test(location.search)) return true;
-    return false;
-  }
-  async function apiDeleteMix(id){
-    try { const r = await fetch('/api/guest-mixes/'+encodeURIComponent(id), { method:'DELETE' }); if (r.ok) return true; } catch(_){}
-    try { const r = await fetch('/api/guest-mixes?id='+encodeURIComponent(id), { method:'DELETE' }); if (r.ok) return true; } catch(_){}
-    try { const r = await fetch('/api/delete-guest-mix', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id}) }); if (r.ok) return true; } catch(_){}
-    return false;
-  }
-  function wireAdminDeleteButtons(){
-    try{
-      if (!isAdmin()){
-        document.querySelectorAll('[data-del]').forEach(b=>b.remove());
-        return;
-      }
-      document.querySelectorAll('[data-like]').forEach(likeBtn=>{
-        const id = likeBtn.getAttribute('data-like');
-        if (!id) return;
-        const container = likeBtn.parentElement || likeBtn;
-        if (container.querySelector('[data-del="'+CSS.escape(id)+'"]')) return;
-        const del = document.createElement('button');
-        del.setAttribute('data-del', id);
-        del.className = 'tap text-xs px-2 py-1 rounded-lg border border-red-700/70 hover:bg-red-600/10 ml-2';
-        del.textContent = 'Удалить';
-        del.addEventListener('click', async function(e){
-          e.stopPropagation();
-          if (!confirm('Удалить этот микс?')) return;
-          const card = likeBtn.closest('.ui-card') || likeBtn.closest('[data-card]') || null;
-          if (card) card.style.opacity = '0.5';
-          const ok = await apiDeleteMix(id);
-          if (ok){
-            try { if (Array.isArray(state.guestMixes)) state.guestMixes = state.guestMixes.filter(x=> x && String(x.id)!==String(id)); } catch(_){}
-            if (card) card.remove();
-          } else {
-            if (card) card.style.opacity = '';
-            alert('Не удалось удалить. Проверьте права и API.');
-          }
-        });
-        container.appendChild(del);
-      });
-    }catch(err){ console && console.warn && console.warn('[admin-delete]', err); }
-  }
-
-  (function installRenderHook(){
-    if (window.__addonHooked) return;
-    window.__addonHooked = true;
-    function afterRender(){ renderThirdPanel(); wireAdminDeleteButtons(); }
-    function tryInstall(){
-      if (typeof window.render !== 'function') return false;
-      if (window.render.__wrappedAddon) return true;
-      const _render = window.render;
-      window.render = function(){
-        const x = window.scrollX, y = window.scrollY;
-        const res = _render.apply(this, arguments);
-        requestAnimationFrame(function(){ try { afterRender(); } catch(_){ } window.scrollTo(x,y); });
-        return res;
-      };
-      window.render.__wrappedAddon = true;
-      return true;
-    }
-    if (!tryInstall()){
-      let tries = 0;
-      const t = setInterval(function(){ tries++; if (tryInstall() || tries > 40) clearInterval(t); }, 100);
-    }
-    document.addEventListener('DOMContentLoaded', function(){ requestAnimationFrame(function(){ try { afterRender(); } catch(_){ } }); });
-  })();
-
-  (function injectStyle(){
-    const s = document.createElement('style');
-    s.textContent = '#thirdRecPanel{ will-change: opacity, transform; contain: layout paint; } .ui-card{ backface-visibility: hidden; }';
-    document.head.appendChild(s);
-  })();
-})();
-</script>
-
-
-<!-- === BANNED WORDS ADD-ON (isolated, no intrusive changes) === -->
 <script>
 (function(){
   'use strict';
+  var openBtn = document.getElementById('bw-fab');
+  var modal   = document.getElementById('bw-modal');
+  var back    = document.getElementById('bw-back');
+  var closeBtn= document.getElementById('bw-close');
+  var saveBtn = document.getElementById('bw-save');
+  var reloadBtn = document.getElementById('bw-reload');
+  var wordsTA = document.getElementById('bw-words');
+  var tokenI  = document.getElementById('bw-token');
 
-  // Utilities
-  const norm = s => String(s||'').toLowerCase().replace(/ё/g,'е');
-  function findBanned(text, list){
+  function show(){ modal.style.display='flex'; back.style.display='block'; modal.setAttribute('aria-hidden','false'); }
+  function hide(){ modal.style.display='none'; back.style.display='none'; modal.setAttribute('aria-hidden','true'); }
+
+  async function reloadServer(){
     try{
-      const t = norm(text);
-      const hits = new Set();
-      (Array.isArray(list)?list:[]).forEach(w=>{ const w2=norm(w); if(w2 && t.includes(w2)) hits.add(w); });
-      return Array.from(hits);
-    }catch(_){ return []; }
-  }
-
-  // Local state for this addon
-  const BW = { words: [] };
-
-  async function loadBannedWords(){
-    try{
-      const r = await fetch('/api/banned-words', { headers: { 'Accept':'application/json' } });
-      if(!r.ok) return;
+      const r = await fetch('/api/banned-words');
+      if(!r.ok) throw new Error('HTTP '+r.status);
       const data = await r.json();
-      BW.words = Array.isArray(data && data.words) ? data.words.map(x=>String(x).toLowerCase()) : [];
-    }catch(_){ /* ignore */ }
-  }
-
-  function getFieldValues(){
-    const titleEl = document.querySelector('#title');
-    const notesEl = document.querySelector('#notes');
-    return {
-      title: titleEl ? titleEl.value : '',
-      notes: notesEl ? notesEl.value : ''
-    };
-  }
-
-  function guardButton(){
-    const saveBtn = document.querySelector('#save');
-    if(!saveBtn) return;
-    const { title, notes } = getFieldValues();
-    const hit = [].concat(findBanned(title, BW.words), findBanned(notes, BW.words));
-    // Toggle disabled + tooltip, but do NOT change your app's logic
-    if (hit.length){
-      saveBtn.setAttribute('data-bw-blocked','1');
-      saveBtn.title = 'Запрещённые слова: ' + Array.from(new Set(hit)).join(', ');
-    } else {
-      saveBtn.removeAttribute('data-bw-blocked');
-      if (saveBtn.title && saveBtn.title.startsWith('Запрещённые слова:')) saveBtn.title='';
+      const arr = Array.isArray(data.words) ? data.words : [];
+      wordsTA.value = arr.join('\\n');
+      alert('Загружено: ' + arr.length + ' шт.');
+    }catch(e){
+      alert('Ошибка загрузки: ' + (e && e.message || e));
     }
   }
 
-  function interceptSave(){
-    const saveBtn = document.querySelector('#save');
-    if(!saveBtn) return;
-    // Capture-phase click handler, only blocks when our flag present
-    saveBtn.addEventListener('click', function(e){
-      try{
-        if (saveBtn.getAttribute('data-bw-blocked') === '1'){
-          e.preventDefault();
-          e.stopImmediatePropagation();
-          const { title, notes } = getFieldValues();
-          const hit = [].concat(findBanned(title, BW.words), findBanned(notes, BW.words));
-          alert('В названии/описании обнаружены запрещённые слова: ' + Array.from(new Set(hit)).join(', '));
-        }
-      }catch(_){}
-    }, true);
+  async function save(){
+    const token = String(tokenI.value||'').trim();
+    if(!token){ alert('Введите Admin Token'); return; }
+    const list = wordsTA.value.split(/\\r?\\n/).map(s=>s.trim()).filter(Boolean);
+    try{
+      const r = await fetch('/api/banned-words', {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json', 'X-Admin-Token': token },
+        body: JSON.stringify({ words: list })
+      });
+      if(!r.ok){
+        let err={}; try{ err = await r.json(); }catch(_){}
+        throw new Error(err && err.error || ('HTTP '+r.status));
+      }
+      const data = await r.json();
+      alert('Сохранено: ' + (data.words ? data.words.length : list.length) + ' шт.');
+      // Чтобы новый список сразу подхватился в блокировке — просто перезагрузим страницу.
+      location.reload();
+    }catch(e){
+      alert('Ошибка сохранения: ' + (e && e.message || e));
+    }
   }
 
-  function wireInputs(){
-    const t = document.querySelector('#title');
-    const n = document.querySelector('#notes');
-    if (t) t.addEventListener('input', guardButton);
-    if (n) n.addEventListener('input', guardButton);
-  }
-
-  async function init(){
-    await loadBannedWords();
-    wireInputs();
-    guardButton();
-    interceptSave();
-    // Also observe DOM changes to re-apply guard when your app re-renders UI
-    const obs = new MutationObserver(()=>guardButton());
-    obs.observe(document.body, { childList:true, subtree:true });
-  }
-
-  if (document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', init, { once:true });
-  } else {
-    init();
-  }
+  openBtn && openBtn.addEventListener('click', function(){ reloadServer().finally(show); });
+  closeBtn && closeBtn.addEventListener('click', hide);
+  back && back.addEventListener('click', hide);
+  reloadBtn && reloadBtn.addEventListener('click', reloadServer);
+  saveBtn && saveBtn.addEventListener('click', save);
 })();
 </script>
 
