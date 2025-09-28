@@ -826,104 +826,71 @@
   }catch(e){ console.error('Smoke tests error', e); }})();
   </script>
 
-<!-- === BANNED WORDS ADMIN UI (floating button + modal) === -->
-<style>
-  .bw-fab{position:fixed;right:18px;bottom:18px;z-index:50;border-radius:9999px;padding:10px 14px;font-weight:600;background:#111;color:#fff;box-shadow:0 6px 14px rgba(0,0,0,.15);opacity:.9}
-  .bw-fab:hover{opacity:1}
-  .bw-back{position:fixed;inset:0;background:rgba(0,0,0,.35);display:none;z-index:60}
-  .bw-modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:70}
-  .bw-card{width:min(800px,92vw);max-height:90vh;overflow:auto;background:#fff;border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
-  .bw-head{padding:16px 20px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center}
-  .bw-body{padding:16px 20px}
-  .bw-foot{padding:12px 20px;border-top:1px solid #eee;display:flex;gap:12px;justify-content:flex-end}
-  .bw-input, .bw-textarea{width:100%;border:1px solid #ddd;border-radius:10px;padding:10px 12px;font:inherit}
-  .bw-textarea{min-height:220px;resize:vertical;white-space:pre}
-  .bw-btn{border:none;border-radius:10px;padding:10px 14px;font-weight:600;cursor:pointer}
-  .bw-btn.primary{background:#111;color:#fff}
-  .bw-btn.secondary{background:#f2f2f2}
-  .bw-note{font-size:12px;color:#666;margin-top:6px}
-</style>
+<script>
+(function(){
+  document.addEventListener('keydown', function(e){
+    if ((e.ctrlKey||e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'a'){
+      const cur = localStorage.getItem('apiBase') || (window.API_BASE||'');
+      const val = prompt('Укажите URL бэкенда (например https://your-service.onrender.com). Пусто — тот же домен.', cur || '');
+      if (val !== null){
+        if (val.trim()){
+          localStorage.setItem('apiBase', val.trim());
+          alert('API BASE сохранён. Перезагрузите страницу.');
+        }else{
+          localStorage.removeItem('apiBase');
+          alert('API BASE очищён. Перезагрузите страницу.');
+        }
+      }
+    }
+  });
+})();
+</script>
 
-<button id="bw-fab" class="bw-fab" title="Запрещённые слова">Слова 🚫</button>
-<div id="bw-back" class="bw-back"></div>
-<div id="bw-modal" class="bw-modal" aria-hidden="true">
-  <div class="bw-card">
-    <div class="bw-head">
-      <div style="font-weight:700">Запрещённые слова</div>
-      <button class="bw-btn secondary" id="bw-close">Закрыть</button>
-    </div>
-    <div class="bw-body">
-      <p>Каждое слово — с новой строки. Проверка выполняется по <em>вхождению</em> (регистр игнорируется).</p>
-      <textarea id="bw-words" class="bw-textarea" spellcheck="false" placeholder="пример:&#10;спайс&#10;наркотик"></textarea>
-      <div class="bw-note">Совет: не добавляйте слишком общие подстроки, чтобы не блокировать легальные слова.</div>
-      <div style="margin-top:14px">
-        <label style="font-size:12px;color:#666">Admin Token (для сохранения)</label>
-        <input id="bw-token" class="bw-input" type="password" placeholder="X-Admin-Token">
-      </div>
-    </div>
-    <div class="bw-foot">
-      <button class="bw-btn secondary" id="bw-reload">Обновить из сервера</button>
-      <button class="bw-btn primary" id="bw-save">Сохранить</button>
-    </div>
-  </div>
-</div>
+
+<script>
+// Global fetch shim: if apiBase is set and request is '/api/...', prefix it.
+(function(){
+  try{
+    const origFetch = window.fetch;
+    window.fetch = function(input, init){
+      try{
+        let url = (typeof input === 'string') ? input : (input && input.url);
+        const base = window.API_BASE || localStorage.getItem('apiBase') || '';
+        if (base && typeof url === 'string' && url.indexOf('/api/') === 0){
+          input = base.replace(/\/+$/,'') + url;
+        }
+      }catch(_){}
+      return origFetch.call(this, input, init);
+    };
+  }catch(_){}
+})();
+</script>
+
 
 <script>
 (function(){
-  'use strict';
-  var openBtn = document.getElementById('bw-fab');
-  var modal   = document.getElementById('bw-modal');
-  var back    = document.getElementById('bw-back');
-  var closeBtn= document.getElementById('bw-close');
-  var saveBtn = document.getElementById('bw-save');
-  var reloadBtn = document.getElementById('bw-reload');
-  var wordsTA = document.getElementById('bw-words');
-  var tokenI  = document.getElementById('bw-token');
-
-  function show(){ modal.style.display='flex'; back.style.display='block'; modal.setAttribute('aria-hidden','false'); }
-  function hide(){ modal.style.display='none'; back.style.display='none'; modal.setAttribute('aria-hidden','true'); }
-
-  async function reloadServer(){
-    try{
-      const r = await fetch('/api/banned-words');
-      if(!r.ok) throw new Error('HTTP '+r.status);
-      const data = await r.json();
-      const arr = Array.isArray(data.words) ? data.words : [];
-      wordsTA.value = arr.join('\\n');
-      alert('Загружено: ' + arr.length + ' шт.');
-    }catch(e){
-      alert('Ошибка загрузки: ' + (e && e.message || e));
+  try{
+    // Support setting API base via URL: ?apiBase=... or ?api=...
+    var q = location.search || '';
+    var h = location.hash || '';
+    function getParam(s, key){
+      try{
+        var m = new URLSearchParams(s.startsWith('?')||s.startsWith('#') ? s.slice(1) : s);
+        return m.get(key);
+      }catch(_){ return null; }
     }
-  }
-
-  async function save(){
-    const token = String(tokenI.value||'').trim();
-    if(!token){ alert('Введите Admin Token'); return; }
-    const list = wordsTA.value.split(/\\r?\\n/).map(s=>s.trim()).filter(Boolean);
-    try{
-      const r = await fetch('/api/banned-words', {
-        method: 'POST',
-        headers: { 'Content-Type':'application/json', 'X-Admin-Token': token },
-        body: JSON.stringify({ words: list })
-      });
-      if(!r.ok){
-        let err={}; try{ err = await r.json(); }catch(_){}
-        throw new Error(err && err.error || ('HTTP '+r.status));
+    var val = getParam(q,'apiBase') || getParam(q,'api') || getParam(h,'apiBase') || getParam(h,'api');
+    if (val != null){
+      val = String(val).trim();
+      if (val){
+        localStorage.setItem('apiBase', val);
+        console.log('[Hookhan] apiBase set from URL:', val);
+      }else{
+        localStorage.removeItem('apiBase');
+        console.log('[Hookhan] apiBase cleared from URL');
       }
-      const data = await r.json();
-      alert('Сохранено: ' + (data.words ? data.words.length : list.length) + ' шт.');
-      // Чтобы новый список сразу подхватился в блокировке — просто перезагрузим страницу.
-      location.reload();
-    }catch(e){
-      alert('Ошибка сохранения: ' + (e && e.message || e));
     }
-  }
-
-  openBtn && openBtn.addEventListener('click', function(){ reloadServer().finally(show); });
-  closeBtn && closeBtn.addEventListener('click', hide);
-  back && back.addEventListener('click', hide);
-  reloadBtn && reloadBtn.addEventListener('click', reloadServer);
-  saveBtn && saveBtn.addEventListener('click', save);
+  }catch(_){}
 })();
 </script>
 
