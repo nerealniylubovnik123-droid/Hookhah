@@ -581,7 +581,7 @@ function applyTheme(t){
 })();
 
   // ========================= API ============================================
-  const API_BASE = (location.protocol === 'file:' || location.origin === 'null' || !location.origin) ? '' : location.origin;
+  const API_BASE = (location.origin && location.origin !== 'null') ? location.origin : '';
   const api = (path, opts={}) => fetch(API_BASE + path, {
     cache: 'no-store',
     ...opts,
@@ -599,8 +599,7 @@ function applyTheme(t){
 
   const BRAND_STRENGTH10_DEFAULTS = {darkside:5,blackburn:6,musthave:5,overdose:6,bonch:7,starline:3};
   const normalizeBrand=b=>(b||'').trim();
-  const brandKey = b => normalizeBrand(b).toLowerCase().replace(/\s+/g,'').replace(/[^a-zа-я0-9]/gi,'');
-const getStrength10=f=>{ if(!f) return 5; if(typeof f.strength10==='number'&&Number.isFinite(f.strength10)) return Math.max(1,Math.min(10,f.strength10)); return BRAND_STRENGTH10_DEFAULTS[ brandKey(f.brand) ] ?? 5;};
+  const getStrength10=f=>{ if(!f) return 5; if(typeof f.strength10==='number'&&Number.isFinite(f.strength10)) return Math.max(1,Math.min(10,f.strength10)); return BRAND_STRENGTH10_DEFAULTS[ brandKey(f.brand) ] ?? 5;};
   const strengthColor=v=>{
     if(v==null) return {bg:'bg-slate-800',text:'text-slate-200',border:'border-slate-700'};
     if(v<4)  return {bg:'bg-emerald-950',text:'text-emerald-300',border:'border-emerald-800'};
@@ -1964,25 +1963,83 @@ const themesBlock =
 </script>
 
 
+<!-- Admin & compatibility overrides -->
 <script>
+// --- brandKey helper (define only if missing) ---
 (function(){
-  try{
-    if (typeof unlikeMixOnServer === 'function') {
-      const _unlike = unlikeMixOnServer;
-      unlikeMixOnServer = async function(id){
-        const uid = String((window.state && window.state.user && window.state.user.id) || 'anon');
-        let r = null;
-        try {
-          r = await api('/api/mixes/'+encodeURIComponent(id)+'/like', { method:'DELETE', headers:{ 'X-User-Id': uid } });
-        } catch (e) {}
-        if (!r || !r.ok) {
-          r = await api('/api/mixes/'+encodeURIComponent(id)+'/like', { method:'POST', headers:{ 'X-User-Id': uid } });
-        }
-        if (!r || !r.ok) throw new Error('unlike ' + (r && r.status));
-        return await r.json();
-      };
+  if (typeof window.brandKey !== 'function') {
+    const normalizeBrand = (typeof window.normalizeBrand === 'function')
+      ? window.normalizeBrand
+      : (b => String(b||'').trim());
+    window.brandKey = b => normalizeBrand(b).toLowerCase().replace(/\s+/g,'').replace(/[^a-zа-я0-9]/gi,'');
+  }
+})();
+
+// --- Admin-only visibility for "Слова 🚫" button without touching render code ---
+(function(){
+  function isAdmin(){ return !!(window.state && window.state.user && state.user.id === 'admin'); }
+  function hideBannedButtons(root){
+    if (isAdmin()) return;
+    const nodes = (root || document).querySelectorAll('button, [role=button]');
+    nodes.forEach(el => {
+      const t = (el.textContent || '').trim();
+      if (t === 'Слова 🚫' || (/Слова/.test(t) && /🚫/.test(t))) {
+        el.style.display = 'none';
+        el.setAttribute('data-hidden-by-admin-guard','1');
+      }
+    });
+  }
+  // initial
+  document.addEventListener('DOMContentLoaded', function(){
+    hideBannedButtons(document);
+  });
+  // observe re-renders
+  const mo = new MutationObserver(muts => {
+    muts.forEach(m => {
+      if (m.addedNodes) {
+        m.addedNodes.forEach(n => {
+          if (n.nodeType === 1) hideBannedButtons(n);
+        });
+      }
+    });
+  });
+  mo.observe(document.documentElement, { childList: true, subtree: true });
+})();
+
+// --- Guard openBannedWords entry (no access for non-admin) ---
+(function(){
+  if (typeof window.openBannedWords === 'function') {
+    const _orig = window.openBannedWords;
+    window.openBannedWords = function(){
+      if (!(window.state && window.state.user && state.user.id === 'admin')) {
+        alert('Только для администратора');
+        return;
+      }
+      return _orig.apply(this, arguments);
+    };
+  }
+})();
+
+// --- Unlike fallback override: try DELETE, then POST toggle ---
+(function(){
+  window.unlikeMixOnServer = async function(id){
+    const uid = String((window.state && state.user && state.user.id) || "anon");
+    let res = null;
+    try {
+      res = await api("/api/mixes/" + encodeURIComponent(id) + "/like", {
+        method: "DELETE",
+        headers: { "X-User-Id": uid }
+      });
+      if (!res || !res.ok) throw new Error('DELETE not supported');
+    } catch (e) {
+      res = await api("/api/mixes/" + encodeURIComponent(id) + "/like", {
+        method: "POST",
+        headers: { "X-User-Id": uid }
+      });
+      if (!res || !res.ok) throw new Error("unlike " + (res && res.status));
     }
-  }catch(e){ console.error('unlikeMixOnServer patch failed', e); }
+    return await res.json();
+  };
 })();
 </script>
 
