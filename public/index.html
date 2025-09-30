@@ -581,7 +581,7 @@ function applyTheme(t){
 })();
 
   // ========================= API ============================================
-  const API_BASE = location.origin;
+  const API_BASE = (location.protocol === 'file:' || location.origin === 'null' || !location.origin) ? '' : location.origin;
   const api = (path, opts={}) => fetch(API_BASE + path, {
     cache: 'no-store',
     ...opts,
@@ -599,7 +599,8 @@ function applyTheme(t){
 
   const BRAND_STRENGTH10_DEFAULTS = {darkside:5,blackburn:6,musthave:5,overdose:6,bonch:7,starline:3};
   const normalizeBrand=b=>(b||'').trim();
-  const getStrength10=f=>{ if(!f) return 5; if(typeof f.strength10==='number'&&Number.isFinite(f.strength10)) return Math.max(1,Math.min(10,f.strength10)); return BRAND_STRENGTH10_DEFAULTS[ brandKey(f.brand) ] ?? 5;};
+  const brandKey = b => normalizeBrand(b).toLowerCase().replace(/\s+/g,'').replace(/[^a-zа-я0-9]/gi,'');
+const getStrength10=f=>{ if(!f) return 5; if(typeof f.strength10==='number'&&Number.isFinite(f.strength10)) return Math.max(1,Math.min(10,f.strength10)); return BRAND_STRENGTH10_DEFAULTS[ brandKey(f.brand) ] ?? 5;};
   const strengthColor=v=>{
     if(v==null) return {bg:'bg-slate-800',text:'text-slate-200',border:'border-slate-700'};
     if(v<4)  return {bg:'bg-emerald-950',text:'text-emerald-300',border:'border-emerald-800'};
@@ -1959,6 +1960,29 @@ const themesBlock =
   load().then(guard);
   intercept();
   const obs = new MutationObserver(()=>guard()); obs.observe(document.body, { childList:true, subtree:true });
+})();
+</script>
+
+
+<script>
+(function(){
+  try{
+    if (typeof unlikeMixOnServer === 'function') {
+      const _unlike = unlikeMixOnServer;
+      unlikeMixOnServer = async function(id){
+        const uid = String((window.state && window.state.user && window.state.user.id) || 'anon');
+        let r = null;
+        try {
+          r = await api('/api/mixes/'+encodeURIComponent(id)+'/like', { method:'DELETE', headers:{ 'X-User-Id': uid } });
+        } catch (e) {}
+        if (!r || !r.ok) {
+          r = await api('/api/mixes/'+encodeURIComponent(id)+'/like', { method:'POST', headers:{ 'X-User-Id': uid } });
+        }
+        if (!r || !r.ok) throw new Error('unlike ' + (r && r.status));
+        return await r.json();
+      };
+    }
+  }catch(e){ console.error('unlikeMixOnServer patch failed', e); }
 })();
 </script>
 
