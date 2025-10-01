@@ -559,26 +559,6 @@ input[type=text], input[type=number], textarea{
       });
     })();
   </script>
-
-<script>
-// === Admin header wrapper for flavors API ===
-(function(){
-  const _fetch = window.fetch;
-  window.fetch = function(input, init){
-    try{
-      const url = (typeof input === 'string') ? input : (input && input.url) || '';
-      if (url && url.indexOf('/api/flavors') !== -1) {
-        init = init || {};
-        const hdrs = Object.assign({}, init.headers || {});
-        const uname = String((window.state && window.state.user && window.state.user.username) || localStorage.getItem('username') || '');
-        if (!hdrs['X-User-Name']) hdrs['X-User-Name'] = uname;
-        init.headers = hdrs;
-      }
-    }catch(_){}
-    return _fetch.call(this, input, init);
-  };
-})();
-</script>
 </head>
 <body class="text-slate-100">
   <div id="root" class="min-h-[100svh]"></div>
@@ -618,34 +598,6 @@ function applyTheme(t){
   const uuidv4 = ()=>{let dt=Date.now(); if(typeof performance!='undefined'&&performance.now) dt+=performance.now(); return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=(dt+Math.random()*16)%16|0;dt=Math.floor(dt/16);return (c==='x'?r:(r&0x3|0x8)).toString(16);});};
 
   const BRAND_STRENGTH10_DEFAULTS = {darkside:5,blackburn:6,musthave:5,overdose:6,bonch:7,starline:3};
-// === Stop-words utils (localStorage) ===
-const STOP_WORDS_KEY = 'FORBIDDEN_MIX_WORDS';
-function loadStopWords(){
-  try{
-    const raw = localStorage.getItem(STOP_WORDS_KEY);
-    const arr = raw ? JSON.parse(raw) : [];
-    return Array.isArray(arr) ? arr : [];
-  }catch{ return []; }
-}
-function saveStopWords(list){
-  const arr = (Array.isArray(list) ? list : [])
-    .map(s => String(s||'').trim())
-    .filter(Boolean);
-  try{ localStorage.setItem(STOP_WORDS_KEY, JSON.stringify(arr)); }catch(_){}
-  return arr;
-}
-function validateMixAgainstStopWords(mix){
-  const words = loadStopWords();
-  if(!words.length) return { ok:true };
-  const haystack = [
-    String(mix?.title||''),
-    String(mix?.notes||''),
-    ...(Array.isArray(mix?.parts) ? mix.parts.map(p => (p?.brand||'')+' '+(p?.name||'')) : [])
-  ].join('\n').toLowerCase();
-  const bad = words.find(w => haystack.includes(String(w||'').toLowerCase()));
-  return bad ? { ok:false, word: bad } : { ok:true };
-}
-
   const normalizeBrand=b=>(b||'').trim();
   const getStrength10=f=>{ if(!f) return 5; if(typeof f.strength10==='number'&&Number.isFinite(f.strength10)) return Math.max(1,Math.min(10,f.strength10)); return BRAND_STRENGTH10_DEFAULTS[ brandKey(f.brand) ] ?? 5;};
   const strengthColor=v=>{
@@ -1080,22 +1032,8 @@ async function fetchRecommendations(){
     );
 
     
-const adminStopWordsBlock = (!isAdmin() ? '' :
-  ('<div class="ui-card">' +
-   '  <div class="px-3 pt-3">' +
-   '    <div class="text-[10px] tracking-wider uppercase text-slate-300/70">Фильтры</div>' +
-   '    <div class="text-base font-semibold">Стоп-слова для миксов</div>' +
-   '  </div>' +
-   '  <div class="p-3 space-y-2 text-sm">' +
-   '    <p class="text-[12px] text-slate-400">Одно слово/фраза на строку. Совпадение в заголовке, заметках или составе — блок сохранения.</p>' +
-   '    <textarea id="stopWordsInput" rows="6" class="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2"></textarea>' +
-   '    <div class="flex gap-2 items-center mt-2">' +
-   '      <button id="stopWordsSaveBtn" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-white/10">Сохранить</button>' +
-   '      <span id="stopWordsSavedMsg" class="text-[12px] text-slate-400 hidden">Сохранено</span>' +
-   '    </div>' +
-   '  </div>' +
-   '</div>')
-);
+// гарантируем наличие переменной
+let adminStopWordsBlock = '';
 const adminLoginBlock = (!isAdmin() && state.adminPrompt) ? (
       '<div class="ui-card">' +
         '<div class="px-3 pt-3"><div class="text-[10px] tracking-wider uppercase text-slate-300/70">Админ-доступ</div><div class="text-base font-semibold">Введите токен</div></div>' +
@@ -1958,7 +1896,7 @@ const themesBlock =
   }
   const BW = { words: [] };
   async function load(){
-    try{ const r = await  if(r.ok){ const d=await r.json(); BW.words = Array.isArray(d.words)? d.words.map(x=>String(x).toLowerCase()):[]; } }catch(_){}
+    try{ const r = await fetch(''); if(r.ok){ const d=await r.json(); BW.words = Array.isArray(d.words)? d.words.map(x=>String(x).toLowerCase()):[]; } }catch(_){}
   }
   // UI
   const fab   = document.getElementById('bw3-fab');
@@ -1977,7 +1915,7 @@ const themesBlock =
     if(!tok){ alert('Введите Admin Token'); return; }
     const list = String(words.value||'').split(/\\r?\\n/).map(s=>s.trim()).filter(Boolean);
     try{
-      const r = await 
+      const r = await fetch('', { method:'POST', headers:{ 'Content-Type':'application/json','X-Admin-Token':tok }, body: JSON.stringify({ words:list }) });
       if(!r.ok){ let err={}; try{err=await r.json();}catch(_){ } throw new Error(err && err.error || ('HTTP '+r.status)); }
       const d = await r.json(); BW.words = d.words||list; alert('Сохранено: '+BW.words.length+' шт.'); location.reload();
     }catch(e){ alert('Ошибка сохранения: '+(e && e.message || e)); }
