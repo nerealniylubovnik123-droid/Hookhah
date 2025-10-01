@@ -2142,5 +2142,78 @@ const themesBlock =
 })();
 </script>
 
+
+<!-- Ensure Admin tab/panel is visible and admin flags are set for the owner -->
+<script>
+(function(){
+  const ADMIN_ID = '504348666';
+
+  function isAdmin(){
+    try { return String(window.state && state.user && state.user.id) === ADMIN_ID; } catch(_) { return false; }
+  }
+
+  function setAdminFlags(){
+    if (!isAdmin()) return;
+    try {
+      window.state = window.state || {};
+      state.user = state.user || {};
+      state.user.id = ADMIN_ID;
+      // Common flags some UIs check:
+      state.isAdmin = true;
+      state.admin = true;
+      state.user.role = 'admin';
+      state.role = 'admin';
+    } catch(_) {}
+  }
+
+  function unhideAdminUI(root){
+    if (!isAdmin()) return;
+    const scope = root || document;
+
+    // Show typical admin containers
+    const selectors = [
+      '[data-admin]', '.admin', '#admin', '.admin-panel', '#admin-panel',
+      '.tab-admin', '#tab-admin', '.adminTab', '#adminTab', '[data-role=\"admin\"]'
+    ];
+    selectors.forEach(sel => {
+      scope.querySelectorAll(sel).forEach(el => {
+        el.style.display = '';
+        el.hidden = false;
+        el.removeAttribute('aria-hidden');
+      });
+    });
+
+    // Make any tab/button with text "Админ" visible
+    const buttons = scope.querySelectorAll('button, [role=button], a, .tab, .tab-item');
+    buttons.forEach(el => {
+      const txt = (el.textContent || '').trim().toLowerCase();
+      if (txt === 'админ' || /админ(ка)?/.test(txt)) {
+        el.style.display = '';
+        el.hidden = false;
+        el.removeAttribute('aria-hidden');
+      }
+      // Keep "выйти из админки" hidden
+      if (/выйти из админки/.test(txt) || /logout/i.test(txt)) {
+        el.style.display = 'none';
+      }
+    });
+  }
+
+  function tick(){
+    setAdminFlags();
+    unhideAdminUI(document);
+  }
+
+  document.addEventListener('DOMContentLoaded', tick);
+  const mo = new MutationObserver(muts => muts.forEach(m => (m.addedNodes||[]).forEach(n => n.nodeType===1 && unhideAdminUI(n))));
+  mo.observe(document.documentElement, { childList: true, subtree: true });
+
+  // extra passes for lazy UIs
+  setTimeout(tick, 300);
+  setTimeout(tick, 1000);
+  setTimeout(tick, 2000);
+})();
+</script>
+
 </body>
 </html>
