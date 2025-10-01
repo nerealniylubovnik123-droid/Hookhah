@@ -743,6 +743,12 @@ function validateMixAgainstStopWords(mix){
     try{
       const r = await api('/api/mixes');
       state.guestMixes = r.ok ? (await r.json()) : [];
+      // normalize likers/likedBy for compatibility
+      state.guestMixes = state.guestMixes.map(m => {
+        if (!Array.isArray(m.likers) && Array.isArray(m.likedBy)) m.likers = m.likedBy.slice();
+        if (!Array.isArray(m.likedBy) && Array.isArray(m.likers)) m.likedBy = m.likers.slice();
+        return m;
+      });
       state.guestMixes.sort((a,b)=>(b?.createdAt||0)-(a?.createdAt||0));
     }catch(_){ state.guestMixes=[]; }
   }
@@ -1070,7 +1076,7 @@ let adminStopWordsBlock = (
             '<button id="admLoadWords" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-white/10">Загрузить</button>' +
             '<button id="admSaveWords" class="tap btn-primary inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px]">Сохранить</button>' +
           '</div>' +
-          '<div class="text-[11px] opacity-70">Проверка идёт по вхождению (регистр игнорируется). Данные хранятся на сервере.</div>' +
+          '<div class="text-[11px] opacity-70">Проверка идёт по вхождению (регистр игнорируется).</div>' +
         '</div>' +
       '</div>'
     );
@@ -1258,6 +1264,19 @@ const themesBlock =
       saveEl.addEventListener('click', async ()=>{
         if(!isMixValid(state.parts,state.title)) return;
         if(!state.user) return;
+        // Check stop-words on title/notes before save
+        try{
+          const respSW = await fetch('/api/stop-words', { cache:'no-store' });
+          if (respSW.ok){
+            const dataSW = await respSW.json();
+            const list = Array.isArray(dataSW.words) ? dataSW.words : [];
+            const _norm = s => String(s||'').toLowerCase().replace(/ё/g,'е');
+            const hay = _norm(String(state.title)+'\n'+String(state.notes));
+            const bad = list.find(w => hay.includes(_norm(w)));
+            if (bad){ alert('Запрещённое слово: '+bad); return; }
+          }
+        }catch(_) { /* ignore network errors, let server validate too */ }
+
         const mix={
           id: uuidv4(),
           title: String(state.title).trim(),
@@ -1354,9 +1373,8 @@ const themesBlock =
     }
 
     // админ-доступ
-    const tokBtn=root.querySelector('#admSaveToken'); if(tokBtn){ tokBtn.addEventListener('click', ()=>{ const v=(root.querySelector('#admToken')||{}).value||''; try{localStorage.setItem('admin_token',v);}catch(_){ } state.adminToken=v||''; state.adminPrompt=false; render(); }); }
-
-    const tokInput=root.querySelector('#admToken'); if(tokInput){ tokInput.addEventListener('input', ()=>{ state.adminToken = tokInput.value; try{ localStorage.setItem('admin_token', state.adminToken); }catch(_){ } }); }
+    const tokBtn=root.querySelector('#admSaveToken');
+    const tokInput=root.querySelector('#admToken'); if(tokInput){ tokInput.addEventListener('input', ()=>{ try{ localStorage.setItem('admin_token', tokInput.value); }catch(_){ } state.adminToken = tokInput.value; }); } if(tokBtn){ tokBtn.addEventListener('click', ()=>{ const v=(root.querySelector('#admToken')||{}).value||''; try{localStorage.setItem('admin_token',v);}catch(_){ } state.adminToken=v||''; state.adminPrompt=false; render(); }); }
     const tokCancel=root.querySelector('#admCancel'); if(tokCancel){ tokCancel.addEventListener('click', ()=>{ state.adminPrompt=false; render(); }); }
 
     if (isAdmin() && state.activeTab==='admin'){
@@ -1387,20 +1405,21 @@ const themesBlock =
       }
       buildAdminFlavorList(root);
     
-      // === Stop-words handlers ===
-      const _loadStopWords = async ()=>{
+      // === Stop-words in Admin tab ===
+      const _admLoadWordsBtn = root.querySelector('#admLoadWords');
+      if (_admLoadWordsBtn) _admLoadWordsBtn.addEventListener('click', async ()=>{
         try{
           const r = await fetch('/api/stop-words', { cache:'no-store' });
-          if (!r.ok) { alert('Не удалось загрузить список'); return; }
+          if(!r.ok){ alert('Не удалось загрузить'); return; }
           const d = await r.json();
-          const arr = Array.isArray(d.words) ? d.words : [];
           const el = root.querySelector('#admWords');
-          if (el) el.value = arr.join('\n');
-        }catch(_){ alert('Ошибка сети при загрузке списка'); }
-      };
-      const _saveStopWords = async ()=>{
-        const el = root.querySelector('#admWords');
+          if(el) el.value = Array.isArray(d.words) ? d.words.join('\n') : '';
+        }catch(_){ alert('Ошибка сети'); }
+      });
+      const _admSaveWordsBtn = root.querySelector('#admSaveWords');
+      if (_admSaveWordsBtn) _admSaveWordsBtn.addEventListener('click', async ()=>{
         const tokenNow = (root.querySelector('#admToken')?.value || state.adminToken || '').trim();
+        const el = root.querySelector('#admWords');
         const list = String(el?.value || '').split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
         try{
           const r = await fetch('/api/stop-words', {
@@ -1408,12 +1427,10 @@ const themesBlock =
             headers:{ 'Content-Type':'application/json', 'X-Admin-Token': tokenNow },
             body: JSON.stringify({ words: list })
           });
-          if (!r.ok) { alert('Не удалось сохранить: '+r.status); return; }
-          alert('Сохранено: ' + list.length);
-        }catch(_){ alert('Ошибка сети при сохранении'); }
-      };
-      const btnLoadWords = root.querySelector('#admLoadWords'); if(btnLoadWords) btnLoadWords.addEventListener('click', _loadStopWords);
-      const btnSaveWords = root.querySelector('#admSaveWords'); if(btnSaveWords) btnSaveWords.addEventListener('click', _saveStopWords);
+          if(!r.ok){ alert('Не удалось сохранить: '+r.status); return; }
+          alert('Сохранено: '+list.length);
+        }catch(_){ alert('Ошибка сети'); }
+      });
 }
 
     // полоса состава
@@ -1966,7 +1983,7 @@ const themesBlock =
   }
   const BW = { words: [] };
   async function load(){
-    try{ const r = await fetch('/api/stop-words', { cache:'no-store' }); if(r.ok){ const d=await r.json(); BW.words = Array.isArray(d.words)? d.words.map(x=>String(x).toLowerCase()):[]; } }catch(_){}
+    try{ const r = await fetch(''); if(r.ok){ const d=await r.json(); BW.words = Array.isArray(d.words)? d.words.map(x=>String(x).toLowerCase()):[]; } }catch(_){}
   }
   // UI
   const fab   = document.getElementById('bw3-fab');
@@ -1985,7 +2002,7 @@ const themesBlock =
     if(!tok){ alert('Введите Admin Token'); return; }
     const list = String(words.value||'').split(/\\r?\\n/).map(s=>s.trim()).filter(Boolean);
     try{
-      const r = await fetch('/api/stop-words', { method:'POST', headers:{ 'Content-Type':'application/json','X-Admin-Token':tok }, body: JSON.stringify({ words:list }) });
+      const r = await fetch('', { method:'POST', headers:{ 'Content-Type':'application/json','X-Admin-Token':tok }, body: JSON.stringify({ words:list }) });
       if(!r.ok){ let err={}; try{err=await r.json();}catch(_){ } throw new Error(err && err.error || ('HTTP '+r.status)); }
       const d = await r.json(); BW.words = d.words||list; alert('Сохранено: '+BW.words.length+' шт.'); location.reload();
     }catch(e){ alert('Ошибка сохранения: '+(e && e.message || e)); }
