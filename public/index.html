@@ -581,7 +581,7 @@ function applyTheme(t){
 })();
 
   // ========================= API ============================================
-  const API_BASE = (location.origin && location.origin !== 'null') ? location.origin : '';
+  const API_BASE = location.origin;
   const api = (path, opts={}) => fetch(API_BASE + path, {
     cache: 'no-store',
     ...opts,
@@ -599,7 +599,37 @@ function applyTheme(t){
 
   const BRAND_STRENGTH10_DEFAULTS = {darkside:5,blackburn:6,musthave:5,overdose:6,bonch:7,starline:3};
   const normalizeBrand=b=>(b||'').trim();
-  const brandKey=b=>normalizeBrand(b).toLowerCase().replace(/\s+/g,'').replace(/[^a-zа-я0-9]/gi,'');
+// helper to normalize brand string for map keys (lowercased, no spaces/punct)
+const brandKey = b => String(b||'').toLowerCase().replace(/\s+/g,'').replace(/[^a-zа-я0-9]/gi,'');
+
+// === Stop-words (client-side only) ===
+const STOP_WORDS_KEY = 'FORBIDDEN_MIX_WORDS';
+function loadStopWords(){
+  try{
+    const raw = localStorage.getItem(STOP_WORDS_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  }catch{ return []; }
+}
+function saveStopWords(list){
+  const arr = (Array.isArray(list) ? list : [])
+    .map(s => String(s||'').trim())
+    .filter(Boolean);
+  try{ localStorage.setItem(STOP_WORDS_KEY, JSON.stringify(arr)); }catch(_){}
+  return arr;
+}
+function validateMixAgainstStopWords(mix){
+  const words = loadStopWords();
+  if(!words.length) return { ok:true };
+  const haystack = [
+    String(mix?.title||''),
+    String(mix?.notes||''),
+    ...(Array.isArray(mix?.parts) ? mix.parts.map(p => (p?.brand||'')+' '+(p?.name||'')) : [])
+  ].join('\n').toLowerCase();
+  const bad = words.find(w => haystack.includes(String(w||'').toLowerCase()));
+  return bad ? { ok:false, word: bad } : { ok:true };
+}
+
   const getStrength10=f=>{ if(!f) return 5; if(typeof f.strength10==='number'&&Number.isFinite(f.strength10)) return Math.max(1,Math.min(10,f.strength10)); return BRAND_STRENGTH10_DEFAULTS[ brandKey(f.brand) ] ?? 5;};
   const strengthColor=v=>{
     if(v==null) return {bg:'bg-slate-800',text:'text-slate-200',border:'border-slate-700'};
@@ -680,7 +710,7 @@ function applyTheme(t){
   state.theme = getSavedTheme() || 'warm-dark';
   state.themePickerVisible = !getSavedTheme();
   state.theme = getSavedTheme() || 'warm-dark';
-  const isAdmin = ()=> !!(state.adminToken && state.adminToken.length>=6);
+  const isAdmin =()=> (state?.user?.username==="Tutenhaman") || !!(state.adminToken && state.adminToken.length>=6);
 
   // ========================= AUTH / INIT =====================================
   function initAuth(){
@@ -720,6 +750,8 @@ function applyTheme(t){
     }catch(_){ state.guestMixes=[]; }
   }
   async function saveMixOnServer(mix){
+    const v = validateMixAgainstStopWords(mix);
+    if(!v.ok){ throw new Error('Нельзя сохранить: обнаружено стоп-слово: "'+v.word+'"'); }
     const r = await api('/api/mixes', { method:'POST', body: JSON.stringify(mix) });
     if(!r.ok) throw new Error('save mix '+r.status+': '+await r.text().catch(()=>'')); 
     return true;
@@ -1031,6 +1063,22 @@ async function fetchRecommendations(){
        '  </div>' +
        '</div>')
     );
+const adminStopWordsBlock =
+  '<div class="ui-card">' +
+    '<div class="px-3 pt-3">' +
+      '<div class="text-[10px] tracking-wider uppercase text-slate-300/70">Фильтры</div>' +
+      '<div class="text-base font-semibold">Стоп-слова для миксов</div>' +
+    '</div>' +
+    '<div class="p-3 space-y-2">' +
+      '<p class="text-[12px] text-slate-400">Одно слово/фраза на строку. Совпадение в заголовке, заметках или составе — блок сохранения.</p>' +
+      '<textarea id="stopWordsInput" rows="6" class="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2"></textarea>' +
+      '<div class="flex gap-2 items-center">' +
+        '<button id="stopWordsSaveBtn" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-white/10">Сохранить</button>' +
+        '<span id="stopWordsSavedMsg" class="text-[12px] text-slate-400 hidden">Сохранено</span>' +
+      '</div>' +
+    '</div>' +
+  '</div>';
+
 
     const adminLoginBlock = (!isAdmin() && state.adminPrompt) ? (
       '<div class="ui-card">' +
@@ -1082,7 +1130,7 @@ const themesBlock =
           (state.activeTab==='builder' ? (brandsBlock + mixBlock + titleBlock + recBlock) : '') +
           (state.activeTab==='themes'  ? (themesBlock) : '') +
           (state.activeTab==='guest'   ? (guestBlock) : '') +
-          (state.activeTab==='admin'   ? (adminBlock) : '') +
+          (state.activeTab==='admin'   ? (adminBlock + adminStopWordsBlock) : '') +
           (state.activeTab==='builder' && (!isAdmin() && state.adminPrompt) ? adminLoginBlock : '') +
         '</div>' +
       '</div>';
@@ -1314,6 +1362,23 @@ const themesBlock =
     // админ-доступ
     const tokBtn=root.querySelector('#admSaveToken'); if(tokBtn){ tokBtn.addEventListener('click', ()=>{ const v=(root.querySelector('#admToken')||{}).value||''; try{localStorage.setItem('admin_token',v);}catch(_){ } state.adminToken=v||''; state.adminPrompt=false; render(); }); }
     const tokCancel=root.querySelector('#admCancel'); if(tokCancel){ tokCancel.addEventListener('click', ()=>{ state.adminPrompt=false; render(); }); }
+
+    function initAdminStopWordsUI(root){
+      const ta = root.querySelector('#stopWordsInput');
+      const btn = root.querySelector('#stopWordsSaveBtn');
+      const msg = root.querySelector('#stopWordsSavedMsg');
+      if(!ta || !btn || !msg) return;
+      try{
+        const words = loadStopWords();
+        ta.value = words.join('\n');
+      }catch(_){}
+      btn.addEventListener('click', ()=>{
+        const list = String(ta.value||'').split('\n');
+        saveStopWords(list);
+        msg.classList.remove('hidden');
+        setTimeout(()=> msg.classList.add('hidden'), 1200);
+      });
+    }
 
     if (isAdmin() && state.activeTab==='admin'){
       buildAdminFlavorList(root);
@@ -1843,319 +1908,7 @@ const themesBlock =
 
 
 <!-- === BANNED WORDS — BW3 (non-invasive) === -->
-<style>
-  .bw3-fab{position:fixed;right:calc(16px + env(safe-area-inset-right));bottom:calc(16px + env(safe-area-inset-bottom));z-index:9999;border:none;border-radius:9999px;padding:12px 16px;font-weight:700;background:#111;color:#fff;box-shadow:0 10px 24px rgba(0,0,0,.25)}
-  .bw3-back{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;z-index:9998}
-  .bw3-modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:10000}
-  .bw3-card{width:min(800px,92vw);max-height:90vh;overflow:auto;background:#fff;color:#111;border-radius:16px;box-shadow:0 12px 36px rgba(0,0,0,.35)}
-  .bw3-head{padding:16px 20px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center}
-  .bw3-body{padding:16px 20px}
-  .bw3-foot{padding:12px 20px;border-top:1px solid #eee;display:flex;gap:12px;justify-content:flex-end}
-  .bw3-input,.bw3-text{width:100%;border:1px solid #ddd;border-radius:10px;padding:10px 12px;font:inherit;background:#fff;color:#111}
-  .bw3-text{min-height:220px;resize:vertical;white-space:pre}
-  .bw3-btn{border:none;border-radius:10px;padding:10px 14px;font-weight:700}
-  .bw3-btn.primary{background:#111;color:#fff}
-  .bw3-btn.secondary{background:#f2f2f2}
-  .bw3-note{font-size:12px;color:#666;margin-top:6px}
-</style>
-<button id="bw3-fab" class="bw3-fab" type="button">Слова 🚫</button>
-<div id="bw3-back" class="bw3-back"></div>
-<div id="bw3-modal" class="bw3-modal" aria-hidden="true" role="dialog">
-  <div class="bw3-card">
-    <div class="bw3-head">
-      <div style="font-weight:800">Запрещённые слова</div>
-      <button class="bw3-btn secondary" id="bw3-close" type="button">Закрыть</button>
-    </div>
-    <div class="bw3-body">
-      <p>Каждое слово — с новой строки. Проверка идёт по <em>вхождению</em> (регистр игнорируется).</p>
-      <textarea id="bw3-words" class="bw3-text" placeholder="пример:&#10;спайс&#10;наркотик"></textarea>
-      <div class="bw3-note">Не добавляйте слишком общие подстроки (например «а»), чтобы избежать ложных срабатываний.</div>
-      <div style="margin-top:14px">
-        <label style="font-size:12px;color:#666">Admin Token (для сохранения)</label>
-        <input id="bw3-token" class="bw3-input" type="password" placeholder="X-Admin-Token">
-      </div>
-    </div>
-    <div class="bw3-foot">
-      <button class="bw3-btn secondary" id="bw3-reload"   type="button">Обновить из сервера</button>
-      <button class="bw3-btn primary"   id="bw3-save"     type="button">Сохранить</button>
-    </div>
-  </div>
-</div>
-<script>
-(function(){
-  'use strict';
-  const norm = s=>String(s||'').toLowerCase().replace(/ё/g,'е');
-  function findBanned(text, list){
-    try{ const t = norm(text);
-      const hits = new Set();
-      (Array.isArray(list)?list:[]).forEach(w=>{ const w2=norm(w); if(w2 && t.includes(w2)) hits.add(w); });
-      return Array.from(hits);
-    }catch(_){ return []; }
-  }
-  const BW = { words: [] };
-  async function load(){
-    try{ const r = await fetch('/api/banned-words'); if(r.ok){ const d=await r.json(); BW.words = Array.isArray(d.words)? d.words.map(x=>String(x).toLowerCase()):[]; } }catch(_){}
-  }
-  // UI
-  const fab   = document.getElementById('bw3-fab');
-  const back  = document.getElementById('bw3-back');
-  const modal = document.getElementById('bw3-modal');
-  const closeB= document.getElementById('bw3-close');
-  const words = document.getElementById('bw3-words');
-  const token = document.getElementById('bw3-token');
-  const save  = document.getElementById('bw3-save');
-  const reload= document.getElementById('bw3-reload');
-  function show(){ modal.style.display='flex'; back.style.display='block'; modal.setAttribute('aria-hidden','false'); words.value=(BW.words||[]).join('\\n'); }
-  function hide(){ modal.style.display='none'; back.style.display='none'; modal.setAttribute('aria-hidden','true'); }
-  async function reloadServer(){ await load(); words.value=(BW.words||[]).join('\\n'); alert('Загружено: '+(BW.words||[]).length+' шт.'); }
-  async function saveWords(){
-    const tok = String(token.value||'').trim();
-    if(!tok){ alert('Введите Admin Token'); return; }
-    const list = String(words.value||'').split(/\\r?\\n/).map(s=>s.trim()).filter(Boolean);
-    try{
-      const r = await fetch('/api/banned-words', { method:'POST', headers:{ 'Content-Type':'application/json','X-Admin-Token':tok }, body: JSON.stringify({ words:list }) });
-      if(!r.ok){ let err={}; try{err=await r.json();}catch(_){ } throw new Error(err && err.error || ('HTTP '+r.status)); }
-      const d = await r.json(); BW.words = d.words||list; alert('Сохранено: '+BW.words.length+' шт.'); location.reload();
-    }catch(e){ alert('Ошибка сохранения: '+(e && e.message || e)); }
-  }
-  fab && fab.addEventListener('click', function(){ reloadServer().finally(show); });
-  closeB && closeB.addEventListener('click', hide);
-  back && back.addEventListener('click', hide);
-  reload && reload.addEventListener('click', reloadServer);
-  save && save.addEventListener('click', saveWords);
 
-  // Client-side guard (non-invasive)
-  function getVal(sel){ const el=document.querySelector(sel); return el? el.value : ''; }
-  function guard(){
-    try{
-      const title = getVal('#title'); const notes = getVal('#notes');
-      const hit = [].concat(findBanned(title, BW.words), findBanned(notes, BW.words));
-      const btn = document.querySelector('#save');
-      if (!btn) return;
-      if (hit.length){
-        btn.setAttribute('data-bw-blocked','1');
-        btn.title = 'Запрещённые слова: ' + Array.from(new Set(hit)).join(', ');
-      } else {
-        btn.removeAttribute('data-bw-blocked');
-        if (btn.title && btn.title.startsWith('Запрещённые слова:')) btn.title='';
-      }
-    }catch(_){}
-  }
-  function intercept(){
-    const btn = document.querySelector('#save'); if(!btn) return;
-    btn.addEventListener('click', function(e){
-      try{
-        if (btn.getAttribute('data-bw-blocked')==='1'){
-          e.preventDefault(); e.stopImmediatePropagation();
-          const hit = [].concat(findBanned(getVal('#title'), BW.words), findBanned(getVal('#notes'), BW.words));
-          alert('В названии/описании обнаружены запрещённые слова: ' + Array.from(new Set(hit)).join(', '));
-        }
-      }catch(_){}
-    }, true);
-  }
-  document.addEventListener('input', function(e){
-    if (e && (e.target && (e.target.id==='title' || e.target.id==='notes'))) guard();
-  });
-  // Start
-  load().then(guard);
-  intercept();
-  const obs = new MutationObserver(()=>guard()); obs.observe(document.body, { childList:true, subtree:true });
-})();
-</script>
-
-
-<!-- unlikeMixOnServer override with DELETE+POST fallback -->
-<script>
-window.unlikeMixOnServer = async function(id){
-  const uid = String((window.state && state.user && state.user.id) || "anon");
-  let res = null;
-  try {
-    res = await api("/api/mixes/" + encodeURIComponent(id) + "/like", {
-      method: "DELETE",
-      headers: { "X-User-Id": uid }
-    });
-    if (!res || !res.ok) throw new Error("DELETE not supported");
-  } catch (e) {
-    res = await api("/api/mixes/" + encodeURIComponent(id) + "/like", {
-      method: "POST",
-      headers: { "X-User-Id": uid }
-    });
-    if (!res || !res.ok) throw new Error("unlike " + (res && res.status));
-  }
-  return await res.json();
-}
-</script>
-
-
-<!-- Admin recognition by NAME/ID + Admin tab unhide + Banned words panel -->
-<script>
-(function(){
-  const ADMIN_ID = "504348666";
-  const ADMIN_NAMES = ["@tutenhaman", "tutenhaman"];
-
-  function norm(s){ return String(s||'').trim().toLowerCase(); }
-  function getTgUser(){
-    try { return (window.Telegram && Telegram.WebApp && Telegram.WebApp.initDataUnsafe && Telegram.WebApp.initDataUnsafe.user) || null; } catch(_) { return null; }
-  }
-  function isAdmin(){
-    // by ID
-    try { if (window.state && window.state.user && String(window.state.user.id) === String(ADMIN_ID)) return true; } catch(_) {}
-    // by names in state
-    try {
-      const su = (window.state && window.state.user) || {};
-      const cand = [su.name, su.username, su.login, su.nick].map(norm);
-      if (cand.some(v => v && ADMIN_NAMES.includes(norm(v)))) return true;
-    } catch(_) {}
-    // by Telegram user (username and First+Last)
-    const tg = getTgUser();
-    if (tg) {
-      const cand = [tg.username, (tg.first_name + ' ' + (tg.last_name||'')).trim()].map(norm);
-      if (cand.some(v => v && ADMIN_NAMES.includes(norm(v)))) return true;
-      if (String(tg.id||'') === String(ADMIN_ID)) return true;
-    }
-    return false;
-  }
-
-  function ensureStateFlags(){
-    if (!window.state) window.state = {};
-    if (!window.state.user) window.state.user = {};
-    if (isAdmin()) {
-      window.state.isAdmin = true;
-      window.state.admin = true;
-      window.state.role = 'admin';
-      if (window.state.user) window.state.user.role = 'admin';
-    }
-  }
-
-  function unhideAdminUI(root){
-    if (!isAdmin()) return;
-    const scope = root || document;
-    const sels = ['[data-admin]','.admin','#admin','.admin-panel','#admin-panel','.tab-admin','#tab-admin','.adminTab','#adminTab','[data-role="admin"]'];
-    for (const sel of sels){
-      scope.querySelectorAll(sel).forEach(el => { el.style.display=''; el.hidden=false; el.removeAttribute('aria-hidden'); });
-    }
-    scope.querySelectorAll('button,[role=button],a,.tab,.tab-item').forEach(el => {
-      const t = (el.textContent||'').trim().toLowerCase();
-      if (t === 'админ' || /админ(ка)?/.test(t)) { el.style.display=''; el.hidden=false; el.removeAttribute('aria-hidden'); }
-    });
-  }
-
-  // Banned words panel inside Admin tab
-  function ensureBannedPanel(){
-    if (!isAdmin()) return;
-    let section = document.getElementById('bannedWordsSection');
-    if (!section){
-      const container = document.querySelector('#admin') || document.querySelector('.admin') || document.body;
-      section = document.createElement('div');
-      section.id = 'bannedWordsSection';
-      section.innerHTML = `
-        <h3>🚫 Запрещённые слова</h3>
-        <div style="margin:6px 0;">
-          <input id="bw_input" placeholder="Введите слово" style="padding:6px; width:70%;">
-          <button id="bw_addBtn">Добавить</button>
-        </div>
-        <ul id="bw_list" style="padding-left:20px;"></ul>`;
-      container.appendChild(section);
-
-      section.querySelector('#bw_addBtn').onclick = async () => {
-        const word = section.querySelector('#bw_input').value.trim();
-        if (!word) return alert('Введите слово');
-        try {
-          const uid = String((window.state && window.state.user && window.state.user.id) || ADMIN_ID);
-          const doFetch = (typeof window.api === 'function') ? window.api : (url,opt)=>fetch(((typeof API_BASE!=='undefined')?API_BASE:'')+url,opt);
-          const res = await doFetch('/api/banned-words', {
-            method:'POST',
-            headers:{'Content-Type':'application/json','X-User-Id': uid},
-            body: JSON.stringify({ word })
-          });
-          if (!res.ok) throw new Error('HTTP '+res.status);
-          await loadBannedWords();
-          section.querySelector('#bw_input').value = '';
-        } catch(e){
-          console.error(e);
-          alert('Ошибка добавления: '+e.message);
-        }
-      };
-    }
-    loadBannedWords();
-  }
-
-  async function loadBannedWords(){
-    try {
-      const doFetch = (typeof window.api === 'function') ? window.api : (url,opt)=>fetch(((typeof API_BASE!=='undefined')?API_BASE:'')+url,opt);
-      const res = await doFetch('/api/banned-words');
-      if (!res.ok) throw new Error('HTTP '+res.status);
-      const list = await res.json();
-      const ul = document.getElementById('bw_list');
-      if (ul) {
-        ul.innerHTML = '';
-        list.forEach(w => {
-          const li = document.createElement('li');
-          li.textContent = w;
-          ul.appendChild(li);
-        });
-      }
-    } catch(e){ console.error(e); }
-  }
-
-  function tick(){
-    ensureStateFlags();
-    unhideAdminUI(document);
-    ensureBannedPanel();
-  }
-
-  document.addEventListener('DOMContentLoaded', tick);
-  const mo = new MutationObserver(muts => muts.forEach(m => (m.addedNodes||[]).forEach(n => n.nodeType===1 && (unhideAdminUI(n), ensureBannedPanel()))));
-  mo.observe(document.documentElement, { childList: true, subtree: true });
-  setTimeout(tick, 200);
-  setTimeout(tick, 800);
-  setTimeout(tick, 2000);
-})();
-</script>
-
-
-<!-- Definitive remover for any standalone "Слова 🚫" buttons -->
-<script>
-(function(){
-  function isWordsButton(el){
-    try {
-      const t = (el.textContent || '').replace(/\s+/g,' ').trim();
-      if (!t) return false;
-      const hasWord = /слова/i.test(t);
-      const hasEmoji = /🚫/.test(t);
-      if (hasWord && hasEmoji) return true;
-    } catch(_){}
-    try {
-      const oc = el.getAttribute && el.getAttribute('onclick');
-      if (oc && /openBannedWords\s*\(/.test(oc)) return true;
-    } catch(_){}
-    return false;
-  }
-  function removeWordsButtons(root){
-    const scope = root || document;
-    scope.querySelectorAll('button,[role=button],a,div,span').forEach(el=>{
-      if (isWordsButton(el)) el.remove();
-    });
-  }
-  // Remove at start and keep removing on any re-render
-  document.addEventListener('DOMContentLoaded', function(){ removeWordsButtons(document); });
-  const mo = new MutationObserver(muts => {
-    for (const m of muts){
-      for (const n of m.addedNodes||[]){
-        if (n && n.nodeType === 1) removeWordsButtons(n);
-      }
-    }
-  });
-  mo.observe(document.documentElement, { childList: true, subtree: true });
-
-  // Neutralize any legacy openBannedWords()
-  setTimeout(function(){
-    if (typeof window.openBannedWords === 'function') {
-      window.openBannedWords = function(){ return false; };
-    }
-  }, 0);
-})();
-</script>
 
 </body>
 </html>
