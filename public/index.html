@@ -49,7 +49,7 @@ const state = {
   notes: '',
   activeTab: 'builder',
   adminToken: localStorage.getItem('admin_token') || '',
-  banned: [], // from server
+  banned: [], // серверный список
 };
 
 function initUser(){
@@ -76,7 +76,7 @@ async function loadBanned(){
 }
 async function saveBannedOnServer(words, token){
   const r = await api('/api/banned-words', { method:'PUT', headers:{ 'X-Admin-Token': token||'' }, body: JSON.stringify({ words })});
-  if (!r.ok) throw new Error('HTTP '+r.status+' — '+await r.text().catch(()=>'')); // <-- 403 ловим здесь
+  if (!r.ok) throw new Error('HTTP '+r.status+' — '+await r.text().catch(()=>'')); // 403 ловим здесь
 }
 
 // -------------------- Logic --------------------
@@ -181,6 +181,7 @@ function render(){
         <div class="text-[11px] opacity-70">${Array.isArray(m.likedBy)? m.likedBy.length : (Array.isArray(m.likers)? m.likers.length : 0)} ❤</div>
       </div>
       <div class="flex items-center gap-2">
+        <button data-like="${esc(m.id)}" class="btn">❤</button>
         <button data-apply="${esc(m.id)}" class="btn">Загрузить</button>
         ${ (state.user && m.authorId && String(m.authorId)===String(state.user.id)) ? `<button data-del="${esc(m.id)}" class="btn">Удалить</button>` : ''}
       </div>
@@ -190,6 +191,7 @@ function render(){
   const adminHTML = `
     <div class="ui-card p-3">
       <div class="text-[10px] uppercase text-slate-300/70">Админ</div>
+
       <div class="font-semibold mb-2">Доступ</div>
       <div class="grid gap-2 mb-4">
         <input id="admToken" class="w-full" placeholder="X-Admin-Token" value="${esc(state.adminToken)}"/>
@@ -257,10 +259,11 @@ function render(){
 
   document.getElementById('root').innerHTML = body;
 
-  // Events
+  // -------------------- Events --------------------
   document.querySelectorAll('[data-tab]').forEach(b=>{
     b.addEventListener('click', ()=>{ state.activeTab = b.getAttribute('data-tab'); render(); });
   });
+
   document.querySelectorAll('[data-add]').forEach(b=>{
     b.addEventListener('click', ()=>{
       const id = b.getAttribute('data-add');
@@ -273,6 +276,7 @@ function render(){
       }
     });
   });
+
   document.querySelectorAll('[data-remove]').forEach(b=>{
     b.addEventListener('click', ()=>{
       const id = b.getAttribute('data-remove');
@@ -280,6 +284,7 @@ function render(){
       render();
     });
   });
+
   document.querySelectorAll('[data-range]').forEach(r=>{
     r.addEventListener('input', ()=>{
       const id = r.getAttribute('data-range');
@@ -290,6 +295,7 @@ function render(){
       render();
     });
   });
+
   const titleEl = document.getElementById('title'); if(titleEl) titleEl.addEventListener('input', ()=>{ state.title = titleEl.value; });
   const notesEl = document.getElementById('notes'); if(notesEl) notesEl.addEventListener('input', ()=>{ state.notes = notesEl.value; });
 
@@ -320,11 +326,44 @@ function render(){
     render();
   });
 
+  // --------- Комьюнити: лайк / удалить / загрузить в конструктор ---------
+  document.querySelectorAll('[data-like]').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      const id = b.getAttribute('data-like');
+      const r = await api(`/api/mixes/${id}/like`, { method:'POST', headers:{ 'X-User-Id': state.user?.id || 'anon' }});
+      if (!r.ok) { alert('Не удалось лайкнуть'); return; }
+      await loadGuestMixes(); render();
+    });
+  });
+
+  document.querySelectorAll('[data-del]').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      const id = b.getAttribute('data-del');
+      if (!confirm('Удалить микс?')) return;
+      const r = await api(`/api/mixes/${id}`, { method:'DELETE', headers:{ 'X-User-Id': state.user?.id || '' }});
+      if (!r.ok) { alert('Не удалось удалить'); return; }
+      await loadGuestMixes(); render();
+    });
+  });
+
+  document.querySelectorAll('[data-apply]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const id = b.getAttribute('data-apply');
+      const m = state.guestMixes.find(x=>x.id===id);
+      if (!m) return;
+      state.parts = Array.isArray(m.parts) ? m.parts.map(p=>({ flavorId:p.flavorId, percent:safePct(p.percent) })) : [];
+      state.title = (m.title || '') + ' (копия)';
+      state.notes = m.notes || '';
+      state.activeTab='builder';
+      render();
+    });
+  });
+
   // -------------------- Admin actions --------------------
   const tokBtn = document.getElementById('admSaveToken');
   const tokInput = document.getElementById('admToken');
   if (tokInput) {
-    // <<< НОВОЕ: обновлять токен на каждый ввод
+    // обновлять токен на каждый ввод + класть в localStorage
     tokInput.addEventListener('input', () => {
       state.adminToken = tokInput.value;
       try { localStorage.setItem('admin_token', state.adminToken); } catch(_) {}
@@ -353,7 +392,7 @@ function render(){
     const raw = document.getElementById('admWords').value || '';
     const words = raw.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
     try{
-      // <<< НОВОЕ: брать токен прямо из инпута при сохранении
+      // брать токен прямо из инпута
       const tokenNow = (document.getElementById('admToken')?.value || state.adminToken || '').trim();
       await saveBannedOnServer(words, tokenNow);
       state.banned = words;
@@ -374,7 +413,7 @@ function render(){
     };
     if (!payload.brand || !payload.name){ alert('Укажите бренд и название'); return; }
     try{
-      // <<< НОВОЕ: брать токен прямо из инпута при добавлении вкуса
+      // токен — из поля, без обязательного нажатия «Сохранить токен»
       const tokenNow = (document.getElementById('admToken')?.value || state.adminToken || '').trim();
       const r = await api('/api/flavors', { method:'POST', headers:{ 'X-Admin-Token': tokenNow }, body: JSON.stringify(payload) });
       if (!r.ok){
