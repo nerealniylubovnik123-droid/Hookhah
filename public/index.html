@@ -1975,7 +1975,50 @@ const themesBlock =
   }
 })();
 
+// --- Admin-only visibility for "Слова 🚫" button without touching render code ---
+(function(){
+  function isAdmin(){ return !!(window.state && window.state.user && state.user.id === 'admin'); }
+  function hideBannedButtons(root){
+    if (isAdmin()) return;
+    const nodes = (root || document).querySelectorAll('button, [role=button]');
+    nodes.forEach(el => {
+      const t = (el.textContent || '').trim();
+      if (t === 'Слова 🚫' || (/Слова/.test(t) && /🚫/.test(t))) {
+        el.style.display = 'none';
+        el.setAttribute('data-hidden-by-admin-guard','1');
+      }
+    });
+  }
+  // initial
+  document.addEventListener('DOMContentLoaded', function(){
+    hideBannedButtons(document);
+  });
+  // observe re-renders
+  const mo = new MutationObserver(muts => {
+    muts.forEach(m => {
+      if (m.addedNodes) {
+        m.addedNodes.forEach(n => {
+          if (n.nodeType === 1) hideBannedButtons(n);
+        });
+      }
+    });
+  });
+  mo.observe(document.documentElement, { childList: true, subtree: true });
+})();
 
+// --- Guard openBannedWords entry (no access for non-admin) ---
+(function(){
+  if (typeof window.openBannedWords === 'function') {
+    const _orig = window.openBannedWords;
+    window.openBannedWords = function(){
+      if (!(window.state && window.state.user && state.user.id === 'admin')) {
+        alert('Только для администратора');
+        return;
+      }
+      return _orig.apply(this, arguments);
+    };
+  }
+})();
 
 // --- Unlike fallback override: try DELETE, then POST toggle ---
 (function(){
@@ -2001,40 +2044,101 @@ const themesBlock =
 </script>
 
 
-<!-- Personalized admin binding to Telegram ID -->
+<!-- Strong admin binding to Telegram ID and resilient UI -->
 <script>
-(function(){ 
+(function(){
   const ADMIN_ID = '504348666';
-  function isMeAdmin(){ 
-    try { return String(window.state && state.user && state.user.id) === ADMIN_ID; } catch(_){}
+
+  function getTelegramUserId(){
+    try {
+      if (window.Telegram && Telegram.WebApp && Telegram.WebApp.initDataUnsafe && Telegram.WebApp.initDataUnsafe.user) {
+        return String(Telegram.WebApp.initDataUnsafe.user.id || '');
+      }
+    } catch(_) {}
+    return '';
+  }
+
+  function getStoredTgId(){
+    try { return String(localStorage.getItem('tg_user_id') || ''); } catch(_) { return ''; }
+  }
+
+  function isAdmin(){
+    try { if (window.state && state.user && String(state.user.id) === ADMIN_ID) return true; } catch(_) {}
+    const tg = getTelegramUserId();
+    if (tg && tg === ADMIN_ID) return true;
+    const ls = getStoredTgId();
+    if (ls && ls === ADMIN_ID) return true;
     return false;
   }
-  // Show/hide "Слова 🚫" button by text match each render
-  function toggleBannedButton(root){ 
-    const nodes = (root||document).querySelectorAll('button, [role=button]');
-    nodes.forEach(el => {
-      const t = (el.textContent||'').trim();
-      if (t === 'Слова 🚫' || (/Слова/.test(t) && /🚫/.test(t))) {
-        el.style.display = isMeAdmin() ? '' : 'none';
+
+  function ensureStateUser(){
+    if (!(window.state && state.user && state.user.id)) {
+      const tg = getTelegramUserId() || getStoredTgId();
+      if (tg) {
+        window.state = window.state || {};
+        state.user = state.user || {};
+        state.user.id = tg;
       }
-      if (/выйти из админки/i.test(t)) {
-        // hide any "logout admin" control
+    }
+  }
+
+  function findControlsRoot(){
+    const qs = ['#controls','.controls','#toolbar','.toolbar','#topbar','.topbar','#filters','.filters','#header','header','main','body'];
+    for (const sel of qs){
+      const el = document.querySelector(sel);
+      if (el) return el;
+    }
+    return document.body;
+  }
+
+  function findBannedButton(){
+    const nodes = document.querySelectorAll('button, [role=button]');
+    for (const el of nodes){
+      const t = (el.textContent||'').trim();
+      if (t === 'Слова 🚫' || (/Слова/.test(t) && /🚫/.test(t))) return el;
+    }
+    return null;
+  }
+
+  function ensureBannedButton(){
+    const btn = findBannedButton();
+    if (btn) {
+      btn.style.display = isAdmin() ? '' : 'none';
+      return;
+    }
+    if (isAdmin() && typeof window.openBannedWords === 'function'){
+      const root = findControlsRoot();
+      const el = document.createElement('button');
+      el.type = 'button';
+      el.textContent = 'Слова 🚫';
+      el.addEventListener('click', () => window.openBannedWords());
+      el.setAttribute('data-injected', 'banned');
+      root.appendChild(el);
+    }
+  }
+
+  function hideLogout(){
+    const nodes = document.querySelectorAll('button, [role=button], a');
+    nodes.forEach(el => {
+      const t = (el.textContent||'').trim().toLowerCase();
+      if (/выйти из админки/.test(t) || /logout/i.test(t)) {
         el.style.display = 'none';
       }
     });
   }
-  document.addEventListener('DOMContentLoaded', () => toggleBannedButton(document));
-  const mo = new MutationObserver(muts => muts.forEach(m => (m.addedNodes||[]).forEach(n => n.nodeType===1 && toggleBannedButton(n))));
-  mo.observe(document.documentElement, { childList: true, subtree: true });
 
-  // Guard entry point
-  if (typeof window.openBannedWords === 'function') {
-    const _orig = window.openBannedWords;
-    window.openBannedWords = function(){ 
-      if (!isMeAdmin()) return alert('Доступ только для владельца (ID 504348666)');
-      return _orig.apply(this, arguments);
-    }
+  function tick(){
+    ensureStateUser();
+    ensureBannedButton();
+    hideLogout();
   }
+
+  document.addEventListener('DOMContentLoaded', tick);
+  const mo = new MutationObserver(() => tick());
+  mo.observe(document.documentElement, { childList: true, subtree: true });
+  setTimeout(tick, 300);
+  setTimeout(tick, 1000);
+  setTimeout(tick, 2000);
 })();
 </script>
 
