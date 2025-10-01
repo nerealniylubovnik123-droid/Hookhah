@@ -599,6 +599,7 @@ function applyTheme(t){
 
   const BRAND_STRENGTH10_DEFAULTS = {darkside:5,blackburn:6,musthave:5,overdose:6,bonch:7,starline:3};
   const normalizeBrand=b=>(b||'').trim();
+  const brandKey=b=>normalizeBrand(b).toLowerCase().replace(/\s+/g,'').replace(/[^a-zа-я0-9]/gi,'');
   const getStrength10=f=>{ if(!f) return 5; if(typeof f.strength10==='number'&&Number.isFinite(f.strength10)) return Math.max(1,Math.min(10,f.strength10)); return BRAND_STRENGTH10_DEFAULTS[ brandKey(f.brand) ] ?? 5;};
   const strengthColor=v=>{
     if(v==null) return {bg:'bg-slate-800',text:'text-slate-200',border:'border-slate-700'};
@@ -1963,235 +1964,131 @@ const themesBlock =
 </script>
 
 
-<!-- Admin & compatibility overrides -->
+<!-- unlikeMixOnServer override with DELETE+POST fallback -->
 <script>
-// --- brandKey helper (define only if missing) ---
-(function(){
-  if (typeof window.brandKey !== 'function') {
-    const normalizeBrand = (typeof window.normalizeBrand === 'function')
-      ? window.normalizeBrand
-      : (b => String(b||'').trim());
-    window.brandKey = b => normalizeBrand(b).toLowerCase().replace(/\s+/g,'').replace(/[^a-zа-я0-9]/gi,'');
-  }
-})();
-
-// --- Admin-only visibility for "Слова 🚫" button without touching render code ---
-(function(){
-  function isAdmin(){ return !!(window.state && window.state.user && state.user.id === 'admin'); }
-  function hideBannedButtons(root){
-    if (isAdmin()) return;
-    const nodes = (root || document).querySelectorAll('button, [role=button]');
-    nodes.forEach(el => {
-      const t = (el.textContent || '').trim();
-      if (t === 'Слова 🚫' || (/Слова/.test(t) && /🚫/.test(t))) {
-        el.style.display = 'none';
-        el.setAttribute('data-hidden-by-admin-guard','1');
-      }
+window.unlikeMixOnServer = async function(id){
+  const uid = String((window.state && state.user && state.user.id) || "anon");
+  let res = null;
+  try {
+    res = await api("/api/mixes/" + encodeURIComponent(id) + "/like", {
+      method: "DELETE",
+      headers: { "X-User-Id": uid }
     });
+    if (!res || !res.ok) throw new Error("DELETE not supported");
+  } catch (e) {
+    res = await api("/api/mixes/" + encodeURIComponent(id) + "/like", {
+      method: "POST",
+      headers: { "X-User-Id": uid }
+    });
+    if (!res || !res.ok) throw new Error("unlike " + (res && res.status));
   }
-  // initial
-  document.addEventListener('DOMContentLoaded', function(){
-    hideBannedButtons(document);
-  });
-  // observe re-renders
-  const mo = new MutationObserver(muts => {
-    muts.forEach(m => {
-      if (m.addedNodes) {
-        m.addedNodes.forEach(n => {
-          if (n.nodeType === 1) hideBannedButtons(n);
+  return await res.json();
+}
+</script>
+
+
+<!-- Admin banned words panel inside Admin tab -->
+<script>
+(function(){
+  const ADMIN_ID = '504348666';
+  function isAdmin(){
+    try { return state && state.user && String(state.user.id) === ADMIN_ID; } catch(_){ return false; }
+  }
+  function renderBannedWordsSection(container){
+    if (!isAdmin()) return;
+    let section = document.getElementById('bannedWordsSection');
+    if (!section){
+      section = document.createElement('div');
+      section.id = 'bannedWordsSection';
+      section.innerHTML = `
+        <h3>🚫 Запрещённые слова</h3>
+        <div style="margin:6px 0;">
+          <input id="bw_input" placeholder="Введите слово" style="padding:6px; width:70%;">
+          <button id="bw_addBtn">Добавить</button>
+        </div>
+        <ul id="bw_list" style="padding-left:20px;"></ul>`;
+      container.appendChild(section);
+      section.querySelector('#bw_addBtn').onclick = async () => {
+        const word = section.querySelector('#bw_input').value.trim();
+        if (!word) return alert('Введите слово');
+        try {
+          const uid = String((state && state.user && state.user.id) || ADMIN_ID);
+          const res = await api('/api/banned-words', {
+            method:'POST',
+            headers:{'Content-Type':'application/json','X-User-Id': uid},
+            body: JSON.stringify({ word })
+          });
+          if (!res.ok) throw new Error('HTTP '+res.status);
+          await loadBannedWords();
+          section.querySelector('#bw_input').value = '';
+        } catch(e){
+          console.error(e);
+          alert('Ошибка добавления: '+e.message);
+        }
+      };
+    }
+    loadBannedWords();
+  }
+  async function loadBannedWords(){
+    try {
+      const res = await api('/api/banned-words');
+      if (!res.ok) throw new Error('HTTP '+res.status);
+      const list = await res.json();
+      const ul = document.getElementById('bw_list');
+      if (ul) {
+        ul.innerHTML = '';
+        list.forEach(w => {
+          const li = document.createElement('li');
+          li.textContent = w;
+          ul.appendChild(li);
         });
       }
-    });
-  });
-  mo.observe(document.documentElement, { childList: true, subtree: true });
-})();
-
-// --- Guard openBannedWords entry (no access for non-admin) ---
-(function(){
-  if (typeof window.openBannedWords === 'function') {
-    const _orig = window.openBannedWords;
-    window.openBannedWords = function(){
-      if (!(window.state && window.state.user && state.user.id === 'admin')) {
-        alert('Только для администратора');
-        return;
-      }
-      return _orig.apply(this, arguments);
-    };
+    } catch(e){ console.error(e); }
   }
-})();
-
-// --- Unlike fallback override: try DELETE, then POST toggle ---
-(function(){
-  window.unlikeMixOnServer = async function(id){
-    const uid = String((window.state && state.user && state.user.id) || "anon");
-    let res = null;
-    try {
-      res = await api("/api/mixes/" + encodeURIComponent(id) + "/like", {
-        method: "DELETE",
-        headers: { "X-User-Id": uid }
-      });
-      if (!res || !res.ok) throw new Error('DELETE not supported');
-    } catch (e) {
-      res = await api("/api/mixes/" + encodeURIComponent(id) + "/like", {
-        method: "POST",
-        headers: { "X-User-Id": uid }
-      });
-      if (!res || !res.ok) throw new Error("unlike " + (res && res.status));
-    }
-    return await res.json();
+  const origRender = window.render || function(){};
+  window.render = function(){
+    origRender.apply(this, arguments);
+    try{
+      const adminTab = document.querySelector('#admin') || document.querySelector('.admin') || document.body;
+      if (adminTab) renderBannedWordsSection(adminTab);
+    }catch(_){}
   };
 })();
 </script>
 
 
-<!-- Forced Admin tab & panel for the owner (by Telegram ID) -->
-<style>
-  #forcedAdminBtn{ position:relative; }
-  #forcedAdminPanel{
-    position: fixed; right: 20px; bottom: 20px; z-index: 99999;
-    background: rgba(255,255,255,0.98); border: 1px solid #ddd; border-radius: 12px;
-    box-shadow: 0 10px 30px rgba(0,0,0,0.15); padding: 16px; width: min(420px, 92vw);
-    display:none; font-family: inherit;
-  }
-  #forcedAdminPanel h3{ margin: 0 0 8px; font-size: 18px; }
-  #forcedAdminPanel .row{ display:flex; gap:8px; margin:8px 0; }
-  #forcedAdminPanel label{ flex:1; font-size: 12px; opacity:.85 }
-  #forcedAdminPanel input, #forcedAdminPanel textarea{ width:100%; padding:8px; border:1px solid #ccc; border-radius:8px; }
-  #forcedAdminPanel .actions{ display:flex; gap:8px; justify-content:flex-end; margin-top:10px; }
-</style>
+<!-- Runtime remover for any "Слова 🚫" buttons -->
 <script>
 (function(){
-  const ADMIN_ID = '504348666';
-
-  function getTelegramUserId(){
+  function isBannedButton(el){
     try {
-      if (window.Telegram && Telegram.WebApp && Telegram.WebApp.initDataUnsafe && Telegram.WebApp.initDataUnsafe.user) {
-        return String(Telegram.WebApp.initDataUnsafe.user.id || '');
-      }
-    } catch(_) {}
-    return '';
-  }
-  function getStoredTgId(){
-    try { return String(localStorage.getItem('tg_user_id') || ''); } catch(_) { return ''; }
-  }
-  function isAdmin(){
-    try { if (window.state && state.user && String(state.user.id) === ADMIN_ID) return true; } catch(_) {}
-    const tg = getTelegramUserId();
-    if (tg && tg === ADMIN_ID) return true;
-    const ls = getStoredTgId();
-    if (ls && ls === ADMIN_ID) return true;
+      const t = (el.textContent || '').trim();
+      if (!t) return false;
+      const low = t.toLowerCase();
+      // Match both exact "Слова 🚫" and variations with the emoji or the word
+      const hasWord = low.includes('слова');
+      const hasEmoji = t.includes('🚫');
+      if (hasWord && hasEmoji) return true;
+    } catch(_){}
+    try {
+      // onclick attribute calling openBannedWords
+      const oc = (el.getAttribute && el.getAttribute('onclick')) || '';
+      if (oc && /openBannedWords\s*\(/.test(oc)) return true;
+    } catch(_){}
     return false;
   }
-  function ensureControlsContainer(){
-    const candidates = ['#controls','.controls','#toolbar','.toolbar','#topbar','.topbar','#filters','.filters','#header','header','main','body'];
-    for (const sel of candidates){
-      const el = document.querySelector(sel);
-      if (el) return el;
-    }
-    return document.body;
+  function nukeButtons(root){
+    const scope = root || document;
+    const nodes = scope.querySelectorAll('button, [role=button], a');
+    nodes.forEach(el => { if (isBannedButton(el)) el.remove(); });
   }
-  function ensureButtonAndPanel(){
-    if (!isAdmin()) return;
-    // Button
-    let btn = document.getElementById('forcedAdminBtn');
-    if (!btn){
-      btn = document.createElement('button');
-      btn.id = 'forcedAdminBtn';
-      btn.type = 'button';
-      btn.textContent = 'Админ';
-      btn.title = 'Админ-панель';
-      ensureControlsContainer().appendChild(btn);
-    }
-    // Panel
-    let panel = document.getElementById('forcedAdminPanel');
-    if (!panel){
-      panel = document.createElement('div');
-      panel.id = 'forcedAdminPanel';
-      panel.innerHTML = `
-        <h3>Добавить вкус</h3>
-        <div class="row">
-          <label>Бренд<br><input id="fa_brand" placeholder="напр. Tangiers"></label>
-        </div>
-        <div class="row">
-          <label>Название<br><input id="fa_name" placeholder="напр. Cane Mint"></label>
-        </div>
-        <div class="row">
-          <label>Крепость (0–10)<br><input id="fa_strength" type="number" min="0" max="10" step="1" value="0"></label>
-          <label>Теги (через запятую)<br><input id="fa_tags" placeholder="mint, fresh"></label>
-        </div>
-        <div class="row">
-          <label>Примечание<br><textarea id="fa_note" rows="3" placeholder="опционально"></textarea></label>
-        </div>
-        <div class="actions">
-          <button id="fa_save" type="button">Сохранить</button>
-          <button id="fa_close" type="button">Закрыть</button>
-        </div>`;
-      document.body.appendChild(panel);
-    }
-    // Toggle
-    btn.onclick = () => {
-      panel.style.display = (panel.style.display === 'none' || !panel.style.display) ? 'block' : 'none';
-    };
-    // Close
-    panel.querySelector('#fa_close').onclick = () => { panel.style.display = 'none'; };
-    // Save handler
-    panel.querySelector('#fa_save').onclick = async () => {
-      const brand = panel.querySelector('#fa_brand').value.trim();
-      const name = panel.querySelector('#fa_name').value.trim();
-      const strength10 = Math.max(0, Math.min(10, Number(panel.querySelector('#fa_strength').value || 0)));
-      const tags = (panel.querySelector('#fa_tags').value || '').split(',').map(s => s.trim()).filter(Boolean);
-      const note = panel.querySelector('#fa_note').value.trim();
-      if (!brand || !name) { alert('Бренд и Название обязательны'); return; }
-
-      const payload = { brand, name, strength10, tags, note };
-      const uid = String((window.state && state.user && state.user.id) || ADMIN_ID || 'admin');
-
-      try {
-        const doFetch = typeof window.api === 'function'
-          ? (url, opt) => window.api(url, opt)
-          : (url, opt) => fetch(url, opt);
-
-        const base = (typeof API_BASE !== 'undefined') ? API_BASE : '';
-        const res = await doFetch(base + '/api/flavors', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-User-Id': uid },
-          body: JSON.stringify(payload)
-        });
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const j = await res.json();
-        // Try to refresh UI gracefully
-        if (typeof window.loadFlavors === 'function') window.loadFlavors();
-        else if (typeof window.refreshFlavors === 'function') window.refreshFlavors();
-        else if (typeof window.render === 'function') window.render();
-        else location.reload();
-        alert('Вкус сохранён: ' + (j && j.id ? j.id : 'ok'));
-        panel.style.display = 'none';
-      } catch (e) {
-        console.error(e);
-        alert('Ошибка сохранения: ' + e.message);
-      }
-    };
-  }
-
-  function tick(){
-    if (!isAdmin()) return;
-    // Ensure state reflects admin for other checks in app
-    try {
-      window.state = window.state || {};
-      state.user = state.user || {};
-      if (!state.user.id) state.user.id = ADMIN_ID;
-      state.isAdmin = true; state.admin = true; state.role = 'admin';
-      if (!state.user.role) state.user.role = 'admin';
-    } catch(_){}
-    ensureButtonAndPanel();
-  }
-
-  document.addEventListener('DOMContentLoaded', tick);
-  const mo = new MutationObserver(() => tick());
+  document.addEventListener('DOMContentLoaded', function(){ nukeButtons(document); });
+  const mo = new MutationObserver(muts => {
+    muts.forEach(m => (m.addedNodes || []).forEach(n => {
+      if (n.nodeType === 1) nukeButtons(n);
+    }));
+  });
   mo.observe(document.documentElement, { childList: true, subtree: true });
-  setTimeout(tick, 200);
-  setTimeout(tick, 800);
-  setTimeout(tick, 2000);
 })();
 </script>
 
