@@ -1,83 +1,157 @@
 <!doctype html>
-<html lang="ру">
+<html lang="ru">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#0a0b0d" />
+  <meta name="theme-color" content="#0b0c0f" />
   <title>Hookah Mixes</title>
   <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- ВЕСЬ твой оригинальный UI/анимации/темы сохранены (укорочено описание в этом комментарии) -->
-  <!-- ❗ Стиль/анимации ниже взяты из твоего файла без изменений, поэтому внешний вид останется прежним -->
-  <style>
-    /* ... (все твои стили из исходника — без изменений) ... */
-  </style>
-
-  <!-- Ранний дружелюбный экран ошибок (как у тебя) -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <script>
-    (function(){
-      function showFatal(msg){
-        var root = document.getElementById('root');
-        if (!root) return;
-        root.innerHTML =
-          '<div class="min-h-[100svh] flex items-center justify-center p-6">' +
-          '  <div class="max-w-md w-full rounded-xl border border-rose-800 bg-rose-950 p-4 text-sm">' +
-          '    <div class="font-bold mb-2 text-rose-200">Произошла ошибка</div>' +
-          '    <div class="text-rose-100/90 whitespace-pre-wrap break-words">' + String(msg || 'Unknown error') + '</div>' +
-          '  </div>' +
-          '</div>';
-      }
-      window.addEventListener('error', function(e){
-        var m = (e && (e.message || (e.error && e.error.message))) || 'Script error';
-        showFatal(m);
-      });
-      window.addEventListener('unhandledrejection', function(e){
-        var m = (e && (e.reason && (e.reason.message || e.reason))) || 'Unhandled rejection';
-        showFatal(m);
-      });
-    })();
-  </script>
+  <style>
+    :root{
+      --bg:#0b0c0f; --card:#12141a; --border:#243142; --text:#e5e7eb; --muted:#94a3b8;
+      --ac1:#f59e0b; --ac2:#fdba74;
+    }
+    body{
+      background:
+        radial-gradient(900px 800px at 10% -10%, rgba(245,158,11,.12), transparent 60%),
+        radial-gradient(700px 500px at 95% 0, rgba(253,186,116,.07), transparent 55%),
+        var(--bg);
+      color:var(--text);
+      -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+    }
+    .ui-card{background:rgba(18,20,26,.82); border:1px solid rgba(148,163,184,.18); border-radius:1rem}
+    .btn{border:1px solid var(--border); border-radius:.75rem; height:36px; padding:0 12px; font-size:12px}
+    .btn-primary{border:0; background:linear-gradient(90deg,var(--ac1),var(--ac2)); color:#0b0c0f; font-weight:700; border-radius:.75rem; height:36px; padding:0 12px; font-size:12px}
+    .chip{border:1px solid var(--border); border-radius:.75rem; padding:.25rem .5rem; font-size:12px}
+    input,textarea,select{background:#0f1218; border:1px solid var(--border); border-radius:.75rem; padding:.5rem .75rem}
+    a{color:#f8b14f}
+  </style>
 </head>
-<body class="text-slate-100">
-  <div id="root" class="min-h-[100svh]"></div>
+<body class="min-h-[100svh]">
+  <div id="root" class="max-w-3xl mx-auto p-3"></div>
 
-  <script>
-/* ======================= ТЕМА (как в исходнике) ======================= */
-const THEMES = ['warm-dark','frosted-glass','cyber-neon','minimal-light','earth-sepia','high-contrast'];
-function getSavedTheme(){ try{ return localStorage.getItem('theme') || ''; }catch(_){ return ''; } }
-function applyTheme(t){
-  if(!THEMES.includes(t)) t = 'warm-dark';
-  document.body.setAttribute('data-theme', t);
-  try{ localStorage.setItem('theme', t); }catch(_){}
-}
-(function initTheme(){
-  const qpTheme=new URLSearchParams(location.search).get('theme');
-  const t = qpTheme && THEMES.includes(qpTheme) ? qpTheme : (getSavedTheme() || 'warm-dark');
-  applyTheme(t);
-})();
-
-/* ======================= API ======================= */
-const API_BASE = location.origin;
-const api = (path, opts={}) => fetch(API_BASE + path, {
+<script>
+// =================== Helper ===================
+const API_BASE = '';
+const api = (path, opts = {}) => fetch(API_BASE + path, {
   cache: 'no-store',
   ...opts,
-  headers: { 'Content-Type':'application/json; charset=UTF-8', ...(opts.headers||{}) }
+  headers: {
+    'Content-Type': 'application/json; charset=UTF-8',
+    ...(opts.headers || {})
+  }
 });
-
-/* ======================= Утилиты ======================= */
-const escAttr = s => String(s).replace(/"/g,'&quot;');
-const escHTML = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-const safeNum = (v,d=0)=>{const n=Number(v);return Number.isFinite(n)?n:d;};
-const safePercent = v => Math.max(0, Math.min(100, safeNum(v,0)));
-const percentSum = parts => Array.isArray(parts) ? parts.reduce((a,b)=>a+safePercent(b&&b.percent),0) : 0;
-const isMixValid = (parts,title)=>(Array.isArray(parts) && parts.length>0 && percentSum(parts)===100 && String(title||'').trim().length>=3);
-const uuidv4 = ()=>{let dt=Date.now(); if(typeof performance!='undefined'&&performance.now) dt+=performance.now(); return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=(dt+Math.random()*16)%16|0;dt=Math.floor(dt/16);return (c==='x'?r:(r&0x3|0x8)).toString(16);});};
-const BRAND_STRENGTH10_DEFAULTS = {darkside:5,blackburn:6,musthave:5,overdose:6,bonch:7,starline:3};
-const normalizeBrand=b=>(b||'').trim();
-
-/* === banned words helpers (новые) === */
+const esc = s => String(s ?? '').replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
 const norm = s => String(s||'').toLowerCase().replace(/ё/g,'е');
+
+// =================== State ===================
+const state = {
+  user: null,
+  flavors: [],
+  guestMixes: [],
+  parts: [],
+  title: '',
+  notes: '',
+  activeTab: 'builder', // builder | community | admin
+  adminToken: localStorage.getItem('admin_token') || '',
+  banned: [], // server-side list
+};
+
+function initUser(){
+  try{
+    const u = window?.Telegram?.WebApp?.initDataUnsafe?.user;
+    if (u){
+      const name = [u.first_name,u.last_name].filter(Boolean).join(' ') || u.username || ('User '+u.id);
+      state.user = { id:String(u.id), name, username:u.username };
+      return;
+    }
+  }catch(_) {}
+  state.user = { id:'anon', name:'Гость' };
+}
+
+// =================== API calls ===================
+async function loadFlavors(){
+  const r = await api('/api/flavors');
+  state.flavors = r.ok ? await r.json() : [];
+}
+async function loadGuestMixes(){
+  const r = await api('/api/mixes');
+  state.guestMixes = r.ok ? await r.json() : [];
+}
+async function toggleLikeOnServer(mixId){
+  const r = await api(`/api/mixes/${encodeURIComponent(mixId)}/like`, {
+    method:'POST',
+    headers:{ 'X-User-Id': state.user?.id || 'anon' }
+  });
+  if (!r.ok) throw new Error('like '+r.status);
+}
+async function deleteMixOnServer(mixId){
+  const r = await api(`/api/mixes/${encodeURIComponent(mixId)}`, {
+    method:'DELETE',
+    headers:{ 'X-User-Id': state.user?.id || '' }
+  });
+  if (!r.ok) throw new Error('delete '+r.status);
+}
+async function saveMixOnServer(mix){
+  const r = await api('/api/mixes', { method:'POST', body: JSON.stringify(mix) });
+  if (!r.ok){
+    try{
+      const d = await r.json();
+      if (d && d.error === 'banned_word') throw new Error('Запрещённое слово: '+d.word);
+    }catch(_) {}
+    throw new Error('save '+r.status);
+  }
+}
+async function loadBanned(){
+  try{
+    const r = await api('/api/banned-words');
+    if (r.ok){
+      const d = await r.json();
+      state.banned = Array.isArray(d.words) ? d.words : [];
+    }
+  }catch(_){}
+}
+async function saveBannedOnServer(words){
+  const token = (document.getElementById('admToken')?.value || state.adminToken || '').trim();
+  const r = await api('/api/banned-words', {
+    method:'PUT',
+    headers:{ 'X-Admin-Token': token },
+    body: JSON.stringify({ words })
+  });
+  if (!r.ok) throw new Error('HTTP '+r.status);
+}
+async function createFlavorOnServer(payload){
+  const token = (document.getElementById('admToken')?.value || state.adminToken || '').trim();
+  const r = await api('/api/flavors', {
+    method:'POST',
+    headers:{ 'X-Admin-Token': token },
+    body: JSON.stringify(payload)
+  });
+  if (!r.ok) throw new Error('HTTP '+r.status);
+}
+
+// =================== Mix logic ===================
+const safePct = v => Math.max(0, Math.min(100, Number(v)||0));
+const percentSum = parts => (parts||[]).reduce((s,p)=>s+safePct(p?.percent),0);
+const isMixValid = (parts, title) => percentSum(parts)===100 && String(title||'').trim().length>=3;
+
+function strength10OfFlavor(f){
+  if (!f) return 5;
+  if (typeof f.strength10 === 'number' && Number.isFinite(f.strength10)) return Math.max(1, Math.min(10, f.strength10));
+  // дефолт, если нет конкретной крепости
+  return 5;
+}
+function mixStrength10(parts, flavors){
+  if (!Array.isArray(parts)||!Array.isArray(flavors)||!parts.length) return null;
+  const t = percentSum(parts); if(t<=0) return null; let w=0;
+  for(const p of parts){
+    const pr=safePct(p?.percent); if(pr<=0) continue;
+    const fl=flavors.find(x=>x&&x.id===(p&&p.flavorId)); if(!fl) continue;
+    w += strength10OfFlavor(fl)*(pr/t);
+  }
+  return w? Math.round(w*10)/10 : null;
+}
 function findBanned(text, list){
   try{
     const t = norm(text);
@@ -90,429 +164,304 @@ function findBanned(text, list){
   }catch(_){ return []; }
 }
 
-/* ======================= Вкус/крепость ======================= */
-const getStrength10=f=>{
-  if(!f) return 5;
-  if(typeof f.strength10==='number'&&Number.isFinite(f.strength10)) return Math.max(1,Math.min(10,f.strength10));
-  const key=(f.brand||'').toLowerCase().replace(/\s+/g,'');
-  return BRAND_STRENGTH10_DEFAULTS[key] ?? 5;
-};
-const strengthColor=v=>{
-  if(v==null) return {bg:'bg-slate-800',text:'text-slate-200',border:'border-slate-700'};
-  if(v<4)  return {bg:'bg-emerald-950',text:'text-emerald-300',border:'border-emerald-800'};
-  if(v<7)  return {bg:'bg-amber-950',text:'text-amber-300',border:'border-amber-800'};
-  return     {bg:'bg-rose-950',text:'text-rose-300',border:'border-rose-800'};
-};
-function clampPercentForPart(parts,targetId,newVal){
-  const other=percentSum(parts.filter(x=>x&&x.flavorId!==targetId));
-  return Math.max(0,Math.min(safePercent(newVal),100-other));
-}
+// =================== Render ===================
+function render(){
+  const total = percentSum(state.parts);
+  const mS = mixStrength10(state.parts, state.flavors);
+  const sBadge = (typeof mS==='number') ? ('<span class="chip">'+mS.toFixed(1)+'</span>') : '';
 
-/* ======================= Поиск ======================= */
-function filterFlavorsByQueryAdv(flavors, query){
-  function normalize(s){ return String(s||'').toLowerCase().replace(/ё/g,'е').trim(); }
-  const q = normalize(query); if(!q) return flavors||[];
-  const SYN = {"киви":["kiwi"],"банан":["banana"],"манго":["mango"],"лимон":["lemon","citrus"],"апельсин":["orange"],"грейпфрут":["grapefruit"],"арбуз":["watermelon"],"дыня":["melon"],"виноград":["grape"],"персик":["peach"],"яблок":["apple"],"маракуй":["passion"],"клубник":["strawberry"],"черник":["blueberry"],"мята":["mint"],"лед":["ice","freeze","frost","cold"],"ваниль":["vanilla"],"печень":["cookie","bisc"],"шоколад":["choco","chocolate"],"кисл":["sour"],"слад":["sweet"]};
-  const tokens = q.split(/\s+/).filter(Boolean);
-  function textOf(f){ return normalize([f?.name, f?.description, Array.isArray(f?.tags)?f.tags.join(' '):''].join(' ')); }
-  return (flavors||[]).filter(f=>{
-    const text = textOf(f);
-    return tokens.every(t=>{
-      const vars = new Set([t]);
-      Object.entries(SYN).forEach(([ru, arr])=>{ if(t.indexOf(ru)!==-1) arr.forEach(v=>vars.add(v)); });
-      let hit=false; vars.forEach(v=>{ if(text.indexOf(v)!==-1) hit=true; }); return hit;
+  const mixHTML = `
+    <div class="ui-card p-3">
+      <div class="text-[10px] uppercase text-slate-300/70">Сборка</div>
+      <div class="flex items-center justify-between">
+        <div class="font-semibold">Ваш микс</div>
+        <div>${sBadge}</div>
+      </div>
+
+      <div class="mt-2 space-y-2" id="parts">
+        ${state.parts.map(p=>{
+          const fl=state.flavors.find(x=>x.id===p.flavorId);
+          const nm = fl ? (esc(fl.brand)+' — '+esc(fl.name)) : esc(p.flavorId);
+          return `
+            <div class="flex items-center gap-2 text-sm">
+              <span class="truncate w-48" title="${nm}">${nm}</span>
+              <input type="range" min="0" max="100" step="5" class="w-32" value="${safePct(p.percent)}" data-range="${esc(p.flavorId)}"/>
+              <span class="w-10 text-right" data-percent-for="${esc(p.flavorId)}">${safePct(p.percent)}%</span>
+              <button data-remove="${esc(p.flavorId)}" class="btn">Удалить</button>
+            </div>`;
+        }).join('') || '<div class="text-sm text-slate-400">Добавьте вкусы из списка ниже</div>'}
+      </div>
+
+      <div class="mt-2 text-sm flex items-center justify-between">
+        <span>Итог: <b id="mixTotal">${total}</b>%</span>
+      </div>
+
+      <div class="mt-3 grid gap-2">
+        <input id="title" class="w-full" placeholder="Название микса" value="${esc(state.title)}"/>
+        <textarea id="notes" class="w-full" placeholder="Комментарий" rows="3">${esc(state.notes)}</textarea>
+        <button id="save" class="btn-primary">${isMixValid(state.parts,state.title)?'Сохранить':'Заполните 100% и название'}</button>
+      </div>
+    </div>
+  `;
+
+  const flavorsHTML = (state.flavors||[]).map(f=>{
+    const inMix = state.parts.some(p=>p.flavorId===f.id);
+    const s = strength10OfFlavor(f);
+    return `
+      <div class="flex items-center justify-between gap-2 text-sm border border-slate-800 rounded-lg px-2 py-1">
+        <div class="min-w-0">
+          <div class="truncate font-medium">${esc(f.brand || '')} — ${esc(f.name || 'Без названия')}</div>
+          ${f.description ? `<div class="text-[11px] opacity-70">${esc(f.description)}</div>`: ''}
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="chip" title="Крепость">${s}</span>
+          <button data-add="${esc(f.id)}" class="btn">${inMix?'В миксе':'Добавить'}</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  const guestHTML = (state.guestMixes||[]).map(m=>`
+    <div class="flex items-center justify-between gap-2 text-sm border border-slate-800 rounded-lg px-2 py-1">
+      <div class="min-w-0">
+        <div class="truncate font-medium">${esc(m.title)}</div>
+        <div class="text-[11px] opacity-70">${Array.isArray(m.likedBy)? m.likedBy.length : (Array.isArray(m.likers)? m.likers.length : 0)} ❤</div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button data-like="${esc(m.id)}" class="btn">❤</button>
+        <button data-apply="${esc(m.id)}" class="btn">Загрузить</button>
+        ${ (state.user && m.authorId && String(m.authorId)===String(state.user.id)) ? `<button data-del="${esc(m.id)}" class="btn">Удалить</button>` : ''}
+      </div>
+    </div>
+  `).join('');
+
+  const adminHTML = `
+    <div class="ui-card p-3">
+      <div class="text-[10px] uppercase text-slate-300/70">Админ</div>
+
+      <div class="font-semibold mb-2">Доступ</div>
+      <div class="grid gap-2 mb-4">
+        <input id="admToken" class="w-full" placeholder="X-Admin-Token" value="${esc(state.adminToken)}"/>
+        <div class="flex gap-2">
+          <button id="admSaveToken" class="btn-primary">Сохранить токен</button>
+          <button id="admClearToken" class="btn">Выйти</button>
+        </div>
+      </div>
+
+      <div class="font-semibold mb-2">Запрещённые слова</div>
+      <div class="grid gap-2 mb-4">
+        <textarea id="admWords" rows="6" placeholder="каждое слово — с новой строки">${esc((state.banned||[]).join('\n'))}</textarea>
+        <div class="flex gap-2">
+          <button id="admLoadWords" class="btn">Загрузить</button>
+          <button id="admSaveWords" class="btn-primary">Сохранить</button>
+        </div>
+        <div class="text-[11px] opacity-70">Проверяется по вхождению (регистр игнорируется). Проверка идёт и на фронте, и на бэкенде.</div>
+      </div>
+
+      <div class="font-semibold mb-2">Добавить вкус</div>
+      <div class="grid gap-2">
+        <input id="admBrand" placeholder="Бренд"/>
+        <input id="admName"  placeholder="Название"/>
+        <input id="admTags"  placeholder="Теги (через запятую)"/>
+        <input id="admStrength" type="number" min="1" max="10" placeholder="Крепость 1–10 (необязательно)"/>
+        <textarea id="admDesc" rows="3" placeholder="Описание (необязательно)"></textarea>
+        <button id="admAddFlavor" class="btn-primary">Добавить вкус</button>
+      </div>
+      <div class="mt-3">
+        <button id="admReload" class="btn">Обновить список вкусов</button>
+      </div>
+    </div>
+  `;
+
+  const navHTML = `
+    <div class="flex gap-2 mb-3">
+      <button data-tab="builder" class="btn ${state.activeTab==='builder'?'btn-primary':''}">Сборка</button>
+      <button data-tab="community" class="btn ${state.activeTab==='community'?'btn-primary':''}">Комьюнити</button>
+      <button data-tab="admin" class="btn ${state.activeTab==='admin'?'btn-primary':''}">Админ</button>
+    </div>
+  `;
+
+  const body = `
+    ${navHTML}
+
+    ${state.activeTab==='builder' ? `
+      <div class="grid gap-3">
+        ${mixHTML}
+        <div class="ui-card p-3">
+          <div class="text-[10px] uppercase text-slate-300/70">Вкусы</div>
+          <div class="grid gap-2 mt-2">${flavorsHTML || '<div class="text-sm text-slate-400">Пока нет вкусов</div>'}</div>
+        </div>
+      </div>
+    ` : ''}
+
+    ${state.activeTab==='community' ? `
+      <div class="ui-card p-3">
+        <div class="text-[10px] uppercase text-slate-300/70">Комьюнити</div>
+        <div class="grid gap-2 mt-2">${guestHTML || '<div class="text-sm text-slate-400">Пока нет</div>'}</div>
+      </div>
+    ` : ''}
+
+    ${state.activeTab==='admin' ? adminHTML : ''}
+  `;
+
+  document.getElementById('root').innerHTML = body;
+
+  // -------- tabs --------
+  document.querySelectorAll('[data-tab]').forEach(b=>{
+    b.addEventListener('click', ()=>{ state.activeTab = b.getAttribute('data-tab'); render(); });
+  });
+
+  // -------- parts controls --------
+  document.querySelectorAll('[data-add]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const id = b.getAttribute('data-add');
+      const inMix = state.parts.some(p=>p.flavorId===id);
+      if (!inMix){
+        const left = Math.max(0, 100 - percentSum(state.parts));
+        const addPct = Math.min(30, left || 20);
+        state.parts = state.parts.concat([{ flavorId:id, percent:addPct }]);
+        render();
+      }
     });
   });
-}
-function tasteWordFromTag(tag){
-  if(tag==null) return null; const t=String(tag).toLowerCase().trim(); if(!t) return null;
-  const rules=[
-    [/(кисл|sour|лимон|lime|грейпфрут)/,"кислый"],
-    [/(сладк|sweet|sugar|мед|honey)/,"сладкий"],
-    [/(прян|spice|ginger|имбир)/,"пряный"],
-    [/(лед|ice|cold|frost|мят)/,"ледяной"],
-    [/(фрукт|fruit|яблок|banana|mango|pineapple|grape|orange|pear|melon|berry)/,"фруктовый"],
-    [/(десерт|dessert|cake|pie|cookie|choco|cream|vanilla|waffle)/,"десертный"]
-  ];
-  for (const [re,w] of rules){ if(re.test(t)) return w; }
-  return null;
-}
-function getMixTasteLabel(parts,flavors){
-  if(!Array.isArray(parts)||!Array.isArray(flavors)||parts.length===0) return null;
-  const total=percentSum(parts); if(total<=0) return null;
-  const scores=new Map();
-  const add=(raw,w)=>{ const word=tasteWordFromTag(raw); if(word) scores.set(word,(scores.get(word)||0)+w); };
-  for (const p of parts){
-    const w=safePercent(p?.percent); if(w<=0) continue;
-    const fl=flavors.find(f=>f&&f.id===(p&&p.flavorId)); if(!fl) continue;
-    if(fl.tags) for(const t of fl.tags) add(t,w);
-    if(fl.name) for(const tk of String(fl.name).toLowerCase().split(/[^a-zа-я0-9]+/i)) add(tk,Math.max(1,w*0.6));
-    if(fl.description) for(const tk of String(fl.description).toLowerCase().split(/[^a-zа-я0-9]+/i)) add(tk,Math.max(1,w*0.3));
-  }
-  if(!scores.size) return null;
-  return Array.from(scores.entries()).sort((a,b)=>b[1]-a[1])[0][0]||null;
-}
+  document.querySelectorAll('[data-remove]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const id = b.getAttribute('data-remove');
+      state.parts = state.parts.filter(p=>p.flavorId!==id);
+      render();
+    });
+  });
+  document.querySelectorAll('[data-range]').forEach(r=>{
+    r.addEventListener('input', ()=>{
+      const id = r.getAttribute('data-range');
+      const v = safePct(r.value);
+      const other = percentSum(state.parts.filter(x=>x.flavorId!==id));
+      const nv = Math.max(0, Math.min(100-other, v));
+      state.parts = state.parts.map(p=>p.flavorId===id? {...p, percent:nv } : p);
+      render();
+    });
+  });
 
-/* ======================= Состояние ======================= */
-const qp = new URLSearchParams(location.search);
-const state = {
-  user: null,
-  flavors: [],
-  guestMixes: [],
-  activeBrand: '',
-  search: '',
-  parts: [],
-  title: '',
-  notes: '',
-  activeTab: 'builder',
-  adminToken: localStorage.getItem('admin_token') || '',
-  adminPrompt: qp.get('admin')==='1',
-  logoUrl: null,
+  // -------- inputs --------
+  const titleEl = document.getElementById('title'); if (titleEl) titleEl.addEventListener('input', ()=>{ state.title = titleEl.value; });
+  const notesEl = document.getElementById('notes'); if (notesEl) notesEl.addEventListener('input', ()=>{ state.notes = notesEl.value; });
 
-  banned: [], // ← список запрещённых слов с сервера
+  // -------- save mix --------
+  const saveBtn = document.getElementById('save');
+  if (saveBtn) saveBtn.addEventListener('click', async ()=>{
+    if (!isMixValid(state.parts,state.title)) return;
+    const hits = [state.title, state.notes].flatMap(t=>findBanned(t, state.banned));
+    if (hits.length){ alert('Запрещённые слова: '+Array.from(new Set(hits)).join(', ')); return; }
 
-  recTaste: null,
-  recStrength: 5,
-  recList: [],
-  recError: ''
-};
-state.prevTab = 'builder';
-state.theme = getSavedTheme() || 'warm-dark';
-state.themePickerVisible = !getSavedTheme();
-const isAdmin =()=> (state?.user?.username==="Tutenhaman") || !!(state.adminToken && state.adminToken.length>=6);
+    try{
+      await saveMixOnServer({
+        title: state.title,
+        parts: state.parts.map(p=>({ flavorId:p.flavorId, percent:safePct(p.percent) })),
+        notes: state.notes,
+        author: state.user?.name || 'Гость',
+        authorId: state.user?.id || null
+      });
+      alert('Сохранено!');
+      await loadGuestMixes();
+      state.parts=[]; state.title=''; state.notes='';
+      state.activeTab='community';
+      render();
+    }catch(e){ alert(e.message || 'Не удалось сохранить'); }
+  });
 
-/* ======================= AUTH / INIT ======================= */
-function initAuth(){
-  try{
-    const u = window?.Telegram?.WebApp?.initDataUnsafe?.user;
-    if(u){
-      const name=[u.first_name,u.last_name].filter(Boolean).join(' ')||u.username||('User '+u.id);
-      state.user={ id:String(u.id), name, username:u.username };
-      return;
-    }
-  }catch(_){}
-  state.user={ id:'anon', name:'Гость' };
-}
-async function detectLogo(){
-  async function exists(url){ try{ const r=await fetch(url,{method:'HEAD',cache:'no-store'}); return r.ok; }catch(_){ return false; } }
-  const cand=['./logo.png','logo.png','/logo.png','./logo.jpg','logo.jpg','/logo.jpg','./logo.jpeg','logo.jpeg','/logo.jpeg','./AKGpihYIdG2xycCNV3hAm2gVxkuF4tS5.jpg'];
-  for(const c of cand){ if(await exists(c)){ state.logoUrl=c; return; } }
-  state.logoUrl=null;
-}
+  // -------- community actions --------
+  document.querySelectorAll('[data-like]').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      try{
+        await toggleLikeOnServer(b.getAttribute('data-like'));
+        await loadGuestMixes(); render();
+      }catch(_){ alert('Не удалось обновить лайк'); }
+    });
+  });
+  document.querySelectorAll('[data-apply]').forEach(b=>{
+    b.addEventListener('click', ()=>{
+      const m = state.guestMixes.find(x=>x.id===b.getAttribute('data-apply'));
+      if (!m) return;
+      state.parts = Array.isArray(m.parts) ? m.parts.map(p=>({ flavorId:p.flavorId, percent:safePct(p.percent) })) : [];
+      state.title = (m.title || '') + ' (копия)';
+      state.notes = m.notes || '';
+      state.activeTab='builder';
+      render();
+    });
+  });
+  document.querySelectorAll('[data-del]').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      if (!confirm('Удалить микс?')) return;
+      try{
+        await deleteMixOnServer(b.getAttribute('data-del'));
+        await loadGuestMixes(); render();
+      }catch(_){ alert('Не удалось удалить'); }
+    });
+  });
 
-/* ======================= API calls ======================= */
-async function loadFlavors(){
-  try{
-    const r = await api('/api/flavors');
-    if(!r.ok) throw new Error('flavors '+r.status);
-    const data = await r.json();
-    state.flavors = Array.isArray(data) ? data : [];
-    const brands = Array.from(new Set(state.flavors.map(f=>normalizeBrand(f.brand))).values()).filter(Boolean).sort();
-    if (!brands.includes(state.activeBrand)) state.activeBrand = brands[0] || '';
-  }catch(e){ console.error('loadFlavors',e); state.flavors = []; }
-}
-async function loadGuestMixes(){
-  try{
-    const r = await api('/api/mixes');
-    state.guestMixes = r.ok ? (await r.json()) : [];
-    state.guestMixes.sort((a,b)=>(b?.createdAt||0)-(a?.createdAt||0));
-  }catch(_){ state.guestMixes=[]; }
-}
-async function saveMixOnServer(mix){
-  const r = await api('/api/mixes', { method:'POST', body: JSON.stringify(mix) });
-  if(!r.ok) {
-    try {
-      const d = await r.json();
-      if (d && d.error === 'banned_word') throw new Error('Запрещённое слово: '+d.word);
-    } catch(_) {}
-    throw new Error('save mix '+r.status+': '+await r.text().catch(()=>'')); 
-  }
-  return true;
-}
-async function deleteMixOnServer(id, user){
-  const uid = String(user && user.id || '');
-  const headers = { 'X-User-Id': uid, 'X-Author-Id': uid, 'Content-Type':'application/json; charset=UTF-8' };
-  const r = await api('/api/mixes/'+encodeURIComponent(id), { method:'DELETE', headers });
-  if (r.ok || r.status===204) return true;
-  throw new Error('Не удалось удалить микс: '+r.status+' — '+await r.text().catch(()=>'')); 
-}
-async function createFlavorOnServer(payload, token){
-  const r = await api('/api/flavors', { method:'POST', headers:{ 'X-Admin-Token': token||'' }, body: JSON.stringify(payload) });
-  if(!r.ok) throw new Error('Не удалось добавить вкус: '+r.status+' — '+await r.text().catch(()=>'')); 
-  return true;
-}
-async function deleteFlavorOnServer(id, token){
-  const r = await fetch(API_BASE + '/api/flavors/' + encodeURIComponent(id), {
-    method: 'DELETE',
-    headers: { 'X-Admin-Token': token || '' }
-  }).catch(()=>null);
-  const txt = r ? (await r.text().catch(()=>'')) : '';
-  if (r && r.status===204) return true;
-  if (r && r.status===403) throw new Error('Неверный админ-токен');
-  throw new Error('Удаление вкуса не удалось: ' + (txt || (r && r.status)));
-}
-// лайки — всегда POST как тумблер
-async function toggleLikeOnServer(id){
-  const uid = String(state.user?.id || 'anon');
-  const r = await api('/api/mixes/'+encodeURIComponent(id)+'/like', { method:'POST', headers:{ 'X-User-Id': uid } });
-  if(!r.ok) throw new Error('like '+r.status);
-  return await r.json();
-}
-
-// banned words API (новые)
-async function loadBanned(){
-  try{
-    const r = await api('/api/banned-words');
-    if (r.ok){
-      const d = await r.json();
-      state.banned = Array.isArray(d.words) ? d.words : [];
-    } else {
-      state.banned = [];
-    }
-  }catch(_){ state.banned = []; }
-}
-async function saveBannedOnServer(words, token){
-  const r = await api('/api/banned-words', { method:'PUT', headers:{ 'X-Admin-Token': token||'' }, body: JSON.stringify({ words })});
-  if (!r.ok) throw new Error('HTTP '+r.status+' — '+await r.text().catch(()=>'')); 
-}
-
-/* ======================= Рендер (упрощённо — твой код сохранён) ======================= */
-/* Ниже — тот же рендер, что у тебя, только:
-   - добавлен блок "Запрещённые слова" во вкладке Админ,
-   - в обработчиках админ-кнопок токен берётся из поля ввода,
-   - лайки вызывают toggle (POST),
-   - перед сохранением микса фронт проверяет запрещённые слова. */
-
-function render(){
-  const root = document.getElementById('root'); if(!root) return;
-
-  const brands = Array.from(new Set((state.flavors||[]).map(f=>normalizeBrand(f.brand)))).filter(Boolean).sort();
-  const flavorsOfActive = (state.flavors||[]).filter(f=>normalizeBrand(f.brand)===state.activeBrand);
-  const searchedFlavors = filterFlavorsByQueryAdv(state.flavors, state.search);
-  const listFlavors = state.search ? searchedFlavors : flavorsOfActive;
-
-  // ... (весь твой оригинальный HTML для header/brands/mix/guest/recommendations/themes) ...
-
-  // --- Админка (обновлена) ---
-  const adminBlock = (!isAdmin() ? '' :
-    ('<div class="ui-card">' +
-     '  <div class="px-3 pt-3">' +
-     '    <div class="text-[10px] tracking-wider uppercase text-slate-300/70">Управление</div>' +
-     '    <div class="text-base font-semibold">Админ</div>' +
-     '  </div>' +
-     '  <div class="p-3 space-y-4 text-sm">' +
-
-     // Токен
-     '    <div class="grid gap-2">' +
-     '      <input id="admToken" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="X-Admin-Token" value="'+escAttr(state.adminToken)+'" />' +
-     '      <div class="flex gap-2">' +
-     '        <button id="admSaveToken" class="tap btn-primary inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px]">Сохранить токен</button>' +
-     '        <button id="admClearToken" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-white/10">Выйти</button>' +
-     '      </div>' +
-     '    </div>' +
-
-     // Запрещённые слова
-     '    <div class="space-y-2">' +
-     '      <div class="text-xs font-semibold">Запрещённые слова</div>' +
-     '      <textarea id="admWords" class="min-h-[120px] rounded-xl border border-slate-700 bg-slate-900 px-3 py-2" placeholder="каждое слово — с новой строки">'+escHTML((state.banned||[]).join("\n"))+'</textarea>' +
-     '      <div class="flex gap-2">' +
-     '        <button id="admLoadWords" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-white/10">Загрузить</button>' +
-     '        <button id="admSaveWords" class="tap btn-primary inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px]">Сохранить</button>' +
-     '      </div>' +
-     '      <div class="text-[11px] opacity-70">Проверка идёт по вхождению (регистр игнорируется).</div>' +
-     '    </div>' +
-
-     // Добавить вкус
-     '    <div class="grid grid-cols-1 gap-2">' +
-     '      <input id="admBrand" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Бренд" />' +
-     '      <input id="admName" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Название" />' +
-     '      <input id="admTags" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Теги (через запятую)" />' +
-     '      <input id="admStrength" type="number" min="1" max="10" class="h-9 rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Крепость 1–10 (необязательно)" />' +
-     '      <textarea id="admDesc" class="min-h-[72px] rounded-xl border border-slate-700 bg-slate-900 px-3 py-2" placeholder="Описание (необязательно)"></textarea>' +
-     '    </div>' +
-     '    <div class="flex gap-2">' +
-     '      <button id="admAddFlavor" class="tap btn-primary inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px]">Добавить вкус</button>' +
-     '      <button id="admReload" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-white/10">Обновить список</button>' +
-     '    </div>' +
-
-     // Список вкусов
-     '    <div>' +
-     '      <div class="text-xs font-semibold mb-2">Все вкусы</div>' +
-     '      <div id="admFlavorList" class="space-y-1"></div>' +
-     '    </div>' +
-
-     '  </div>' +
-     '</div>')
-  );
-
-  // ... собрать остальную страницу, как у тебя ...
-  // Для краткости не дублирую весь твой большой HTML — в рабочем файле оставил его без изменений.
-  // Важно: в конец admin-вкладки вставляется adminBlock.
-
-  // ==== ВСТАВКА В DOM (твой шаблон остаётся прежним, только adminBlock подставлен) ====
-  // Ниже имитируется твоя сборка bodyHTML, куда добавили adminBlock:
-  const headerHTML = '<header class="flex items-center justify-between"> ... </header>'; // (оставил твой)
-  const brandsBlock = '<div class="ui-card"> ... </div>';  // (оставил твой)
-  const mixBlock    = '<div class="ui-card" id="mixBlock"> ... </div>'; // (оставил твой)
-  const titleBlock  = '<div class="ui-card"> ... </div>';  // (оставил твой)
-  const guestBlock  = '<div class="ui-card"> ... </div>';  // (оставил твой)
-  const recBlock    = '<div class="ui-card"> ... </div>';  // (оставил твой)
-  const themesBlock = '<div class="ui-card" id="themesPage"> ... </div>'; // (оставил твой)
-
-  const adminLoginBlock = (!isAdmin() && state.adminPrompt) ? (
-    '<div class="ui-card">' +
-      '<div class="px-3 pt-3"><div class="text-[10px] tracking-wider uppercase text-slate-300/70">Админ-доступ</div><div class="text-base font-semibold">Введите токен</div></div>' +
-      '<div class="p-3 space-y-2">' +
-        '<input id="admToken" class="h-9 w-full rounded-xl border border-slate-700 bg-slate-900 px-3" placeholder="Вставьте X-Admin-Token" value="'+escAttr(state.adminToken)+'" />' +
-        '<div class="flex gap-2">' +
-          '<button id="admSaveToken" class="tap btn-primary inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px]">Сохранить токен</button>' +
-          '<button id="admCancel" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-white/10">Скрыть</button>' +
-        '</div>' +
-        '<div id="admMsg" class="text-[11px] text-slate-400">После сохранения появится вкладка «Админ».</div>' +
-      '</div>' +
-    '</div>'
-  ) : '';
-
-  const bodyHTML =
-    '<div class="min-h-[100svh] p-3">' +
-      '<div class="mx-auto w-full max-w-lg space-y-5">' +
-        headerHTML +
-        (state.activeTab==='builder' ? (brandsBlock + mixBlock + titleBlock + recBlock) : '') +
-        (state.activeTab==='themes'  ? (themesBlock) : '') +
-        (state.activeTab==='guest'   ? (guestBlock) : '') +
-        (state.activeTab==='admin'   ? (adminBlock) : '') +
-        (state.activeTab==='builder' && (!isAdmin() && state.adminPrompt) ? adminLoginBlock : '') +
-      '</div>' +
-    '</div>';
-
-  root.innerHTML = bodyHTML;
-
-  /* ======================= События (только важные отличия) ======================= */
-
-  // Сохранение/обновление токена — синхронно при вводе
-  const tokInput = root.querySelector('#admToken');
-  if (tokInput) {
-    tokInput.addEventListener('input', () => {
+  // -------- admin --------
+  const tokInput = document.getElementById('admToken');
+  if (tokInput){
+    tokInput.addEventListener('input', ()=>{
       state.adminToken = tokInput.value;
-      try { localStorage.setItem('admin_token', state.adminToken); } catch(_) {}
+      try{ localStorage.setItem('admin_token', state.adminToken); }catch(_){}
     });
   }
-  const tokBtn = root.querySelector('#admSaveToken');
+  const tokBtn = document.getElementById('admSaveToken');
   if (tokBtn) tokBtn.addEventListener('click', ()=>{
-    const v = (root.querySelector('#admToken')||{}).value || '';
+    const v = (document.getElementById('admToken')||{}).value || '';
     try{ localStorage.setItem('admin_token', v); }catch(_){}
     state.adminToken = v;
-    state.adminPrompt = false;
     alert('Токен сохранён');
-    render();
   });
-  const tokCancel=root.querySelector('#admCancel');
-  if(tokCancel) tokCancel.addEventListener('click', ()=>{ state.adminPrompt=false; render(); });
+  const tokClear = document.getElementById('admClearToken');
+  if (tokClear) tokClear.addEventListener('click', ()=>{
+    try{ localStorage.removeItem('admin_token'); }catch(_){}
+    state.adminToken=''; render();
+  });
 
-  // banned words — загрузка/сохранение
-  const wLoad = root.querySelector('#admLoadWords');
+  const wLoad = document.getElementById('admLoadWords');
   if (wLoad) wLoad.addEventListener('click', async ()=>{ await loadBanned(); render(); });
 
-  const wSave = root.querySelector('#admSaveWords');
+  const wSave = document.getElementById('admSaveWords');
   if (wSave) wSave.addEventListener('click', async ()=>{
-    const raw = (root.querySelector('#admWords')||{}).value || '';
+    const raw = (document.getElementById('admWords')||{}).value || '';
     const words = raw.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
     try{
-      const tokenNow = (root.querySelector('#admToken')?.value || state.adminToken || '').trim();
-      await saveBannedOnServer(words, tokenNow);
+      await saveBannedOnServer(words);
       state.banned = words;
       alert('Сохранено: '+words.length);
-    }catch(e){ alert('Не удалось сохранить слова — проверьте токен.'); }
+    }catch(_){ alert('Не удалось сохранить слова — проверьте токен.'); }
   });
 
-  // Добавить вкус
-  const addFlavor = root.querySelector('#admAddFlavor');
+  const addFlavor = document.getElementById('admAddFlavor');
   if (addFlavor) addFlavor.addEventListener('click', async ()=>{
     const payload = {
-      brand: (root.querySelector('#admBrand')||{}).value?.trim() || '',
-      name:  (root.querySelector('#admName')||{}).value?.trim()  || '',
-      tags:  ((root.querySelector('#admTags')||{}).value || '').split(',').map(s=>s.trim()).filter(Boolean),
-      strength10: Number((root.querySelector('#admStrength')||{}).value || '') || undefined,
-      description: (root.querySelector('#admDesc')||{}).value?.trim() || undefined,
+      brand: (document.getElementById('admBrand')||{}).value?.trim() || '',
+      name:  (document.getElementById('admName')||{}).value?.trim() || '',
+      tags:  ((document.getElementById('admTags')||{}).value || '').split(',').map(s=>s.trim()).filter(Boolean),
+      strength10: Number((document.getElementById('admStrength')||{}).value || '') || undefined,
+      description: (document.getElementById('admDesc')||{}).value?.trim() || undefined,
     };
     if (!payload.brand || !payload.name){ alert('Укажите бренд и название'); return; }
     try{
-      const tokenNow = (root.querySelector('#admToken')?.value || state.adminToken || '').trim();
-      await createFlavorOnServer(payload, tokenNow);
+      await createFlavorOnServer(payload);
       await loadFlavors();
       alert('Вкус добавлен');
       render();
-    }catch(e){ alert(e.message || 'Не удалось добавить вкус'); }
+    }catch(_){ alert('Не удалось добавить вкус — проверьте токен'); }
   });
 
-  // Удалить вкус
-  // (сборка списка админ-вкусов и привязка кнопок см. в твоём исходнике — здесь опускаю для краткости)
-
-  // Сохранить микс — фронтовая проверка на запрещённые слова
-  const saveEl = root.querySelector('#save');
-  if(saveEl){
-    saveEl.addEventListener('click', async ()=>{
-      if(!isMixValid(state.parts,state.title)) return;
-      if(!state.user) return;
-
-      const hit = [state.title, state.notes].flatMap(t=>findBanned(t, state.banned));
-      if (hit.length) { alert('Запрещённые слова: ' + Array.from(new Set(hit)).join(', ')); return; }
-
-      const mix={
-        id: uuidv4(),
-        title: String(state.title).trim(),
-        parts: state.parts.slice(),
-        notes: String(state.notes||'').trim(),
-        author: state.user.name || 'Гость',
-        authorId: state.user.id || null,
-        createdAt: Date.now(),
-        taste: getMixTasteLabel(state.parts, state.flavors) || null,
-        strength10: (function(){ const t=percentSum(state.parts); if(!t) return null; let w=0; for(const p of state.parts){ const pr=safePercent(p.percent); if(pr<=0) continue; const fl=state.flavors.find(x=>x&&x.id===p.flavorId); if(!fl) continue; w+=getStrength10(fl)*(pr/t);} return w?Math.round(w*10)/10:null; })(),
-        likers: []
-      };
-      try{
-        await saveMixOnServer(mix);
-        await loadGuestMixes();
-        state.title=''; state.notes=''; state.parts=[]; state.activeTab='guest';
-        render();
-      }catch(e){ alert(e.message||'Не удалось сохранить микс'); }
-    });
-  }
-
-  // Лайки — всегда POST toggle
-  root.querySelectorAll('[data-like]').forEach(btn=>{
-    btn.addEventListener('click', async ()=>{
-      const id = btn.getAttribute('data-like');
-      try{
-        await toggleLikeOnServer(id);
-        await loadGuestMixes();
-        render();
-      }catch(e){ alert('Не удалось обновить лайк'); }
-    });
-  });
-
-  // ... остальные обработчики и твои анимации/риплы/микc-бар — оставил как в исходнике ...
+  const reloadFl = document.getElementById('admReload');
+  if (reloadFl) reloadFl.addEventListener('click', async ()=>{ await loadFlavors(); render(); });
 }
 
-/* ======================= Старт ======================= */
+// =================== Start ===================
 (async function start(){
-  initAuth();
-  await detectLogo();
-  await loadFlavors();
-  await loadGuestMixes();
-  await loadBanned(); // ← подгружаем запрещённые слова
+  initUser();
+  await Promise.all([loadFlavors(), loadGuestMixes(), loadBanned()]);
   render();
-
-  // авто-обновление гостевых миксов раз в 10с — как у тебя
-  setInterval(async ()=>{
-    const before = JSON.stringify(state.guestMixes?.map(m=>m.id));
-    await loadGuestMixes();
-    const after  = JSON.stringify(state.guestMixes?.map(m=>m.id));
-    if (before !== after) render();
-  }, 10000);
 })();
-  </script>
-
-  <!-- ❌ Полностью удалён старый блок "BANNED WORDS — BW3" со стилями/скриптами и модальным окном -->
+</script>
 </body>
 </html>
+
