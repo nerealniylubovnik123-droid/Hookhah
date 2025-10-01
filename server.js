@@ -7,7 +7,7 @@ const cors = require("cors");
 const app = express();
 const PORT = process.env.PORT || 8080;
 
-app.use(cors()); // разрешаем CORS со всех источников
+app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 
 // ==== статика (если захотите отдавать фронт с Render) ====
@@ -28,11 +28,6 @@ function writeJSON(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
 }
 
-// создадим пустые файлы, если нет
-if (!fs.existsSync(FLAVORS_FILE)) writeJSON(FLAVORS_FILE, []);
-if (!fs.existsSync(MIXES_FILE))   writeJSON(MIXES_FILE, []);
-
-
 // ---- Admin auth helper: allow by token OR by username 'Tutenhaman' ----
 function isAdminReq(req){
   try{
@@ -43,6 +38,10 @@ function isAdminReq(req){
     return allowByUser || allowByToken;
   }catch(_){ return false; }
 }
+
+// создадим пустые файлы, если нет
+if (!fs.existsSync(FLAVORS_FILE)) writeJSON(FLAVORS_FILE, []);
+if (!fs.existsSync(MIXES_FILE))   writeJSON(MIXES_FILE,   []);
 
 // ==== Health ====
 app.get("/healthz", (req, res) => {
@@ -55,8 +54,7 @@ app.get("/api/flavors", (req, res) => {
 });
 
 app.post("/api/flavors", (req, res) => {
-  if (!isAdminReq(req)) { return res.status(403).json({ error: "Forbidden (bad admin token)" }); });
-  }
+  if (!isAdminReq(req)) { return res.status(403).json({ error: "Forbidden (bad admin token)" }); }
   const flavor = req.body || {};
   if (!flavor.brand || !flavor.name) {
     return res.status(400).json({ error: "brand and name are required" });
@@ -86,10 +84,16 @@ app.delete("/api/flavors/:id", (req, res) => {
   res.status(204).end();
 });
 
-
 // ==== Mixes ====
+function ensureLikeAliases(mix) {
+  if (!mix) return mix;
+  if (!Array.isArray(mix.likedBy)) mix.likedBy = Array.isArray(mix.likers) ? mix.likers.slice() : [];
+  mix.likesCount = Array.isArray(mix.likedBy) ? mix.likedBy.length : 0;
+  return mix;
+}
+
 app.get("/api/mixes", (req, res) => {
-  const mixes = readJSON(MIXES_FILE, []);
+  const mixes = readJSON(MIXES_FILE, []).map(ensureLikeAliases);
   mixes.sort((a,b) => (b?.createdAt||0) - (a?.createdAt||0));
   res.json(mixes);
 });
@@ -98,7 +102,7 @@ app.post("/api/mixes", (req, res) => {
   const body = req.body || {};
   const mixes = readJSON(MIXES_FILE, []);
   const id = String(Date.now()) + Math.random().toString(16).slice(2);
-  const mix = {
+  const mix = ensureLikeAliases({
     id,
     title: String(body.title || "Без названия").slice(0, 120),
     parts: Array.isArray(body.parts) ? body.parts : [],
@@ -107,8 +111,9 @@ app.post("/api/mixes", (req, res) => {
     authorId: body.authorId == null ? null : String(body.authorId),
     createdAt: Date.now(),
     taste: body.taste ?? null,
-    strength10: body.strength10 ?? null
-  };
+    strength10: body.strength10 ?? null,
+    likedBy: Array.isArray(body.likedBy) ? body.likedBy : (Array.isArray(body.likers) ? body.likers : [])
+  });
   mixes.push(mix);
   writeJSON(MIXES_FILE, mixes);
   res.json(mix);
@@ -137,32 +142,20 @@ app.delete("/api/mixes/:id", (req, res) => {
   return res.status(403).json({ error: "Forbidden" });
 });
 
-// SPA fallback (если фронт в /public на Render)
-if (fs.existsSync(PUBLIC_DIR)) {
-  app.get("*", (req, res) => {
-    res.sendFile(path.join(PUBLIC_DIR, "index.html"));
-  });
-}
-
-
-// Like / Unlike a mix
-app.post('/api/mixes/:id/like', (req, res) => {
+// Лайки — тумблер (POST)
+app.post("/api/mixes/:id/like", (req, res) => {
   const id = String(req.params.id);
-  const userId = String(req.header('X-User-Id') || 'anon');
+  const userId = String(req.header("X-User-Id") || "anon");
   const mixes = readJSON(MIXES_FILE, []);
   const i = mixes.findIndex(m => m && m.id === id);
-  if (i === -1) return res.status(404).json({ error:'Not found' });
-  const mix = mixes[i];
-  if (!Array.isArray(mix.likedBy)) mix.likedBy = [];
+  if (i === -1) return res.status(404).json({ error: "Not found" });
+  const mix = ensureLikeAliases(mixes[i]);
+
   const idx = mix.likedBy.indexOf(userId);
   let liked;
-  if (idx >= 0) {
-    mix.likedBy.splice(idx, 1);
-    liked = false;
-  } else {
-    mix.likedBy.push(userId);
-    liked = true;
-  }
+  if (idx >= 0) { mix.likedBy.splice(idx, 1); liked = false; }
+  else { mix.likedBy.push(userId); liked = true; }
+
   mix.likesCount = mix.likedBy.length;
   mixes[i] = mix;
   writeJSON(MIXES_FILE, mixes);
