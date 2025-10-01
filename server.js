@@ -1,4 +1,5 @@
-// server.js — Hookhah backend (Render/Node)
+// server.js — Hookah backend
+// Node >= 16
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
@@ -10,33 +11,37 @@ const PORT = process.env.PORT || 8080;
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 
-// ==== статика (по желанию) ====
+// ====== Static (optional) ======
 const PUBLIC_DIR = path.join(__dirname, "public");
 if (fs.existsSync(PUBLIC_DIR)) {
   app.use(express.static(PUBLIC_DIR));
 }
 
-// ==== JSON файлы ====
-const FLAVORS_FILE   = path.join(__dirname, "flavors.json");
-const MIXES_FILE     = path.join(__dirname, "guest_mixes.json");
-const STOP_WORDS_FILE= path.join(__dirname, "stop_words.json");
+// ====== Data files ======
+const FLAVORS_FILE     = path.join(__dirname, "flavors.json");
+const MIXES_FILE       = path.join(__dirname, "guest_mixes.json");
+const STOP_WORDS_FILE  = path.join(__dirname, "stop_words.json");
 
+// create if missing
+function writeJSON(file, data) {
+  fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
+}
 function readJSON(file, fallback = []) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); }
   catch { return fallback; }
 }
-function writeJSON(file, data) {
-  fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
-}
+if (!fs.existsSync(FLAVORS_FILE))    writeJSON(FLAVORS_FILE, []);
+if (!fs.existsSync(MIXES_FILE))      writeJSON(MIXES_FILE,   []);
+if (!fs.existsSync(STOP_WORDS_FILE)) writeJSON(STOP_WORDS_FILE, { words: [] });
 
-// ---- Admin auth helper ----
-// Пропускаем по:
-// 1) точному токену, если ADMIN_TOKEN задан;
-// 2) иначе — любому непустому токену длиной >= 6;
-// 3) либо по username 'Tutenhaman'.
+// ====== Admin auth helper ======
+// Разрешаем:
+// 1) точный токен, если ADMIN_TOKEN задан;
+// 2) иначе — любой непустой токен длиной >= 6 (удобно в dev);
+// 3) имя пользователя 'Tutenhaman' (через заголовки X-User-Name/X-Username).
 function isAdminReq(req) {
   try {
-    const token = String(req.header("X-Admin-Token") || "");
+    const token = String(req.header("X-Admin-Token") || "").trim();
     const rawName =
       (req.header("X-User-Name") ||
        req.header("X-Username")  ||
@@ -45,13 +50,11 @@ function isAdminReq(req) {
        req.query.username        ||
        ""
       ).toString();
-    const norm = rawName.trim().replace(/^@/, "").toLowerCase();
-    const allowByUser = norm === "tutenhaman";
+    const normUser = rawName.trim().replace(/^@/, "").toLowerCase();
+    const allowByUser = normUser === "tutenhaman";
 
-    const envTok = process.env.ADMIN_TOKEN || "";
-    const allowByToken = envTok
-      ? (token && token === envTok)
-      : (token && token.length >= 6);
+    const envTok = String(process.env.ADMIN_TOKEN || "").trim();
+    const allowByToken = envTok ? (token === envTok) : (token && token.length >= 6);
 
     return allowByUser || allowByToken;
   } catch {
@@ -59,17 +62,56 @@ function isAdminReq(req) {
   }
 }
 
-// создаём файлы, если нет
-if (!fs.existsSync(FLAVORS_FILE))    writeJSON(FLAVORS_FILE, []);
-if (!fs.existsSync(MIXES_FILE))      writeJSON(MIXES_FILE,   []);
-if (!fs.existsSync(STOP_WORDS_FILE)) writeJSON(STOP_WORDS_FILE, { words: [] });
-
-// ==== Health ====
+// ====== Health ======
 app.get("/healthz", (req, res) => {
   res.json({ ok: true, time: Date.now(), uptime: process.uptime() });
 });
 
-// ==== Flavors ====
+// ====== Stop-words helpers ======
+function sanitizeWords(list) {
+  const out = [];
+  const seen = new Set();
+  (Array.isArray(list) ? list : []).forEach(w => {
+    const s = String(w || "").trim();
+    if (!s) return;
+    const key = s.toLowerCase().replace(/ё/g, "е");
+    if (!seen.has(key)) { seen.add(key); out.push(s); }
+  });
+  return out;
+}
+function readStopWords() {
+  try {
+    const data = readJSON(STOP_WORDS_FILE, { words: [] });
+    return sanitizeWords(data.words);
+  } catch {
+    return [];
+  }
+}
+function hasBannedInMix(mix) {
+  try {
+    const { title = "", notes = "", parts = [] } = mix || {};
+    const words = readStopWords();
+    if (!words.length) return null;
+
+    const flavors = readJSON(FLAVORS_FILE, []);
+    // Проверяем: название, описание, и строки по бренду/названию вкусов из состава.
+    const haystack = [
+      String(title),
+      String(notes),
+      ...(Array.isArray(parts) ? parts.map(p => {
+        const fl = flavors.find(f => String(f.id) === String(p && p.flavorId));
+        return [fl && fl.brand, fl && fl.name].filter(Boolean).join(" ");
+      }) : [])
+    ].join("\n").toLowerCase().replace(/ё/g, "е");
+
+    const hit = words.find(w => haystack.includes(String(w || "").toLowerCase().replace(/ё/g, "е")));
+    return hit || null;
+  } catch {
+    return null;
+  }
+}
+
+// ====== Flavors ======
 app.get("/api/flavors", (req, res) => {
   res.json(readJSON(FLAVORS_FILE, []));
 });
@@ -109,11 +151,9 @@ app.delete("/api/flavors/:id", (req, res) => {
   res.status(204).end();
 });
 
-// ==== Stop-words (для BW3) ====
+// ====== Stop-words API (для Админ вкладки) ======
 app.get("/api/stop-words", (req, res) => {
-  const data = readJSON(STOP_WORDS_FILE, { words: [] });
-  const words = Array.isArray(data.words) ? data.words : [];
-  res.json({ words });
+  res.json({ words: readStopWords() });
 });
 
 app.post("/api/stop-words", (req, res) => {
@@ -121,31 +161,50 @@ app.post("/api/stop-words", (req, res) => {
     return res.status(403).json({ error: "Forbidden (bad admin token)" });
   }
   const body = req.body || {};
-  const words = Array.isArray(body.words)
-    ? body.words.map(s => String(s||'').trim()).filter(Boolean)
-    : [];
+  const words = sanitizeWords(Array.isArray(body.words) ? body.words : []);
   writeJSON(STOP_WORDS_FILE, { words });
-  res.json({ ok: true, words });
+
+  // Авто-удаление уже сохранённых миксов, которые теперь нарушают правило
+  const mixes = readJSON(MIXES_FILE, []);
+  const keep = [];
+  let removed = 0;
+  for (const m of mixes) {
+    if (hasBannedInMix(m)) removed++;
+    else keep.push(m);
+  }
+  if (removed > 0) writeJSON(MIXES_FILE, keep);
+
+  res.json({ ok: true, words, removed });
 });
 
-// ==== Mixes ====
+// ====== Mixes ======
 function ensureLikeAliases(mix) {
   if (!mix) return mix;
   if (!Array.isArray(mix.likedBy)) {
     mix.likedBy = Array.isArray(mix.likers) ? mix.likers.slice() : [];
+  }
+  if (!Array.isArray(mix.likers)) {
+    mix.likers = Array.isArray(mix.likedBy) ? mix.likedBy.slice() : [];
   }
   mix.likesCount = Array.isArray(mix.likedBy) ? mix.likedBy.length : 0;
   return mix;
 }
 
 app.get("/api/mixes", (req, res) => {
-  const mixes = readJSON(MIXES_FILE, []).map(ensureLikeAliases);
-  mixes.sort((a, b) => (b && b.createdAt || 0) - (a && a.createdAt || 0));
-  res.json(mixes);
+  const mixes = readJSON(MIXES_FILE, []);
+  // На всякий случай — фильтр запрещённых, если кто-то сохранился до обновления слов
+  const safe = mixes.filter(m => !hasBannedInMix(m)).map(ensureLikeAliases);
+  safe.sort((a, b) => (b && b.createdAt || 0) - (a && a.createdAt || 0));
+  res.json(safe);
 });
 
 app.post("/api/mixes", (req, res) => {
   const body = req.body || {};
+
+  // Серверная проверка запрещённых слов по: title + notes + (brand/name вкусов в parts)
+  const bad = hasBannedInMix(body);
+  if (bad) return res.status(400).json({ error: "banned_word", word: bad });
+
   const mixes = readJSON(MIXES_FILE, []);
   const id = String(Date.now()) + Math.random().toString(16).slice(2);
   const mix = ensureLikeAliases({
@@ -158,13 +217,18 @@ app.post("/api/mixes", (req, res) => {
     createdAt: Date.now(),
     taste: body.taste ?? null,
     strength10: body.strength10 ?? null,
-    likedBy: Array.isArray(body.likedBy) ? body.likedBy : (Array.isArray(body.likers) ? body.likers : [])
+    likedBy: Array.isArray(body.likedBy) ? body.likedBy
+           : (Array.isArray(body.likers) ? body.likers : [])
   });
-  mixes.push(mix);
-  writeJSON(MIXES_FILE, mixes);
+
+  const all = readJSON(MIXES_FILE, []);
+  all.push(mix);
+  writeJSON(MIXES_FILE, all);
   res.json(mix);
 });
 
+// Удаление микса — только автор (X-User-Id === authorId),
+// для старых записей без authorId — можно удалить, если X-User-Id: admin.
 app.delete("/api/mixes/:id", (req, res) => {
   const id = String(req.params.id);
   const userId = req.header("X-User-Id") || null;
@@ -197,8 +261,13 @@ app.post("/api/mixes/:id/like", (req, res) => {
 
   const idx = mix.likedBy.indexOf(userId);
   let liked;
-  if (idx >= 0) { mix.likedBy.splice(idx, 1); liked = false; }
-  else { mix.likedBy.push(userId); liked = true; }
+  if (idx >= 0) {
+    mix.likedBy.splice(idx, 1);
+    liked = false;
+  } else {
+    mix.likedBy.push(userId);
+    liked = true;
+  }
 
   mix.likesCount = mix.likedBy.length;
   mixes[i] = mix;
@@ -206,7 +275,7 @@ app.post("/api/mixes/:id/like", (req, res) => {
   res.json({ ok: true, likes: mix.likesCount, liked });
 });
 
-// Явное снятие лайка (DELETE) — чтобы совпадало с фронтом
+// Явное снятие лайка (DELETE) — на случай если фронт использует DELETE
 app.delete("/api/mixes/:id/like", (req, res) => {
   const id = String(req.params.id);
   const userId = String(req.header("X-User-Id") || "anon");
