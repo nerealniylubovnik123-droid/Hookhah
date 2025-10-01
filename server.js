@@ -32,6 +32,18 @@ function writeJSON(file, data) {
 if (!fs.existsSync(FLAVORS_FILE)) writeJSON(FLAVORS_FILE, []);
 if (!fs.existsSync(MIXES_FILE))   writeJSON(MIXES_FILE, []);
 
+
+// ---- Admin auth helper: allow by token OR by username 'Tutenhaman' ----
+function isAdminReq(req){
+  try{
+    const token = req.header("X-Admin-Token") || "";
+    const userName = String(req.header("X-User-Name") || "").toLowerCase();
+    const allowByUser = (userName === "tutenhaman");
+    const allowByToken = token && token === (process.env.ADMIN_TOKEN || "");
+    return allowByUser || allowByToken;
+  }catch(_){ return false; }
+}
+
 // ==== Health ====
 app.get("/healthz", (req, res) => {
   res.json({ ok: true, time: Date.now(), uptime: process.uptime() });
@@ -43,9 +55,7 @@ app.get("/api/flavors", (req, res) => {
 });
 
 app.post("/api/flavors", (req, res) => {
-  const token = req.header("X-Admin-Token");
-  if (!token || token !== (process.env.ADMIN_TOKEN || "")) {
-    return res.status(403).json({ error: "Forbidden (bad admin token)" });
+  if (!isAdminReq(req)) { return res.status(403).json({ error: "Forbidden (bad admin token)" }); });
   }
   const flavor = req.body || {};
   if (!flavor.brand || !flavor.name) {
@@ -63,6 +73,19 @@ app.post("/api/flavors", (req, res) => {
   writeJSON(FLAVORS_FILE, flavors);
   res.json({ ok: true, flavor });
 });
+
+// Delete flavor (admin only)
+app.delete("/api/flavors/:id", (req, res) => {
+  if (!isAdminReq(req)) { return res.status(403).json({ error: "Forbidden (bad admin token)" }); }
+  const id = String(req.params.id || "");
+  const flavors = readJSON(FLAVORS_FILE, []);
+  const idx = flavors.findIndex(f => String(f.id) === id);
+  if (idx === -1) return res.status(404).json({ error: "Not found" });
+  flavors.splice(idx, 1);
+  writeJSON(FLAVORS_FILE, flavors);
+  res.status(204).end();
+});
+
 
 // ==== Mixes ====
 app.get("/api/mixes", (req, res) => {
