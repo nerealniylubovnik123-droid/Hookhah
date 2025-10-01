@@ -21,24 +21,35 @@ const FLAVORS_FILE = path.join(__dirname, "flavors.json");
 const MIXES_FILE   = path.join(__dirname, "guest_mixes.json");
 
 function readJSON(file, fallback = []) {
-  try { return JSON.parse(fs.readFileSync(file, "utf8")); }
-  catch { return fallback; }
+  try {
+    return JSON.parse(fs.readFileSync(file, "utf8"));
+  } catch (e) {
+    return fallback;
+  }
 }
 function writeJSON(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
 }
 
 // ---- Admin auth helper: allow by token OR by username 'Tutenhaman' ----
-function isAdminReq(req){
-  try{
+function isAdminReq(req) {
+  try {
     const token = req.header("X-Admin-Token") || "";
-    const rawName = (req.header("X-User-Name") || req.header("X-Username") || req.header("X-User") || req.query.user || req.query.username || "").toString();
+    const rawName =
+      (req.header("X-User-Name") ||
+       req.header("X-Username")  ||
+       req.header("X-User")      ||
+       req.query.user            ||
+       req.query.username        ||
+       ""
+      ).toString();
     const norm = rawName.trim().replace(/^@/, "").toLowerCase();
-    const allowByUser = (norm === "tutenhaman");
+    const allowByUser = norm === "tutenhaman";
     const allowByToken = token && token === (process.env.ADMIN_TOKEN || "");
     return allowByUser || allowByToken;
-  }catch(_){ return false; }
-}catch(_){ return false; }
+  } catch (e) {
+    return false;
+  }
 }
 
 // создадим пустые файлы, если нет
@@ -56,7 +67,9 @@ app.get("/api/flavors", (req, res) => {
 });
 
 app.post("/api/flavors", (req, res) => {
-  if (!isAdminReq(req)) { return res.status(403).json({ error: "Forbidden (bad admin token)" }); }
+  if (!isAdminReq(req)) {
+    return res.status(403).json({ error: "Forbidden (bad admin token)" });
+  }
   const flavor = req.body || {};
   if (!flavor.brand || !flavor.name) {
     return res.status(400).json({ error: "brand and name are required" });
@@ -64,7 +77,8 @@ app.post("/api/flavors", (req, res) => {
   const flavors = readJSON(FLAVORS_FILE, []);
   if (!flavor.id) {
     flavor.id = (String(flavor.brand) + "-" + String(flavor.name))
-      .toLowerCase().replace(/\s+/g, "-");
+      .toLowerCase()
+      .replace(/\s+/g, "-");
   }
   if (flavors.some(f => f.id === flavor.id)) {
     return res.status(409).json({ error: "id already exists" });
@@ -76,7 +90,9 @@ app.post("/api/flavors", (req, res) => {
 
 // Delete flavor (admin only)
 app.delete("/api/flavors/:id", (req, res) => {
-  if (!isAdminReq(req)) { return res.status(403).json({ error: "Forbidden (bad admin token)" }); }
+  if (!isAdminReq(req)) {
+    return res.status(403).json({ error: "Forbidden (bad admin token)" });
+  }
   const id = String(req.params.id || "");
   const flavors = readJSON(FLAVORS_FILE, []);
   const idx = flavors.findIndex(f => String(f.id) === id);
@@ -89,14 +105,16 @@ app.delete("/api/flavors/:id", (req, res) => {
 // ==== Mixes ====
 function ensureLikeAliases(mix) {
   if (!mix) return mix;
-  if (!Array.isArray(mix.likedBy)) mix.likedBy = Array.isArray(mix.likers) ? mix.likers.slice() : [];
+  if (!Array.isArray(mix.likedBy)) {
+    mix.likedBy = Array.isArray(mix.likers) ? mix.likers.slice() : [];
+  }
   mix.likesCount = Array.isArray(mix.likedBy) ? mix.likedBy.length : 0;
   return mix;
 }
 
 app.get("/api/mixes", (req, res) => {
   const mixes = readJSON(MIXES_FILE, []).map(ensureLikeAliases);
-  mixes.sort((a,b) => (b?.createdAt||0) - (a?.createdAt||0));
+  mixes.sort((a, b) => (b && b.createdAt || 0) - (a && a.createdAt || 0));
   res.json(mixes);
 });
 
@@ -155,13 +173,18 @@ app.post("/api/mixes/:id/like", (req, res) => {
 
   const idx = mix.likedBy.indexOf(userId);
   let liked;
-  if (idx >= 0) { mix.likedBy.splice(idx, 1); liked = false; }
-  else { mix.likedBy.push(userId); liked = true; }
+  if (idx >= 0) {
+    mix.likedBy.splice(idx, 1);
+    liked = false;
+  } else {
+    mix.likedBy.push(userId);
+    liked = true;
+  }
 
   mix.likesCount = mix.likedBy.length;
   mixes[i] = mix;
   writeJSON(MIXES_FILE, mixes);
-  res.json({ ok:true, likes: mix.likesCount, liked });
+  res.json({ ok: true, likes: mix.likesCount, liked });
 });
 
 app.listen(PORT, () => {
