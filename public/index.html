@@ -879,7 +879,7 @@ async function fetchRecommendations(){
       const canDelete = !!(state.user && (m.authorId && String(m.authorId)===String(state.user.id)));
       const delBtn = canDelete ? '<button data-del="'+escAttr(m.id)+'" class="tap ml-auto inline-flex items-center justify-center rounded-full h-7 px-3 text-[11px] border border-rose-700 text-rose-300 hover:bg-rose-900/40">Удалить</button>' : '';
       const likes = Array.isArray(m.likers) ? m.likers.length : 0;
-      const iLiked = Array.isArray(m.likers) && state.user && m.likers.includes(String(state.user.id));
+      const iLiked = Array.isArray(m.likers) && window.state.user && m.likers.includes(String(state.user.id));
       const likeBtn =
         '<button data-like="'+escAttr(m.id)+'" class="tap inline-flex items-center gap-1 rounded-full h-7 px-3 text-[11px] border '+(iLiked?'border-pink-500 text-pink-200 bg-pink-900/30':'border-slate-700 text-slate-200 hover:bg-white/10')+'">'+
         (iLiked?'❤':'♡')+' <span class="tabular-nums">'+likes+'</span></button>';
@@ -1182,7 +1182,7 @@ const themesBlock =
       logoEl.addEventListener('mousedown', start); logoEl.addEventListener('touchstart', start);
       ['mouseup','mouseleave','touchend','touchcancel'].forEach(ev=>logoEl.addEventListener(ev, clear));
     }
-// Ensure save button state is correct after first render
+// Ensure save button window.state is correct after first render
     updateSaveButtonUI();
 
     // === анимации и ripple после каждого render
@@ -1255,7 +1255,7 @@ const themesBlock =
       btn.addEventListener('click', async ()=>{
         const id = btn.getAttribute('data-like');
         const mix = state.guestMixes.find(m=>m.id===id);
-        const liked = Array.isArray(mix?.likers) && state.user && mix.likers.includes(String(state.user.id));
+        const liked = Array.isArray(mix?.likers) && window.state.user && mix.likers.includes(String(state.user.id));
         try{
           if (liked) await unlikeMixOnServer(id);
           else        await likeMixOnServer(id);
@@ -1967,7 +1967,7 @@ const themesBlock =
 <!-- unlikeMixOnServer override with DELETE+POST fallback -->
 <script>
 window.unlikeMixOnServer = async function(id){
-  const uid = String((window.state && state.user && state.user.id) || "anon");
+  const uid = String((window.state && window.state.user && state.user.id) || "anon");
   let res = null;
   try {
     res = await api("/api/mixes/" + encodeURIComponent(id) + "/like", {
@@ -1992,7 +1992,7 @@ window.unlikeMixOnServer = async function(id){
 (function(){
   const ADMIN_ID = '504348666';
   function isAdmin(){
-    try { return state && state.user && String(state.user.id) === ADMIN_ID; } catch(_){ return false; }
+    try { return window.state && window.state.user && String(state.user.id) === ADMIN_ID; } catch(_){ return false; }
   }
   function renderBannedWordsSection(container){
     if (!isAdmin()) return;
@@ -2012,8 +2012,9 @@ window.unlikeMixOnServer = async function(id){
         const word = section.querySelector('#bw_input').value.trim();
         if (!word) return alert('Введите слово');
         try {
-          const uid = String((state && state.user && state.user.id) || ADMIN_ID);
-          const res = await api('/api/banned-words', {
+          const uid = String((window.state && window.state.user && window.state.user.id) || ADMIN_ID);
+          const doFetch = (typeof window.api === 'function') ? window.api : (url,opt)=>fetch(((typeof API_BASE!=='undefined')?API_BASE:'')+url,opt);
+          const res = await doFetch('/api/banned-words', {
             method:'POST',
             headers:{'Content-Type':'application/json','X-User-Id': uid},
             body: JSON.stringify({ word })
@@ -2031,7 +2032,8 @@ window.unlikeMixOnServer = async function(id){
   }
   async function loadBannedWords(){
     try {
-      const res = await api('/api/banned-words');
+      const doFetch = (typeof window.api === 'function') ? window.api : (url,opt)=>fetch(((typeof API_BASE!=='undefined')?API_BASE:'')+url,opt);
+      const res = await doFetch('/api/banned-words');
       if (!res.ok) throw new Error('HTTP '+res.status);
       const list = await res.json();
       const ul = document.getElementById('bw_list');
