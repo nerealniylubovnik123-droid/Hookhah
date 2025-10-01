@@ -1061,7 +1061,19 @@ async function fetchRecommendations(){
 
     
 // гарантируем наличие переменной
-let adminStopWordsBlock = '';
+let adminStopWordsBlock = (
+      '<div class="ui-card">' +
+        '<div class="px-3 pt-3"><div class="text-[10px] tracking-wider uppercase text-slate-300/70">Контент</div><div class="text-base font-semibold">Запрещённые слова</div></div>' +
+        '<div class="p-3 space-y-2 text-sm">' +
+          '<textarea id="admWords" class="min-h-[140px] w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2" placeholder="каждое слово — с новой строки"></textarea>' +
+          '<div class="flex gap-2">' +
+            '<button id="admLoadWords" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-white/10">Загрузить</button>' +
+            '<button id="admSaveWords" class="tap btn-primary inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px]">Сохранить</button>' +
+          '</div>' +
+          '<div class="text-[11px] opacity-70">Проверка идёт по вхождению (регистр игнорируется). Данные хранятся на сервере.</div>' +
+        '</div>' +
+      '</div>'
+    );
 const adminLoginBlock = (!isAdmin() && state.adminPrompt) ? (
       '<div class="ui-card">' +
         '<div class="px-3 pt-3"><div class="text-[10px] tracking-wider uppercase text-slate-300/70">Админ-доступ</div><div class="text-base font-semibold">Введите токен</div></div>' +
@@ -1374,7 +1386,35 @@ const themesBlock =
         });
       }
       buildAdminFlavorList(root);
-    }
+    
+      // === Stop-words handlers ===
+      const _loadStopWords = async ()=>{
+        try{
+          const r = await fetch('/api/stop-words', { cache:'no-store' });
+          if (!r.ok) { alert('Не удалось загрузить список'); return; }
+          const d = await r.json();
+          const arr = Array.isArray(d.words) ? d.words : [];
+          const el = root.querySelector('#admWords');
+          if (el) el.value = arr.join('\n');
+        }catch(_){ alert('Ошибка сети при загрузке списка'); }
+      };
+      const _saveStopWords = async ()=>{
+        const el = root.querySelector('#admWords');
+        const tokenNow = (root.querySelector('#admToken')?.value || state.adminToken || '').trim();
+        const list = String(el?.value || '').split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+        try{
+          const r = await fetch('/api/stop-words', {
+            method:'POST',
+            headers:{ 'Content-Type':'application/json', 'X-Admin-Token': tokenNow },
+            body: JSON.stringify({ words: list })
+          });
+          if (!r.ok) { alert('Не удалось сохранить: '+r.status); return; }
+          alert('Сохранено: ' + list.length);
+        }catch(_){ alert('Ошибка сети при сохранении'); }
+      };
+      const btnLoadWords = root.querySelector('#admLoadWords'); if(btnLoadWords) btnLoadWords.addEventListener('click', _loadStopWords);
+      const btnSaveWords = root.querySelector('#admSaveWords'); if(btnSaveWords) btnSaveWords.addEventListener('click', _saveStopWords);
+}
 
     // полоса состава
     renderMixBar();
