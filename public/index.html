@@ -2113,5 +2113,49 @@ window.unlikeMixOnServer = async function(id){
 })();
 </script>
 
+
+<!-- Definitive remover for any standalone "Слова 🚫" buttons -->
+<script>
+(function(){
+  function isWordsButton(el){
+    try {
+      const t = (el.textContent || '').replace(/\s+/g,' ').trim();
+      if (!t) return false;
+      const hasWord = /слова/i.test(t);
+      const hasEmoji = /🚫/.test(t);
+      if (hasWord && hasEmoji) return true;
+    } catch(_){}
+    try {
+      const oc = el.getAttribute && el.getAttribute('onclick');
+      if (oc && /openBannedWords\s*\(/.test(oc)) return true;
+    } catch(_){}
+    return false;
+  }
+  function removeWordsButtons(root){
+    const scope = root || document;
+    scope.querySelectorAll('button,[role=button],a,div,span').forEach(el=>{
+      if (isWordsButton(el)) el.remove();
+    });
+  }
+  // Remove at start and keep removing on any re-render
+  document.addEventListener('DOMContentLoaded', function(){ removeWordsButtons(document); });
+  const mo = new MutationObserver(muts => {
+    for (const m of muts){
+      for (const n of m.addedNodes||[]){
+        if (n && n.nodeType === 1) removeWordsButtons(n);
+      }
+    }
+  });
+  mo.observe(document.documentElement, { childList: true, subtree: true });
+
+  // Neutralize any legacy openBannedWords()
+  setTimeout(function(){
+    if (typeof window.openBannedWords === 'function') {
+      window.openBannedWords = function(){ return false; };
+    }
+  }, 0);
+})();
+</script>
+
 </body>
 </html>
