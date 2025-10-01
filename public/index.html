@@ -771,7 +771,7 @@ function validateMixAgainstStopWords(mix){
   async function deleteFlavorOnServer(id, token){
     const r = await fetch(API_BASE + '/api/flavors/' + encodeURIComponent(id), {
       method: 'DELETE',
-      headers: { 'X-Admin-Token': token || '' }
+      headers: {  'X-User-Name': String(state?.user?.username||''), 'X-Admin-Token': token || '' }
     }).catch(()=>null);
     const txt = r ? (await r.text().catch(()=>'')) : '';
     if (r && r.status===204) return true;
