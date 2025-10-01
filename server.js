@@ -19,6 +19,7 @@ if (fs.existsSync(PUBLIC_DIR)) {
 // ==== JSON файлы ====
 const FLAVORS_FILE = path.join(__dirname, "flavors.json");
 const MIXES_FILE   = path.join(__dirname, "guest_mixes.json");
+const BANNED_FILE  = path.join(__dirname, "banned_words.json");
 
 function readJSON(file, fallback = []) {
   try {
@@ -134,7 +135,15 @@ app.post("/api/mixes", (req, res) => {
     strength10: body.strength10 ?? null,
     likedBy: Array.isArray(body.likedBy) ? body.likedBy : (Array.isArray(body.likers) ? body.likers : [])
   });
-  mixes.push(mix);
+  
+  try{
+    const words = readJSON(BANNED_FILE, []);
+    const title = String(mix.title||'').toLowerCase();
+    const notes = String(mix.notes||'').toLowerCase();
+    const bad = (Array.isArray(words)?words:[]).map(w=>String(w||'').toLowerCase().trim()).filter(Boolean).find(w=> title.includes(w) || notes.includes(w) );
+    if (bad) return res.status(400).json({ error: "Banned word", word: bad });
+  }catch(_){}
+mixes.push(mix);
   writeJSON(MIXES_FILE, mixes);
   res.json(mix);
 });
@@ -187,6 +196,19 @@ app.post("/api/mixes/:id/like", (req, res) => {
   res.json({ ok: true, likes: mix.likesCount, liked });
 });
 
+
+// ==== BANNED WORDS ====
+app.get('/api/banned-words', (req,res)=>{
+  const words = readJSON(BANNED_FILE, []);
+  res.json(Array.isArray(words)? words : []);
+});
+app.put('/api/banned-words', (req,res)=>{
+  if(!isAdminReq(req)) return res.status(403).json({ error:'Forbidden (bad admin token)' });
+  const arr = Array.isArray(req.body?.words) ? req.body.words : [];
+  const words = Array.from(new Set(arr.map(w=>String(w||'').trim()).filter(Boolean)));
+  writeJSON(BANNED_FILE, words);
+  res.json({ ok:true, count: words.length });
+});
 app.listen(PORT, () => {
   console.log(`✅ Server started on http://localhost:${PORT}`);
 });
