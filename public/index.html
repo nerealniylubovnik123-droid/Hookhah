@@ -559,6 +559,27 @@ input[type=text], input[type=number], textarea{
       });
     })();
   </script>
+
+<script>
+// === Admin header wrapper for flavors API ===
+(function(){
+  const _fetch = window.fetch;
+  window.fetch = function(input, init){
+    try{
+      const url = (typeof input === 'string') ? input : (input && input.url) || '';
+      if (url && url.indexOf('/api/flavors') !== -1) {
+        init = init || {};
+        const hdrs = Object.assign({}, init.headers || {});
+        const uname = String((window.state && window.state.user && window.state.user.username) || localStorage.getItem('username') || '');
+        if (!hdrs['X-User-Name']) hdrs['X-User-Name'] = uname;
+        init.headers = hdrs;
+      }
+    }catch(_){}
+    return _fetch.call(this, input, init);
+  };
+})();
+</script>
+
 </head>
 <body class="text-slate-100">
   <div id="root" class="min-h-[100svh]"></div>
@@ -771,7 +792,7 @@ function validateMixAgainstStopWords(mix){
   async function deleteFlavorOnServer(id, token){
     const r = await fetch(API_BASE + '/api/flavors/' + encodeURIComponent(id), {
       method: 'DELETE',
-      headers: {  'X-User-Name': String(state?.user?.username||''), 'X-Admin-Token': token || '' }
+      headers: { 'X-Admin-Token': token || '' }
     }).catch(()=>null);
     const txt = r ? (await r.text().catch(()=>'')) : '';
     if (r && r.status===204) return true;
@@ -1063,22 +1084,6 @@ async function fetchRecommendations(){
        '  </div>' +
        '</div>')
     );
-const adminStopWordsBlock =
-  '<div class="ui-card">' +
-    '<div class="px-3 pt-3">' +
-      '<div class="text-[10px] tracking-wider uppercase text-slate-300/70">Фильтры</div>' +
-      '<div class="text-base font-semibold">Стоп-слова для миксов</div>' +
-    '</div>' +
-    '<div class="p-3 space-y-2">' +
-      '<p class="text-[12px] text-slate-400">Одно слово/фраза на строку. Совпадение в заголовке, заметках или составе — блок сохранения.</p>' +
-      '<textarea id="stopWordsInput" rows="6" class="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2"></textarea>' +
-      '<div class="flex gap-2 items-center">' +
-        '<button id="stopWordsSaveBtn" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-white/10">Сохранить</button>' +
-        '<span id="stopWordsSavedMsg" class="text-[12px] text-slate-400 hidden">Сохранено</span>' +
-      '</div>' +
-    '</div>' +
-  '</div>';
-
 
     const adminLoginBlock = (!isAdmin() && state.adminPrompt) ? (
       '<div class="ui-card">' +
