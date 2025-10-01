@@ -598,6 +598,34 @@ function applyTheme(t){
   const uuidv4 = ()=>{let dt=Date.now(); if(typeof performance!='undefined'&&performance.now) dt+=performance.now(); return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=(dt+Math.random()*16)%16|0;dt=Math.floor(dt/16);return (c==='x'?r:(r&0x3|0x8)).toString(16);});};
 
   const BRAND_STRENGTH10_DEFAULTS = {darkside:5,blackburn:6,musthave:5,overdose:6,bonch:7,starline:3};
+// === Stop-words utils (localStorage) ===
+const STOP_WORDS_KEY = 'FORBIDDEN_MIX_WORDS';
+function loadStopWords(){
+  try{
+    const raw = localStorage.getItem(STOP_WORDS_KEY);
+    const arr = raw ? JSON.parse(raw) : [];
+    return Array.isArray(arr) ? arr : [];
+  }catch{ return []; }
+}
+function saveStopWords(list){
+  const arr = (Array.isArray(list) ? list : [])
+    .map(s => String(s||'').trim())
+    .filter(Boolean);
+  try{ localStorage.setItem(STOP_WORDS_KEY, JSON.stringify(arr)); }catch(_){}
+  return arr;
+}
+function validateMixAgainstStopWords(mix){
+  const words = loadStopWords();
+  if(!words.length) return { ok:true };
+  const haystack = [
+    String(mix?.title||''),
+    String(mix?.notes||''),
+    ...(Array.isArray(mix?.parts) ? mix.parts.map(p => (p?.brand||'')+' '+(p?.name||'')) : [])
+  ].join('\n').toLowerCase();
+  const bad = words.find(w => haystack.includes(String(w||'').toLowerCase()));
+  return bad ? { ok:false, word: bad } : { ok:true };
+}
+
   const normalizeBrand=b=>(b||'').trim();
   const getStrength10=f=>{ if(!f) return 5; if(typeof f.strength10==='number'&&Number.isFinite(f.strength10)) return Math.max(1,Math.min(10,f.strength10)); return BRAND_STRENGTH10_DEFAULTS[ brandKey(f.brand) ] ?? 5;};
   const strengthColor=v=>{
@@ -1084,7 +1112,7 @@ const themesBlock =
           (state.activeTab==='builder' ? (brandsBlock + mixBlock + titleBlock + recBlock) : '') +
           (state.activeTab==='themes'  ? (themesBlock) : '') +
           (state.activeTab==='guest'   ? (guestBlock) : '') +
-          (state.activeTab==='admin'   ? (adminBlock) : '') +
+          (state.activeTab==='admin'   ? (adminBlock + adminStopWordsBlock) : '') +
           (state.activeTab==='builder' && (!isAdmin() && state.adminPrompt) ? adminLoginBlock : '') +
         '</div>' +
       '</div>';
