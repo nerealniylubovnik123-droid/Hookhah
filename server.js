@@ -1,4 +1,4 @@
-// server.js — Hookhah backend (Render/Node)
+// server.js — Hookah backend
 const express = require("express");
 const fs = require("fs");
 const path = require("path");
@@ -10,78 +10,75 @@ const PORT = process.env.PORT || 8080;
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 
-// ==== статика (если захотите отдавать фронт с Render) ====
+// ---- Static (optional) ----
 const PUBLIC_DIR = path.join(__dirname, "public");
-if (fs.existsSync(PUBLIC_DIR)) {
-  app.use(express.static(PUBLIC_DIR));
-}
+if (fs.existsSync(PUBLIC_DIR)) app.use(express.static(PUBLIC_DIR));
 
-// ==== JSON файлы ====
+// ---- Storage files ----
 const FLAVORS_FILE = path.join(__dirname, "flavors.json");
-const MIXES_FILE   = path.join(__dirname, "guest_mixes.json");
-const BANNED_FILE  = path.join(__dirname, "banned_words.json");
+const MIXES_FILE = path.join(__dirname, "guest_mixes.json");
+const BANNED_FILE = path.join(__dirname, "banned_words.json");
 
-function readJSON(file, fallback = []) {
-  try {
-    return JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch (e) {
-    return fallback;
-  }
+function readJSON(file, fallback) {
+  try { return JSON.parse(fs.readFileSync(file, "utf8")); }
+  catch (_) { return fallback; }
 }
 function writeJSON(file, data) {
   fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
 }
 
-// ---- Admin auth helper: allow by token OR by username 'Tutenhaman' ----
+// Ensure files exist
+if (!fs.existsSync(FLAVORS_FILE)) writeJSON(FLAVORS_FILE, []);
+if (!fs.existsSync(MIXES_FILE)) writeJSON(MIXES_FILE, []);
+if (!fs.existsSync(BANNED_FILE)) writeJSON(BANNED_FILE, { words: [] });
+
+// ---- Admin auth helper ----
+// Логика: если ADMIN_TOKEN задан в окружении — нужен точный матч.
+// Если не задан — подойдёт любой непустой токен длиной ≥ 6 символов.
+// Дополнительно: если заголовок X-User-Name (или подобный) = 'tutenhaman' — доступ есть.
 function isAdminReq(req) {
   try {
-    const token = req.header("X-Admin-Token") || "";
-    const rawName =
-      (req.header("X-User-Name") ||
-       req.header("X-Username")  ||
-       req.header("X-User")      ||
-       req.query.user            ||
-       req.query.username        ||
-       ""
-      ).toString();
-    const norm = rawName.trim().replace(/^@/, "").toLowerCase();
-    const allowByUser = norm === "tutenhaman";
-    const allowByToken = token && token === (process.env.ADMIN_TOKEN || "");
+    const token = String(req.header("X-Admin-Token") || "").trim();
+
+    const rawName = String(
+      req.header("X-User-Name") ||
+      req.header("X-Username")  ||
+      req.header("X-User")      ||
+      req.query.user            ||
+      req.query.username        ||
+      ""
+    );
+    const allowByUser = rawName.trim().replace(/^@/, "").toLowerCase() === "tutenhaman";
+
+    const envToken = String(process.env.ADMIN_TOKEN || "").trim();
+    const allowByToken = envToken
+      ? token === envToken
+      : (token && token.length >= 6); // fallback для локальной разработки
+
     return allowByUser || allowByToken;
-  } catch (e) {
+  } catch {
     return false;
   }
 }
 
-// создадим пустые файлы, если нет
-if (!fs.existsSync(FLAVORS_FILE)) writeJSON(FLAVORS_FILE, []);
-if (!fs.existsSync(MIXES_FILE))   writeJSON(MIXES_FILE,   []);
+// ---- Health ----
+app.get("/healthz", (_, res) => res.json({ ok: true, time: Date.now(), uptime: process.uptime() }));
 
-// ==== Health ====
-app.get("/healthz", (req, res) => {
-  res.json({ ok: true, time: Date.now(), uptime: process.uptime() });
-});
-
-// ==== Flavors ====
-app.get("/api/flavors", (req, res) => {
-  res.json(readJSON(FLAVORS_FILE, []));
-});
+// ---- Flavors ----
+app.get("/api/flavors", (_, res) => res.json(readJSON(FLAVORS_FILE, [])));
 
 app.post("/api/flavors", (req, res) => {
-  if (!isAdminReq(req)) {
-    return res.status(403).json({ error: "Forbidden (bad admin token)" });
-  }
+  if (!isAdminReq(req)) return res.status(403).json({ error: "Forbidden (bad admin token)" });
   const flavor = req.body || {};
-  if (!flavor.brand || !flavor.name) {
-    return res.status(400).json({ error: "brand and name are required" });
-  }
+  if (!flavor.brand || !flavor.name) return res.status(400).json({ error: "brand and name are required" });
+
   const flavors = readJSON(FLAVORS_FILE, []);
   if (!flavor.id) {
     flavor.id = (String(flavor.brand) + "-" + String(flavor.name))
       .toLowerCase()
       .replace(/\s+/g, "-");
   }
-  if (flavors.some(f => f.id === flavor.id)) {
+  if (flavors.some(f => String(f.id) === String(flavor.id))) {
     return res.status(409).json({ error: "id already exists" });
   }
   flavors.push(flavor);
@@ -89,11 +86,8 @@ app.post("/api/flavors", (req, res) => {
   res.json({ ok: true, flavor });
 });
 
-// Delete flavor (admin only)
 app.delete("/api/flavors/:id", (req, res) => {
-  if (!isAdminReq(req)) {
-    return res.status(403).json({ error: "Forbidden (bad admin token)" });
-  }
+  if (!isAdminReq(req)) return res.status(403).json({ error: "Forbidden (bad admin token)" });
   const id = String(req.params.id || "");
   const flavors = readJSON(FLAVORS_FILE, []);
   const idx = flavors.findIndex(f => String(f.id) === id);
@@ -103,7 +97,37 @@ app.delete("/api/flavors/:id", (req, res) => {
   res.status(204).end();
 });
 
-// ==== Mixes ====
+// ---- Banned words (Админ: редактирование) ----
+function sanitizeWords(list) {
+  const out = [];
+  const seen = new Set();
+  (Array.isArray(list) ? list : []).forEach(w => {
+    const s = String(w || "").trim();
+    if (!s) return;
+    const key = s.toLowerCase().replace(/ё/g, "е");
+    if (!seen.has(key)) { seen.add(key); out.push(s); }
+  });
+  return out;
+}
+
+app.get("/api/banned-words", (_, res) => {
+  const data = readJSON(BANNED_FILE, { words: [] });
+  const words = sanitizeWords(data.words);
+  // нормализуем файл, если надо
+  if (JSON.stringify(data.words) !== JSON.stringify(words)) {
+    writeJSON(BANNED_FILE, { words });
+  }
+  res.json({ words });
+});
+
+app.put("/api/banned-words", (req, res) => {
+  if (!isAdminReq(req)) return res.status(403).json({ error: "Forbidden (bad admin token)" });
+  const words = sanitizeWords((req.body && req.body.words) || []);
+  writeJSON(BANNED_FILE, { words });
+  res.json({ ok: true, words });
+});
+
+// ---- Mixes ----
 function ensureLikeAliases(mix) {
   if (!mix) return mix;
   if (!Array.isArray(mix.likedBy)) {
@@ -113,14 +137,42 @@ function ensureLikeAliases(mix) {
   return mix;
 }
 
-app.get("/api/mixes", (req, res) => {
+function hasBanned(mix) {
+  try {
+    const { title = "", notes = "", parts = [] } = mix || {};
+    const words = sanitizeWords(readJSON(BANNED_FILE, { words: [] }).words);
+    if (!words.length) return null;
+
+    const flavors = readJSON(FLAVORS_FILE, []);
+    const haystack = [
+      String(title),
+      String(notes),
+      ...(Array.isArray(parts) ? parts.map(p => {
+        const fl = flavors.find(f => String(f.id) === String(p && p.flavorId));
+        return [fl && fl.brand, fl && fl.name].filter(Boolean).join(" ");
+      }) : [])
+    ].join("\n").toLowerCase().replace(/ё/g, "е");
+
+    const hit = words.find(w => haystack.includes(String(w || "").toLowerCase().replace(/ё/g, "е")));
+    return hit || null;
+  } catch {
+    return null;
+  }
+}
+
+app.get("/api/mixes", (_, res) => {
   const mixes = readJSON(MIXES_FILE, []).map(ensureLikeAliases);
-  mixes.sort((a, b) => (b && b.createdAt || 0) - (a && a.createdAt || 0));
+  mixes.sort((a, b) => (b?.createdAt || 0) - (a?.createdAt || 0));
   res.json(mixes);
 });
 
 app.post("/api/mixes", (req, res) => {
   const body = req.body || {};
+
+  // серверная проверка запрещённых слов
+  const banned = hasBanned(body);
+  if (banned) return res.status(400).json({ error: "banned_word", word: banned });
+
   const mixes = readJSON(MIXES_FILE, []);
   const id = String(Date.now()) + Math.random().toString(16).slice(2);
   const mix = ensureLikeAliases({
@@ -135,20 +187,12 @@ app.post("/api/mixes", (req, res) => {
     strength10: body.strength10 ?? null,
     likedBy: Array.isArray(body.likedBy) ? body.likedBy : (Array.isArray(body.likers) ? body.likers : [])
   });
-  
-  try{
-    const words = readJSON(BANNED_FILE, []);
-    const title = String(mix.title||'').toLowerCase();
-    const notes = String(mix.notes||'').toLowerCase();
-    const bad = (Array.isArray(words)?words:[]).map(w=>String(w||'').toLowerCase().trim()).filter(Boolean).find(w=> title.includes(w) || notes.includes(w) );
-    if (bad) return res.status(400).json({ error: "Banned word", word: bad });
-  }catch(_){}
-mixes.push(mix);
+  mixes.push(mix);
   writeJSON(MIXES_FILE, mixes);
   res.json(mix);
 });
 
-// Удаление — только автор (совпадает X-User-Id и authorId)
+// Удалить микс: автор (X-User-Id == mix.authorId) или админ для «старых» без authorId
 app.delete("/api/mixes/:id", (req, res) => {
   const id = String(req.params.id);
   const userId = req.header("X-User-Id") || null;
@@ -162,7 +206,6 @@ app.delete("/api/mixes/:id", (req, res) => {
     writeJSON(MIXES_FILE, mixes);
     return res.json({ ok: true });
   }
-  // Разрешим удалять старые записи без authorId админом (X-User-Id: admin)
   if (!mix.authorId && userId === "admin") {
     mixes.splice(idx, 1);
     writeJSON(MIXES_FILE, mixes);
@@ -171,7 +214,7 @@ app.delete("/api/mixes/:id", (req, res) => {
   return res.status(403).json({ error: "Forbidden" });
 });
 
-// Лайки — тумблер (POST)
+// Лайки — toggle через POST
 app.post("/api/mixes/:id/like", (req, res) => {
   const id = String(req.params.id);
   const userId = String(req.header("X-User-Id") || "anon");
@@ -182,13 +225,8 @@ app.post("/api/mixes/:id/like", (req, res) => {
 
   const idx = mix.likedBy.indexOf(userId);
   let liked;
-  if (idx >= 0) {
-    mix.likedBy.splice(idx, 1);
-    liked = false;
-  } else {
-    mix.likedBy.push(userId);
-    liked = true;
-  }
+  if (idx >= 0) { mix.likedBy.splice(idx, 1); liked = false; }
+  else { mix.likedBy.push(userId); liked = true; }
 
   mix.likesCount = mix.likedBy.length;
   mixes[i] = mix;
@@ -196,19 +234,6 @@ app.post("/api/mixes/:id/like", (req, res) => {
   res.json({ ok: true, likes: mix.likesCount, liked });
 });
 
-
-// ==== BANNED WORDS ====
-app.get('/api/banned-words', (req,res)=>{
-  const words = readJSON(BANNED_FILE, []);
-  res.json(Array.isArray(words)? words : []);
-});
-app.put('/api/banned-words', (req,res)=>{
-  if(!isAdminReq(req)) return res.status(403).json({ error:'Forbidden (bad admin token)' });
-  const arr = Array.isArray(req.body?.words) ? req.body.words : [];
-  const words = Array.from(new Set(arr.map(w=>String(w||'').trim()).filter(Boolean)));
-  writeJSON(BANNED_FILE, words);
-  res.json({ ok:true, count: words.length });
-});
 app.listen(PORT, () => {
   console.log(`✅ Server started on http://localhost:${PORT}`);
 });
