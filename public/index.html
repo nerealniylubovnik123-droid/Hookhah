@@ -579,7 +579,6 @@ input[type=text], input[type=number], textarea{
   };
 })();
 </script>
-
 </head>
 <body class="text-slate-100">
   <div id="root" class="min-h-[100svh]"></div>
@@ -619,11 +618,7 @@ function applyTheme(t){
   const uuidv4 = ()=>{let dt=Date.now(); if(typeof performance!='undefined'&&performance.now) dt+=performance.now(); return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=(dt+Math.random()*16)%16|0;dt=Math.floor(dt/16);return (c==='x'?r:(r&0x3|0x8)).toString(16);});};
 
   const BRAND_STRENGTH10_DEFAULTS = {darkside:5,blackburn:6,musthave:5,overdose:6,bonch:7,starline:3};
-  const normalizeBrand=b=>(b||'').trim();
-// helper to normalize brand string for map keys (lowercased, no spaces/punct)
-const brandKey = b => String(b||'').toLowerCase().replace(/\s+/g,'').replace(/[^a-zа-я0-9]/gi,'');
-
-// === Stop-words (client-side only) ===
+// === Stop-words utils (localStorage) ===
 const STOP_WORDS_KEY = 'FORBIDDEN_MIX_WORDS';
 function loadStopWords(){
   try{
@@ -651,6 +646,7 @@ function validateMixAgainstStopWords(mix){
   return bad ? { ok:false, word: bad } : { ok:true };
 }
 
+  const normalizeBrand=b=>(b||'').trim();
   const getStrength10=f=>{ if(!f) return 5; if(typeof f.strength10==='number'&&Number.isFinite(f.strength10)) return Math.max(1,Math.min(10,f.strength10)); return BRAND_STRENGTH10_DEFAULTS[ brandKey(f.brand) ] ?? 5;};
   const strengthColor=v=>{
     if(v==null) return {bg:'bg-slate-800',text:'text-slate-200',border:'border-slate-700'};
@@ -771,8 +767,6 @@ function validateMixAgainstStopWords(mix){
     }catch(_){ state.guestMixes=[]; }
   }
   async function saveMixOnServer(mix){
-    const v = validateMixAgainstStopWords(mix);
-    if(!v.ok){ throw new Error('Нельзя сохранить: обнаружено стоп-слово: "'+v.word+'"'); }
     const r = await api('/api/mixes', { method:'POST', body: JSON.stringify(mix) });
     if(!r.ok) throw new Error('save mix '+r.status+': '+await r.text().catch(()=>'')); 
     return true;
@@ -1085,7 +1079,24 @@ async function fetchRecommendations(){
        '</div>')
     );
 
-    const adminLoginBlock = (!isAdmin() && state.adminPrompt) ? (
+    
+const adminStopWordsBlock = (!isAdmin() ? '' :
+  ('<div class="ui-card">' +
+   '  <div class="px-3 pt-3">' +
+   '    <div class="text-[10px] tracking-wider uppercase text-slate-300/70">Фильтры</div>' +
+   '    <div class="text-base font-semibold">Стоп-слова для миксов</div>' +
+   '  </div>' +
+   '  <div class="p-3 space-y-2 text-sm">' +
+   '    <p class="text-[12px] text-slate-400">Одно слово/фраза на строку. Совпадение в заголовке, заметках или составе — блок сохранения.</p>' +
+   '    <textarea id="stopWordsInput" rows="6" class="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2"></textarea>' +
+   '    <div class="flex gap-2 items-center mt-2">' +
+   '      <button id="stopWordsSaveBtn" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-white/10">Сохранить</button>' +
+   '      <span id="stopWordsSavedMsg" class="text-[12px] text-slate-400 hidden">Сохранено</span>' +
+   '    </div>' +
+   '  </div>' +
+   '</div>')
+);
+const adminLoginBlock = (!isAdmin() && state.adminPrompt) ? (
       '<div class="ui-card">' +
         '<div class="px-3 pt-3"><div class="text-[10px] tracking-wider uppercase text-slate-300/70">Админ-доступ</div><div class="text-base font-semibold">Введите токен</div></div>' +
         '<div class="p-3 space-y-2">' +
@@ -1135,7 +1146,7 @@ const themesBlock =
           (state.activeTab==='builder' ? (brandsBlock + mixBlock + titleBlock + recBlock) : '') +
           (state.activeTab==='themes'  ? (themesBlock) : '') +
           (state.activeTab==='guest'   ? (guestBlock) : '') +
-          (state.activeTab==='admin'   ? (adminBlock + adminStopWordsBlock) : '') +
+          (state.activeTab==='admin'   ? (adminBlock) : '') +
           (state.activeTab==='builder' && (!isAdmin() && state.adminPrompt) ? adminLoginBlock : '') +
         '</div>' +
       '</div>';
@@ -1367,23 +1378,6 @@ const themesBlock =
     // админ-доступ
     const tokBtn=root.querySelector('#admSaveToken'); if(tokBtn){ tokBtn.addEventListener('click', ()=>{ const v=(root.querySelector('#admToken')||{}).value||''; try{localStorage.setItem('admin_token',v);}catch(_){ } state.adminToken=v||''; state.adminPrompt=false; render(); }); }
     const tokCancel=root.querySelector('#admCancel'); if(tokCancel){ tokCancel.addEventListener('click', ()=>{ state.adminPrompt=false; render(); }); }
-
-    function initAdminStopWordsUI(root){
-      const ta = root.querySelector('#stopWordsInput');
-      const btn = root.querySelector('#stopWordsSaveBtn');
-      const msg = root.querySelector('#stopWordsSavedMsg');
-      if(!ta || !btn || !msg) return;
-      try{
-        const words = loadStopWords();
-        ta.value = words.join('\n');
-      }catch(_){}
-      btn.addEventListener('click', ()=>{
-        const list = String(ta.value||'').split('\n');
-        saveStopWords(list);
-        msg.classList.remove('hidden');
-        setTimeout(()=> msg.classList.add('hidden'), 1200);
-      });
-    }
 
     if (isAdmin() && state.activeTab==='admin'){
       buildAdminFlavorList(root);
@@ -1913,7 +1907,125 @@ const themesBlock =
 
 
 <!-- === BANNED WORDS — BW3 (non-invasive) === -->
+<style>
+  .bw3-fab{position:fixed;right:calc(16px + env(safe-area-inset-right));bottom:calc(16px + env(safe-area-inset-bottom));z-index:9999;border:none;border-radius:9999px;padding:12px 16px;font-weight:700;background:#111;color:#fff;box-shadow:0 10px 24px rgba(0,0,0,.25)}
+  .bw3-back{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;z-index:9998}
+  .bw3-modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:10000}
+  .bw3-card{width:min(800px,92vw);max-height:90vh;overflow:auto;background:#fff;color:#111;border-radius:16px;box-shadow:0 12px 36px rgba(0,0,0,.35)}
+  .bw3-head{padding:16px 20px;border-bottom:1px solid #eee;display:flex;justify-content:space-between;align-items:center}
+  .bw3-body{padding:16px 20px}
+  .bw3-foot{padding:12px 20px;border-top:1px solid #eee;display:flex;gap:12px;justify-content:flex-end}
+  .bw3-input,.bw3-text{width:100%;border:1px solid #ddd;border-radius:10px;padding:10px 12px;font:inherit;background:#fff;color:#111}
+  .bw3-text{min-height:220px;resize:vertical;white-space:pre}
+  .bw3-btn{border:none;border-radius:10px;padding:10px 14px;font-weight:700}
+  .bw3-btn.primary{background:#111;color:#fff}
+  .bw3-btn.secondary{background:#f2f2f2}
+  .bw3-note{font-size:12px;color:#666;margin-top:6px}
+</style>
 
+<div id="bw3-back" class="bw3-back"></div>
+<div id="bw3-modal" class="bw3-modal" aria-hidden="true" role="dialog">
+  <div class="bw3-card">
+    <div class="bw3-head">
+      <div style="font-weight:800">Запрещённые слова</div>
+      <button class="bw3-btn secondary" id="bw3-close" type="button">Закрыть</button>
+    </div>
+    <div class="bw3-body">
+      <p>Каждое слово — с новой строки. Проверка идёт по <em>вхождению</em> (регистр игнорируется).</p>
+      <textarea id="bw3-words" class="bw3-text" placeholder="пример:&#10;спайс&#10;наркотик"></textarea>
+      <div class="bw3-note">Не добавляйте слишком общие подстроки (например «а»), чтобы избежать ложных срабатываний.</div>
+      <div style="margin-top:14px">
+        <label style="font-size:12px;color:#666">Admin Token (для сохранения)</label>
+        <input id="bw3-token" class="bw3-input" type="password" placeholder="X-Admin-Token">
+      </div>
+    </div>
+    <div class="bw3-foot">
+      <button class="bw3-btn secondary" id="bw3-reload"   type="button">Обновить из сервера</button>
+      <button class="bw3-btn primary"   id="bw3-save"     type="button">Сохранить</button>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  'use strict';
+  const norm = s=>String(s||'').toLowerCase().replace(/ё/g,'е');
+  function findBanned(text, list){
+    try{ const t = norm(text);
+      const hits = new Set();
+      (Array.isArray(list)?list:[]).forEach(w=>{ const w2=norm(w); if(w2 && t.includes(w2)) hits.add(w); });
+      return Array.from(hits);
+    }catch(_){ return []; }
+  }
+  const BW = { words: [] };
+  async function load(){
+    try{ const r = await  if(r.ok){ const d=await r.json(); BW.words = Array.isArray(d.words)? d.words.map(x=>String(x).toLowerCase()):[]; } }catch(_){}
+  }
+  // UI
+  const fab   = document.getElementById('bw3-fab');
+  const back  = document.getElementById('bw3-back');
+  const modal = document.getElementById('bw3-modal');
+  const closeB= document.getElementById('bw3-close');
+  const words = document.getElementById('bw3-words');
+  const token = document.getElementById('bw3-token');
+  const save  = document.getElementById('bw3-save');
+  const reload= document.getElementById('bw3-reload');
+  function show(){ modal.style.display='flex'; back.style.display='block'; modal.setAttribute('aria-hidden','false'); words.value=(BW.words||[]).join('\\n'); }
+  function hide(){ modal.style.display='none'; back.style.display='none'; modal.setAttribute('aria-hidden','true'); }
+  async function reloadServer(){ await load(); words.value=(BW.words||[]).join('\\n'); alert('Загружено: '+(BW.words||[]).length+' шт.'); }
+  async function saveWords(){
+    const tok = String(token.value||'').trim();
+    if(!tok){ alert('Введите Admin Token'); return; }
+    const list = String(words.value||'').split(/\\r?\\n/).map(s=>s.trim()).filter(Boolean);
+    try{
+      const r = await 
+      if(!r.ok){ let err={}; try{err=await r.json();}catch(_){ } throw new Error(err && err.error || ('HTTP '+r.status)); }
+      const d = await r.json(); BW.words = d.words||list; alert('Сохранено: '+BW.words.length+' шт.'); location.reload();
+    }catch(e){ alert('Ошибка сохранения: '+(e && e.message || e)); }
+  }
+  fab && fab.addEventListener('click', function(){ reloadServer().finally(show); });
+  closeB && closeB.addEventListener('click', hide);
+  back && back.addEventListener('click', hide);
+  reload && reload.addEventListener('click', reloadServer);
+  save && save.addEventListener('click', saveWords);
+
+  // Client-side guard (non-invasive)
+  function getVal(sel){ const el=document.querySelector(sel); return el? el.value : ''; }
+  function guard(){
+    try{
+      const title = getVal('#title'); const notes = getVal('#notes');
+      const hit = [].concat(findBanned(title, BW.words), findBanned(notes, BW.words));
+      const btn = document.querySelector('#save');
+      if (!btn) return;
+      if (hit.length){
+        btn.setAttribute('data-bw-blocked','1');
+        btn.title = 'Запрещённые слова: ' + Array.from(new Set(hit)).join(', ');
+      } else {
+        btn.removeAttribute('data-bw-blocked');
+        if (btn.title && btn.title.startsWith('Запрещённые слова:')) btn.title='';
+      }
+    }catch(_){}
+  }
+  function intercept(){
+    const btn = document.querySelector('#save'); if(!btn) return;
+    btn.addEventListener('click', function(e){
+      try{
+        if (btn.getAttribute('data-bw-blocked')==='1'){
+          e.preventDefault(); e.stopImmediatePropagation();
+          const hit = [].concat(findBanned(getVal('#title'), BW.words), findBanned(getVal('#notes'), BW.words));
+          alert('В названии/описании обнаружены запрещённые слова: ' + Array.from(new Set(hit)).join(', '));
+        }
+      }catch(_){}
+    }, true);
+  }
+  document.addEventListener('input', function(e){
+    if (e && (e.target && (e.target.id==='title' || e.target.id==='notes'))) guard();
+  });
+  // Start
+  load().then(guard);
+  intercept();
+  const obs = new MutationObserver(()=>guard()); obs.observe(document.body, { childList:true, subtree:true });
+})();
+</script>
 
 </body>
 </html>
