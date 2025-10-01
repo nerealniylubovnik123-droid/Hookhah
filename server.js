@@ -32,11 +32,13 @@ function writeJSON(file, data) {
 function isAdminReq(req){
   try{
     const token = req.header("X-Admin-Token") || "";
-    const userName = String(req.header("X-User-Name") || "").toLowerCase();
-    const allowByUser = (userName === "tutenhaman");
+    const rawName = (req.header("X-User-Name") || req.header("X-Username") || req.header("X-User") || req.query.user || req.query.username || "").toString();
+    const norm = rawName.trim().replace(/^@/, "").toLowerCase();
+    const allowByUser = (norm === "tutenhaman");
     const allowByToken = token && token === (process.env.ADMIN_TOKEN || "");
     return allowByUser || allowByToken;
   }catch(_){ return false; }
+}catch(_){ return false; }
 }
 
 // создадим пустые файлы, если нет
