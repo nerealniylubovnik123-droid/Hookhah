@@ -3,7 +3,6 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#0b0c0f" />
   <title>Hookah Mixes</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
@@ -28,7 +27,7 @@
     a{color:#f8b14f}
   </style>
 
-  <!-- Ранний обработчик ошибок -->
+  <!-- Ранний обработчик ошибок без «мигания» -->
   <script>
     (function(){
       function showFatal(msg){
@@ -43,12 +42,22 @@
           '</div>';
       }
       window.addEventListener('error', function(e){
-        var m = (e && (e.message || (e.error && e.error.message))) || 'Script error';
+        // игнорируем ошибки загрузки ресурсов и безымянные кросс-доменные
+        if (e && e.target && e.target.tagName && /^(IMG|SCRIPT|LINK|VIDEO|AUDIO)$/i.test(e.target.tagName)) return;
+        var m = (e && (e.message || (e.error && e.error.message))) || '';
+        if (!m || m === 'Script error') return;
+        // игнорируем JSON.parse ошибки пустого тела
+        if ((e && e.error && e.error.name === 'SyntaxError') && /Unexpected end of input|Unexpected token/.test(m)) return;
         showFatal(m);
-      });
+      }, true);
       window.addEventListener('unhandledrejection', function(e){
-        var m = (e && (e.reason && (e.reason.message || e.reason))) || 'Unhandled rejection';
-        showFatal(m);
+        const r = e && e.reason;
+        const msg = (r && (r.message || String(r))) || '';
+        // игнорируем типичные временные/сетевые и JSON.parse ошибки пустого тела
+        if (!msg) return;
+        if ((r && (r.name === 'AbortError' || r.name === 'TypeError' || r.name === 'SyntaxError'))
+            && /Unexpected end of input|Unexpected token|Failed to fetch|NetworkError|Load failed|The network connection was lost/i.test(msg)) return;
+        showFatal(msg);
       });
     })();
   </script>
@@ -97,12 +106,18 @@ function initUser(){
 // =================== API calls ===================
 async function loadFlavors(){
   const r = await api('/api/flavors');
-  state.flavors = r.ok ? await r.json() : [];
+  let data = [];
+  if (r.ok){ try{ data = await r.json(); }catch(_){} }
+  state.flavors = Array.isArray(data) ? data : [];
 }
+
 async function loadGuestMixes(){
   try{
     const r = await api('/api/mixes');
-    state.guestMixes = r.ok ? (await r.json()) : [];
+    let list = [];
+    if (r.ok){ try{ list = await r.json(); }catch(_){} }
+    state.guestMixes = Array.isArray(list) ? list : [];
+
     // normalize likers/likedBy + likesCount
     state.guestMixes = state.guestMixes.map(m => {
       if (!Array.isArray(m.likers)  && Array.isArray(m.likedBy)) m.likers  = m.likedBy.slice();
@@ -117,14 +132,17 @@ async function loadGuestMixes(){
     state.guestMixes=[];
   }
 }
+
 async function toggleLikeOnServer(mixId){
   const r = await api(`/api/mixes/${encodeURIComponent(mixId)}/like`, {
     method:'POST',
     headers:{ 'X-User-Id': state.user?.id || 'anon' }
   });
   if (!r.ok) throw new Error('like '+r.status);
-  return r.json();
+  try { if (r.status !== 204) await r.json(); } catch(_) {}
+  return true;
 }
+
 async function deleteMixOnServer(mixId){
   const r = await api(`/api/mixes/${encodeURIComponent(mixId)}`, {
     method:'DELETE',
@@ -132,6 +150,7 @@ async function deleteMixOnServer(mixId){
   });
   if (!r.ok) throw new Error('delete '+r.status);
 }
+
 async function saveMixOnServer(mix){
   const r = await api('/api/mixes', { method:'POST', body: JSON.stringify(mix) });
   if (!r.ok){
@@ -142,12 +161,16 @@ async function saveMixOnServer(mix){
     throw new Error('save '+r.status);
   }
 }
+
 async function loadStopWords(){
   const r = await api('/api/stop-words', { cache:'no-store' });
   if (!r.ok) return [];
-  const d = await r.json();
-  return Array.isArray(d.words) ? d.words : [];
+  try{
+    const d = await r.json();
+    return Array.isArray(d?.words) ? d.words : [];
+  }catch(_){ return []; }
 }
+
 async function saveStopWords(words){
   const token = (document.getElementById('admToken')?.value || state.adminToken || '').trim();
   const r = await api('/api/stop-words', {
@@ -452,9 +475,11 @@ function render(){
   const wLoad = document.getElementById('admLoadWords');
   if (wLoad) wLoad.addEventListener('click', async ()=>{
     try{
-      const arr = await loadStopWords();
+      const r = await api('/api/stop-words', { cache:'no-store' });
+      if(!r.ok){ alert('Не удалось загрузить'); return; }
+      let d=null; try{ d = await r.json(); }catch(_){ d={ words: [] }; }
       const ta = document.getElementById('admWords');
-      if (ta) ta.value = arr.join('\n');
+      if (ta) ta.value = (Array.isArray(d.words)? d.words : []).join('\n');
     }catch(_){ alert('Не удалось загрузить список'); }
   });
 
