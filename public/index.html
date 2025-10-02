@@ -1,6 +1,32 @@
 <!doctype html>
 <html lang="ru">
 <head>
+<script>
+(function(){
+  window.getAdminToken = window.getAdminToken || function(){
+    try{
+      if (window.state && state.adminToken) return String(state.adminToken||'');
+      var v = document.getElementById('admToken') && document.getElementById('admToken').value;
+      if (v) return String(v||'');
+      var ls = localStorage.getItem('admin_token'); if (ls) return String(ls||'');
+    }catch(_){}
+    return '';
+  };
+  var getAdminToken = window.getAdminToken;
+  document.addEventListener('click', function(e){
+    const btn = e.target && (e.target.closest ? e.target.closest('#admSaveToken') : null);
+    if (!btn) return;
+    try{
+      const v = String((document.getElementById('admToken')||{}).value || '');
+      if (v){
+        try{ localStorage.setItem('admin_token', v); }catch(_){}
+        if (window.state) state.adminToken = v;
+      }
+    }catch(_){}
+  }, true);
+})();
+</script>
+
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#0a0b0d" />
@@ -1284,18 +1310,24 @@ const themesBlock =
 
     // Лайки
     root.querySelectorAll('[data-like]').forEach(btn=>{
-      btn.addEventListener('click', async ()=>{
-        const id = btn.getAttribute('data-like');
-        const mix = state.guestMixes.find(m=>m.id===id);
-        const liked = Array.isArray(mix?.likers) && state.user && mix.likers.includes(String(state.user.id));
-        try{
-          if (liked) await unlikeMixOnServer(id);
-          else        await likeMixOnServer(id);
-          await loadGuestMixes();
-          render();
-        }catch(e){ alert('Не удалось обновить лайк'); }
-      });
-    });
+  btn.addEventListener('click', async ()=>{
+    if (btn.dataset.busy==='1') return;
+    btn.dataset.busy='1';
+    const id = btn.getAttribute('data-like');
+    const mix = state.guestMixes.find(m=>m.id===id);
+    const liked = Array.isArray(mix?.likers) && state.user && mix.likers.includes(String(state.user.id));
+    try{
+      if (liked) await unlikeMixOnServer(id);
+      else        await likeMixOnServer(id);
+      await loadGuestMixes();
+      render();
+    }catch(e){
+      alert('Не удалось обновить лайк: ' + (e && (e.message || e) || ''));
+    }finally{
+      delete btn.dataset.busy;
+    }
+  });
+});
 
     // Рекомендатор
     const rs = root.querySelector('#recStrength');
@@ -1999,57 +2031,27 @@ const themesBlock =
 <script>
 (function(){
   const LS_KEY = 'FORBIDDEN_MIX_WORDS';
-  function getAdminToken(){
-    try{
-      if (window.state && state.adminToken) return String(state.adminToken||''); 
-      var inp = document.getElementById('admToken'); if (inp && inp.value) return String(inp.value||''); 
-      var ls = localStorage.getItem('admin_token'); if (ls) return String(ls||''); 
-    }catch(_){}
-    return '';
-  }
   function loadLocal(){ try{ const raw = localStorage.getItem(LS_KEY); const arr = raw ? JSON.parse(raw) : []; return Array.isArray(arr)?arr:[]; }catch(_){ return []; } }
   function saveLocal(list){ const arr = (Array.isArray(list)?list:[]).map(s=>String(s||'').trim()).filter(Boolean); try{ localStorage.setItem(LS_KEY, JSON.stringify(arr)); }catch(_){ } return arr; }
-  const ENDPOINTS = ['/api/stop-words','/api/admin/stop-words','/api/bw3/stop-words','/api/stopwords'];
-  async function tryFetch(url, opts){ try{ const r = await fetch(url, opts); return r; }catch(_){ return { ok:false, status:0, text: async()=>'' }; } }
-  async function loadFromServer(){
-    for (const url of ENDPOINTS){
-      const r = await tryFetch(url, {});
-      if (r && r.ok){ const d = await r.json().catch(()=>({words:[]})); return saveLocal(Array.isArray(d && d.words)?d.words:[]); }
-      if (r && (r.status===401 || r.status===403)) break;
-    }
-    return loadLocal();
-  }
-  async function saveToServer(list, token){
-    const arr = (Array.isArray(list)?list:[]).map(s=>String(s||'').trim()).filter(Boolean);
-    const headers = { 'Content-Type':'application/json; charset=UTF-8', 'X-Admin-Token': String(token||getAdminToken()||'') };
-    let last; 
-    for (const url of ENDPOINTS){
-      let r = await tryFetch(url, { method:'PUT', headers, body: JSON.stringify({ words: arr }) });
-      if (r.ok){ saveLocal(arr); return; }
-      if (r.status===404 || r.status===405){
-        r = await tryFetch(url, { method:'POST', headers, body: JSON.stringify({ words: arr }) });
-        if (r.ok){ saveLocal(arr); return; }
-        last = r; continue;
-      }
-      last = r;
-    }
-    let details = ''; try{ details = await (last && last.text ? last.text() : ''); }catch(_){}
-    throw new Error('Сохранение стоп-слов не удалось: ' + (last && last.status) + (details ? (' — '+details) : ''));
-  }
-  async function adminDeleteMix(id, token){
-    const headers = { 'X-Admin-Token': String(token||getAdminToken()||'') };
-    for (const p of ['/api/mixes/','/api/admin/mixes/']){
-      const r = await tryFetch(p + encodeURIComponent(id), { method:'DELETE', headers });
-      if (r.ok || r.status===204) return true;
-      if (r.status && r.status!==404 && r.status!==405) return false;
-    }
-    return false;
-  }
   function validateText(title, notes){
     const words = loadLocal(); if(!words.length) return { ok:true };
     const hay = [String(title||''), String(notes||'')].join('\\n').toLowerCase();
     const bad = words.find(w => hay.includes(String(w||'').toLowerCase()));
     return bad ? { ok:false, word: bad } : { ok:true };
+  }
+  async function saveForbiddenWords(list){
+    const words = (Array.isArray(list)?list:[]).map(s=>String(s||'').trim()).filter(Boolean);
+    const headers = { 'Content-Type':'application/json; charset=UTF-8', 'X-Admin-Token': (window.getAdminToken ? window.getAdminToken() : '') };
+    let r = await fetch('/api/stop-words', { method:'POST', headers, body: JSON.stringify({ words }) });
+    if (!r.ok) r = await fetch('/api/stop-words', { method:'PUT', headers, body: JSON.stringify({ words }) });
+    if (!r.ok){ let t=''; try{ t=await r.text(); }catch(_){ } throw new Error('Сохранение стоп-слов не удалось: ' + r.status + (t?(' — ' + t):'')); }
+    saveLocal(words);
+  }
+  async function adminDeleteMix(id){
+    try{
+      const r = await fetch('/api/mixes/'+encodeURIComponent(id), { method:'DELETE', headers: { 'X-Admin-Token': (window.getAdminToken?window.getAdminToken():'') } });
+      return r.ok || r.status===204;
+    }catch(_){ return false; }
   }
   document.addEventListener('click', function(e){
     try{
@@ -2081,23 +2083,31 @@ const themesBlock =
       '  </div>',
       '</div>'
     ].join('');
-    var hostCard = list.closest('.ui-card');
+    var hostCard = list.closest && list.closest('.ui-card');
     if (hostCard && hostCard.parentNode){ hostCard.parentNode.insertBefore(card, hostCard.nextSibling); } else { list.parentNode.insertBefore(card, list.nextSibling); }
     var area = card.querySelector('#admForbidden'); if (area){ try{ area.value = (loadLocal()||[]).join('\\n'); }catch(_){ area.value=''; } }
     var btnLoad = card.querySelector('#admStopWordsLoad');
-    if (btnLoad) btnLoad.addEventListener('click', async ()=>{ await loadFromServer(); var a = card.querySelector('#admForbidden'); if (a) a.value = (loadLocal()||[]).join('\\n'); });
+    if (btnLoad) btnLoad.addEventListener('click', async ()=>{
+      try{
+        const r = await fetch('/api/stop-words');
+        if (r.ok){
+          const d = await r.json().catch(()=>({words:[]}));
+          saveLocal(Array.isArray(d && d.words)?d.words:[]);
+        }
+        var a = card.querySelector('#admForbidden'); if (a) a.value = (loadLocal()||[]).join('\\n');
+      }catch(_){}
+    });
     var btnSave = card.querySelector('#admStopWordsSave');
     if (btnSave) btnSave.addEventListener('click', async ()=>{
       try{
         var a = card.querySelector('#admForbidden');
         var list = String(a ? a.value||'' : '').split(/\\r?\\n|,|;/).map(s=>s.trim()).filter(Boolean);
-        var token = getAdminToken();
-        await saveToServer(list, token);
+        await saveForbiddenWords(list);
         try{
           if (typeof loadGuestMixes === 'function') await loadGuestMixes();
           var mixes = (window.state && Array.isArray(state.guestMixes)) ? state.guestMixes.slice() : [];
           var bad = mixes.filter(m => !validateText(m && m.title, m && m.notes).ok);
-          for (const m of bad){ await adminDeleteMix(m.id, token); }
+          for (const m of bad){ await adminDeleteMix(m.id); }
           if (bad.length && typeof loadGuestMixes === 'function') await loadGuestMixes();
           if (typeof render === 'function') render();
         }catch(_){}
@@ -2108,11 +2118,6 @@ const themesBlock =
   var obs = new MutationObserver(ensureCard);
   obs.observe(document.documentElement || document.body, { childList:true, subtree:true });
   if (document.readyState === 'complete' || document.readyState === 'interactive'){ setTimeout(ensureCard, 300); } else { document.addEventListener('DOMContentLoaded', ()=> setTimeout(ensureCard, 300)); }
-  document.addEventListener('click', function(e){
-    var btn = e.target && (e.target.closest ? e.target.closest('#admSaveToken') : null);
-    if (!btn) return;
-    try{ var inp = document.getElementById('admToken'); var v = inp ? String(inp.value||'') : ''; if (v){ localStorage.setItem('admin_token', v); if (window.state) state.adminToken=v; } }catch(_){}
-  }, true);
 })();
 </script>
 
