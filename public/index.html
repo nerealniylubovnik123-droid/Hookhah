@@ -739,19 +739,24 @@ function validateMixAgainstStopWords(mix){
       if (!brands.includes(state.activeBrand)) state.activeBrand = brands[0] || '';
     }catch(e){ console.error('loadFlavors',e); state.flavors = []; }
   }
-  async function loadGuestMixes(){
-    try{
-      const r = await api('/api/mixes');
-      state.guestMixes = r.ok ? (await r.json()) : [];
-      // normalize likers/likedBy for compatibility
-      state.guestMixes = state.guestMixes.map(m => {
-        if (!Array.isArray(m.likers) && Array.isArray(m.likedBy)) m.likers = m.likedBy.slice();
-        if (!Array.isArray(m.likedBy) && Array.isArray(m.likers)) m.likedBy = m.likers.slice();
-        return m;
-      });
-      state.guestMixes.sort((a,b)=>(b?.createdAt||0)-(a?.createdAt||0));
-    }catch(_){ state.guestMixes=[]; }
+ async function loadGuestMixes(){
+  try{
+    const r = await api('/api/mixes');
+    state.guestMixes = r.ok ? (await r.json()) : [];
+    // ← ДОБАВЬ ЭТО (совместимость likedBy/likers + вычислим likesCount):
+    state.guestMixes = state.guestMixes.map(m => {
+      if (!Array.isArray(m.likers)  && Array.isArray(m.likedBy)) m.likers  = m.likedBy.slice();
+      if (!Array.isArray(m.likedBy) && Array.isArray(m.likers))  m.likedBy = m.likers.slice();
+      const count = Array.isArray(m.likedBy) ? m.likedBy.length
+                   : (Array.isArray(m.likers) ? m.likers.length
+                   : (Number(m.likesCount)||0));
+      m.likesCount = count;
+      return m;
+    });
+  }catch(_){
+    state.guestMixes=[];
   }
+}
   async function saveMixOnServer(mix){
     const r = await api('/api/mixes', { method:'POST', body: JSON.stringify(mix) });
     if(!r.ok) throw new Error('save mix '+r.status+': '+await r.text().catch(()=>'')); 
@@ -843,7 +848,9 @@ async function fetchRecommendations(){
 
     const total = percentSum(state.parts);
     const mixStrength10 = (function(parts,flavors){
-      if(!Array.isArray(parts)||!Array.isArray(flavors)||!parts.length) return null;
+      ${(typeof m.likesCount==='number' ? m.likesCount 
+  : (Array.isArray(m.likedBy)? m.likedBy.length 
+     : (Array.isArray(m.likers)? m.likers.length : 0)))} ❤
       const t=percentSum(parts); if(t<=0) return null; let w=0;
       for(const p of parts){
         const pr=safePercent(p?.percent); if(pr<=0) continue;
