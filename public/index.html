@@ -2136,5 +2136,138 @@ const themesBlock =
 })();
 </script>
 
+
+<script>
+/* Stop-words admin card (robust DOM injector) */
+(function(){
+  const API_BASE = (location && location.origin) || '';
+  const LS_KEY = 'FORBIDDEN_MIX_WORDS';
+
+  function loadLocal(){
+    try{ const raw = localStorage.getItem(LS_KEY); const arr = raw ? JSON.parse(raw) : []; return Array.isArray(arr)?arr:[]; }catch(_){ return []; }
+  }
+  function saveLocal(list){
+    const arr = (Array.isArray(list)?list:[]).map(s=>String(s||'').trim()).filter(Boolean);
+    try{ localStorage.setItem(LS_KEY, JSON.stringify(arr)); }catch(_){}
+    return arr;
+  }
+  async function loadFromServer(){
+    try{
+      const r = await fetch(API_BASE + '/api/stop-words');
+      if (r.ok){ const d = await r.json().catch(()=>({words:[]})); return saveLocal(Array.isArray(d && d.words) ? d.words : []); }
+    }catch(_){}
+    return loadLocal();
+  }
+  async function saveToServer(list, token){
+    const arr = (Array.isArray(list)?list:[]).map(s=>String(s||'').trim()).filter(Boolean);
+    const r = await fetch(API_BASE + '/api/stop-words', {
+      method: 'PUT',
+      headers: { 'Content-Type':'application/json; charset=UTF-8', 'X-Admin-Token': String(token||'') },
+      body: JSON.stringify({ words: arr })
+    });
+    if (!r.ok){ let t=''; try{ t=await r.text(); }catch(_){ } throw new Error('HTTP '+r.status+': '+t); }
+    saveLocal(arr);
+  }
+  async function adminDeleteMix(id, token){
+    try{
+      const r = await fetch(API_BASE + '/api/mixes/'+encodeURIComponent(id), { method: 'DELETE', headers: { 'X-Admin-Token': String(token||'') } });
+      return r.ok || r.status===204;
+    }catch(_){ return false; }
+  }
+  function validateText(title, notes){
+    const words = loadLocal(); if(!words.length) return { ok:true };
+    const hay = [String(title||''), String(notes||'')].join('\n').toLowerCase();
+    const bad = words.find(w => hay.includes(String(w||'').toLowerCase()));
+    return bad ? { ok:false, word: bad } : { ok:true };
+  }
+
+  // Block saving new mixes if contains stop words (idempotent)
+  document.addEventListener('click', function(e){
+    try{
+      const btn = e.target && (e.target.closest ? e.target.closest('#save') : null);
+      if (!btn) return;
+      const titleEl = document.getElementById('title');
+      const notesEl = document.getElementById('notes');
+      const v = validateText(titleEl ? titleEl.value : '', notesEl ? notesEl.value : '');
+      if (!v.ok){ e.preventDefault(); e.stopImmediatePropagation(); alert('Микс содержит запрещённое слово: ' + v.word); }
+    }catch(_){}
+  }, true);
+
+  // Inject admin card next to '#admFlavorList' when it exists
+  function ensureCard(){
+    var list = document.getElementById('admFlavorList');
+    if (!list) return;
+    if (document.getElementById('admForbidden')) return;
+
+    var card = document.createElement('div');
+    card.className = 'ui-card';
+    card.innerHTML = [
+      '<div class="px-3 pt-3">',
+      '  <div class="text-[10px] tracking-wider uppercase text-slate-300/70">Модерация</div>',
+      '  <div class="text-base font-semibold">Запрещённые слова</div>',
+      '</div>',
+      '<div class="p-3 space-y-2 text-sm">',
+      '  <textarea id="admForbidden" class="min-h-[140px] rounded-xl border border-slate-700 bg-slate-900 px-3 py-2" placeholder="Одно слово на строку"></textarea>',
+      '  <div class="text-[11px] text-slate-400">Если слово встречается в названии или описании — микс нельзя сохранить. При добавлении новых слов нарушающие старые миксы удаляются автоматически.</div>',
+      '  <div class="flex gap-2">',
+      '    <button id="admStopWordsLoad" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-white/10">Загрузить с сервера</button>',
+      '    <button id="admStopWordsSave" class="tap btn-primary shimmer inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px]">Сохранить</button>',
+      '  </div>',
+      '</div>'
+    ].join('');
+
+    var hostCard = list.closest('.ui-card');
+    if (hostCard && hostCard.parentNode){
+      hostCard.parentNode.insertBefore(card, hostCard.nextSibling);
+    } else {
+      list.parentNode.insertBefore(card, list.nextSibling);
+    }
+
+    // Prefill and wire buttons
+    var area = card.querySelector('#admForbidden');
+    if (area){ try{ area.value = (loadLocal()||[]).join('\\n'); }catch(_){ area.value=''; } }
+
+    var btnLoad = card.querySelector('#admStopWordsLoad');
+    if (btnLoad) btnLoad.addEventListener('click', async ()=>{
+      await loadFromServer();
+      var a = card.querySelector('#admForbidden'); if (a) a.value = (loadLocal()||[]).join('\\n');
+    });
+
+    var btnSave = card.querySelector('#admStopWordsSave');
+    if (btnSave) btnSave.addEventListener('click', async ()=>{
+      try{
+        var a = card.querySelector('#admForbidden');
+        var list = String(a ? a.value||'' : '').split(/\\r?\\n|,|;/).map(s=>s.trim()).filter(Boolean);
+        var token = (window.state && state.adminToken) || ''; // читаем из вашего состояния, если доступно
+        await saveToServer(list, token);
+        // Применение ко всем существующим миксам (удаление нарушителей)
+        try{
+          if (typeof loadGuestMixes === 'function') await loadGuestMixes();
+          var mixes = (window.state && Array.isArray(state.guestMixes)) ? state.guestMixes.slice() : [];
+          var bad = mixes.filter(m => !validateText(m && m.title, m && m.notes).ok);
+          for (const m of bad){ await adminDeleteMix(m.id, token); }
+          if (bad.length && typeof loadGuestMixes === 'function') await loadGuestMixes();
+          if (typeof render === 'function') render();
+        }catch(_){}
+        alert('Сохранено и применено.');
+      }catch(e){
+        alert(e && (e.message || e) || 'Не удалось сохранить список');
+      }
+    });
+  }
+
+  // Observe DOM; inject when admin UI появляется
+  var obs = new MutationObserver(ensureCard);
+  obs.observe(document.documentElement || document.body, { childList:true, subtree:true });
+
+  // Try initial
+  if (document.readyState === 'complete' || document.readyState === 'interactive'){
+    setTimeout(ensureCard, 300);
+  } else {
+    document.addEventListener('DOMContentLoaded', ()=> setTimeout(ensureCard, 300));
+  }
+})();
+</script>
+
 </body>
 </html>
