@@ -559,7 +559,6 @@ input[type=text], input[type=number], textarea{
       });
     })();
   </script>
-<style id="fix-input-contrast">input,textarea,select{color:var(--text)!important;}input::placeholder,textarea::placeholder{color:var(--muted)!important;opacity:.9}</style>
 </head>
 <body class="text-slate-100">
   <div id="root" class="min-h-[100svh]"></div>
@@ -612,13 +611,7 @@ function saveStopWords(list){
   const arr = (Array.isArray(list) ? list : [])
     .map(s => String(s||'').trim())
     .filter(Boolean);
-  try { localStorage.setItem(STOP_WORDS_KEY, JSON.stringify(arr)); } catch (_) {}
-  // Фоновая чистка уже созданных миксов под новые запреты
-  setTimeout(() => {
-    try {
-      if (typeof deleteMixesWithStopWords === 'function') deleteMixesWithStopWords();
-    } catch (_) {}
-  }, 0);
+  try{ localStorage.setItem(STOP_WORDS_KEY, JSON.stringify(arr)); }catch(_){}
   return arr;
 }
 function validateMixAgainstStopWords(mix){
@@ -632,26 +625,6 @@ function validateMixAgainstStopWords(mix){
   const bad = words.find(w => haystack.includes(String(w||'').toLowerCase()));
   return bad ? { ok:false, word: bad } : { ok:true };
 }
-
-function deleteMixesWithStopWords(){
-  try { if (!(isAdmin && isAdmin())) return; } catch (_) { return; }
-  const words = loadStopWords();
-  if (!Array.isArray(words) || !words.length) return;
-  const list = Array.isArray(state?.guestMixes) ? state.guestMixes.slice() : [];
-  const bad = list.filter(mix => {
-    const hay = [String(mix?.title||''), String(mix?.notes||'')]
-      .concat(Array.isArray(mix?.parts) ? mix.parts.map(p => String((p?.brand||'')+' '+(p?.name||''))) : [])
-      .join('\n').toLowerCase();
-    return words.some(w => hay.includes(String(w||'').toLowerCase()));
-  });
-  (async () => {
-    for (const m of bad){
-      try { await deleteMixOnServer(m.id, state.user); } catch (_) {}
-    }
-    if (bad.length) { try { await loadGuestMixes(); render(); } catch (_) {} }
-  })();
-}
-
 
   const normalizeBrand=b=>(b||'').trim();
   const getStrength10=f=>{ if(!f) return 5; if(typeof f.strength10==='number'&&Number.isFinite(f.strength10)) return Math.max(1,Math.min(10,f.strength10)); return BRAND_STRENGTH10_DEFAULTS[ brandKey(f.brand) ] ?? 5;};
@@ -802,29 +775,17 @@ function deleteMixesWithStopWords(){
   }
   // Лайки
   async function likeMixOnServer(id){
-  const uid = String(state.user?.id ?? 'anon');
-  const res = await api('/api/mixes/' + encodeURIComponent(id) + '/like', {
-    method: 'POST',
-    headers: { 'X-User-Id': uid }
-  });
-  if (!res.ok) throw new Error('like ' + res.status);
-  if (res.status === 204) return true;
-  let data = null;
-  try { data = await res.json(); } catch (_) {}
-  return data || true;
-}
+    const uid = String(state.user?.id || 'anon');
+    const r = await api('/api/mixes/'+encodeURIComponent(id)+'/like', { method:'POST', headers:{ 'X-User-Id': uid } });
+    if(!r.ok) throw new Error('like '+r.status);
+    return await r.json();
+  }
   async function unlikeMixOnServer(id){
-  const uid = String(state.user?.id ?? 'anon');
-  const res = await api('/api/mixes/' + encodeURIComponent(id) + '/like', {
-    method: 'DELETE',
-    headers: { 'X-User-Id': uid }
-  });
-  if (!res.ok) throw new Error('unlike ' + res.status);
-  if (res.status === 204) return true;
-  let data = null;
-  try { data = await res.json(); } catch (_) {}
-  return data || true;
-}
+    const uid = String(state.user?.id || 'anon');
+    const r = await api('/api/mixes/'+encodeURIComponent(id)+'/like', { method:'DELETE', headers:{ 'X-User-Id': uid } });
+    if(!r.ok) throw new Error('unlike '+r.status);
+    return await r.json();
+  }
   // Рекомендатор
   
 async function fetchRecommendations(){
@@ -945,7 +906,7 @@ async function fetchRecommendations(){
       const canDelete = !!(state.user && (m.authorId && String(m.authorId)===String(state.user.id)));
       const delBtn = canDelete ? '<button data-del="'+escAttr(m.id)+'" class="tap ml-auto inline-flex items-center justify-center rounded-full h-7 px-3 text-[11px] border border-rose-700 text-rose-300 hover:bg-rose-900/40">Удалить</button>' : '';
       const likes = Array.isArray(m.likers) ? m.likers.length : 0;
-      const iLiked = Array.isArray(m.likers) && state.user && m.likers.map(String).includes(String(state.user.id));
+      const iLiked = Array.isArray(m.likers) && state.user && m.likers.includes(String(state.user.id));
       const likeBtn =
         '<button data-like="'+escAttr(m.id)+'" class="tap inline-flex items-center gap-1 rounded-full h-7 px-3 text-[11px] border '+(iLiked?'border-pink-500 text-pink-200 bg-pink-900/30':'border-slate-700 text-slate-200 hover:bg-white/10')+'">'+
         (iLiked?'❤':'♡')+' <span class="tabular-nums">'+likes+'</span></button>';
@@ -1297,9 +1258,7 @@ const themesBlock =
           strength10: (function(){ const t=percentSum(state.parts); if(!t) return null; let w=0; for(const p of state.parts){ const pr=safePercent(p.percent); if(pr<=0) continue; const fl=state.flavors.find(x=>x&&x.id===p.flavorId); if(!fl) continue; w+=getStrength10(fl)*(pr/t);} return w?Math.round(w*10)/10:null; })(),
           likers: []
         };
-        const v = validateMixAgainstStopWords(mix);
-          if (!v.ok) { alert('Нельзя сохранить: слово "'+v.word+'" в списке запрещённых.'); return; }
-try{
+        try{
           await saveMixOnServer(mix);
           await loadGuestMixes();
           state.title=''; state.notes=''; state.parts=[]; state.activeTab='guest';
@@ -1325,8 +1284,8 @@ try{
     root.querySelectorAll('[data-like]').forEach(btn=>{
       btn.addEventListener('click', async ()=>{
         const id = btn.getAttribute('data-like');
-        const mix = state.guestMixes.find(m=>String(m.id)===String(id));
-        const liked = Array.isArray(mix?.likers) && state.user && mix.likers.map(String).includes(String(state.user.id));
+        const mix = state.guestMixes.find(m=>m.id===id);
+        const liked = Array.isArray(mix?.likers) && state.user && mix.likers.includes(String(state.user.id));
         try{
           if (liked) await unlikeMixOnServer(id);
           else        await likeMixOnServer(id);
@@ -1387,6 +1346,26 @@ try{
     const tokCancel=root.querySelector('#admCancel'); if(tokCancel){ tokCancel.addEventListener('click', ()=>{ state.adminPrompt=false; render(); }); }
 
     if (isAdmin() && state.activeTab==='admin'){
+      // Stop-words admin wiring
+      try {
+        const swText = root.querySelector('#admStopText');
+        const swLoad = root.querySelector('#admStopLoad');
+        const swSave = root.querySelector('#admStopSave');
+        if (swText) {
+          const list = loadStopWords();
+          swText.value = Array.isArray(list) ? list.join('\n') : '';
+        }
+        if (swLoad && swText) swLoad.addEventListener('click', ()=>{
+          const list = loadStopWords();
+          swText.value = Array.isArray(list) ? list.join('\n') : '';
+        });
+        if (swSave && swText) swSave.addEventListener('click', ()=>{
+          const lines = String(swText.value||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+          saveStopWords(lines);
+          alert('Сохранено');
+        });
+      } catch(_) {}
+
       buildAdminFlavorList(root);
       const btnReload=root.querySelector('#admReload'); if(btnReload){ btnReload.addEventListener('click', async ()=>{ await loadFlavors(); render(); }); }
       const btnLogout=root.querySelector('#admClearToken'); if(btnLogout){ btnLogout.addEventListener('click', ()=>{ try{localStorage.removeItem('admin_token');}catch(_){ } state.adminToken=''; state.activeTab='builder'; render(); }); }
