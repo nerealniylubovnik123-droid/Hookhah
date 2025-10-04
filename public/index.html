@@ -706,7 +706,7 @@ function validateMixAgainstStopWords(mix){
   state.prevTab = 'builder';
   state.theme = getSavedTheme() || 'warm-dark';
   state.themePickerVisible = !getSavedTheme();
-  
+  state.theme = getSavedTheme() || 'warm-dark';
   const isAdmin =()=> (state?.user?.username==="Tutenhaman") || !!(state.adminToken && state.adminToken.length>=6);
 
   // ========================= AUTH / INIT =====================================
@@ -731,7 +731,7 @@ function validateMixAgainstStopWords(mix){
   // ========================= API CALLS =======================================
   async function loadFlavors(){
     try{
-      const res = await api('/api/flavors');
+      const r = await api('/api/flavors');
       if(!r.ok) throw new Error('flavors '+r.status);
       const data = await r.json();
       state.flavors = Array.isArray(data) ? data : [];
@@ -741,25 +741,25 @@ function validateMixAgainstStopWords(mix){
   }
   async function loadGuestMixes(){
     try{
-      const res = await api('/api/mixes');
+      const r = await api('/api/mixes');
       state.guestMixes = r.ok ? (await r.json()) : [];
       state.guestMixes.sort((a,b)=>(b?.createdAt||0)-(a?.createdAt||0));
     }catch(_){ state.guestMixes=[]; }
   }
   async function saveMixOnServer(mix){
-    const res = await api('/api/mixes', { method:'POST', body: JSON.stringify(mix) });
+    const r = await api('/api/mixes', { method:'POST', body: JSON.stringify(mix) });
     if(!r.ok) throw new Error('save mix '+r.status+': '+await r.text().catch(()=>'')); 
     return true;
   }
   async function deleteMixOnServer(id, user){
     const uid = String(user && user.id || '');
     const headers = { 'X-User-Id': uid, 'X-Author-Id': uid, 'Content-Type':'application/json; charset=UTF-8' };
-    const res = await api('/api/mixes/'+encodeURIComponent(id), { method:'DELETE', headers });
+    const r = await api('/api/mixes/'+encodeURIComponent(id), { method:'DELETE', headers });
     if (r.ok || r.status===204) return true;
     throw new Error('Не удалось удалить микс: '+r.status+' — '+await r.text().catch(()=>'')); 
   }
   async function createFlavorOnServer(payload, token){
-    const res = await api('/api/flavors', { method:'POST', headers:{ 'X-Admin-Token': token||'' }, body: JSON.stringify(payload) });
+    const r = await api('/api/flavors', { method:'POST', headers:{ 'X-Admin-Token': token||'' }, body: JSON.stringify(payload) });
     if(!r.ok) throw new Error('Не удалось добавить вкус: '+r.status+' — '+await r.text().catch(()=>'')); 
     return true;
   }
@@ -775,19 +775,12 @@ function validateMixAgainstStopWords(mix){
   }
   // Лайки
   async function likeMixOnServer(id){
-  const uid = String(state.user?.id ?? 'anon');
-  const res = await api('/api/mixes/' + encodeURIComponent(id) + '/like', {
-    method: 'POST',
-    headers: { 'X-User-Id': uid }
-  });
-  if (!res.ok) throw new Error('like ' + res.status);
-  if (res.status === 204) return true;
-  let data = null;
-  try { data = await res.json(); } catch (_) {}
-  return data || true;
-}
-
-async function unlikeMixOnServer(id){
+    const uid = String(state.user?.id || 'anon');
+    const r = await api('/api/mixes/'+encodeURIComponent(id)+'/like', { method:'POST', headers:{ 'X-User-Id': uid } });
+    if(!r.ok) throw new Error('like '+r.status);
+    return await r.json();
+  }
+  async function unlikeMixOnServer(id){
   const uid = String(state.user?.id ?? 'anon');
   const res = await api('/api/mixes/' + encodeURIComponent(id) + '/like', {
     method: 'DELETE',
@@ -799,7 +792,6 @@ async function unlikeMixOnServer(id){
   try { data = await res.json(); } catch (_) {}
   return data || true;
 }
-
 
 
   function LogoSVG(cls){
@@ -893,7 +885,7 @@ async function unlikeMixOnServer(id){
       const canDelete = !!(state.user && (m.authorId && String(m.authorId)===String(state.user.id)));
       const delBtn = canDelete ? '<button data-del="'+escAttr(m.id)+'" class="tap ml-auto inline-flex items-center justify-center rounded-full h-7 px-3 text-[11px] border border-rose-700 text-rose-300 hover:bg-rose-900/40">Удалить</button>' : '';
       const likes = Array.isArray(m.likers) ? m.likers.length : 0;
-      const iLiked = Array.isArray(m.likers) && state.user && m.likers.map(String).includes(String(state.user.id));
+      const iLiked = Array.isArray(m.likers) && state.user && m.likers.includes(String(state.user.id));
       const likeBtn =
         '<button data-like="'+escAttr(m.id)+'" class="tap inline-flex items-center gap-1 rounded-full h-7 px-3 text-[11px] border '+(iLiked?'border-pink-500 text-pink-200 bg-pink-900/30':'border-slate-700 text-slate-200 hover:bg-white/10')+'">'+
         (iLiked?'❤':'♡')+' <span class="tabular-nums">'+likes+'</span></button>';
@@ -1272,7 +1264,7 @@ const themesBlock =
       btn.addEventListener('click', async ()=>{
         const id = btn.getAttribute('data-like');
         const mix = state.guestMixes.find(m=>m.id===id);
-        const liked = Array.isArray(mix?.likers) && state.user && mix.likers.map(String).includes(String(state.user.id));
+        const liked = Array.isArray(mix?.likers) && state.user && mix.likers.includes(String(state.user.id));
         try{
           if (liked) await unlikeMixOnServer(id);
           else        await likeMixOnServer(id);
