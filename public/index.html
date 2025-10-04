@@ -775,11 +775,17 @@ function validateMixAgainstStopWords(mix){
   }
   // Лайки
   async function likeMixOnServer(id){
-    const uid = String(state.user?.id || 'anon');
-    const r = await api('/api/mixes/'+encodeURIComponent(id)+'/like', { method:'POST', headers:{ 'X-User-Id': uid } });
-    if(!r.ok) throw new Error('like '+r.status);
-    return await r.json();
-  }
+  const uid = String(state.user?.id ?? 'anon');
+  const res = await api('/api/mixes/' + encodeURIComponent(id) + '/like', {
+    method: 'POST',
+    headers: { 'X-User-Id': uid }
+  });
+  if (!res.ok) throw new Error('like ' + res.status);
+  if (res.status === 204) return true;
+  let data = null;
+  try { data = await res.json(); } catch (_) {}
+  return data || true;
+}
   async function unlikeMixOnServer(id){
   const uid = String(state.user?.id ?? 'anon');
   const res = await api('/api/mixes/' + encodeURIComponent(id) + '/like', {
@@ -791,6 +797,33 @@ function validateMixAgainstStopWords(mix){
   let data = null;
   try { data = await res.json(); } catch (_) {}
   return data || true;
+}
+  // Рекомендатор
+  
+async function fetchRecommendations(){
+  const q = new URLSearchParams();
+  if (state.recTaste) q.set('taste', state.recTaste);
+  if (Number.isFinite(state.recStrength)) q.set('strength', String(state.recStrength));
+  q.set('limit','10');
+  state.recError = '';
+  try{
+    if (location.protocol === 'file:' || location.origin === 'null') {
+      // No backend in file:// mode
+      state.recError = 'Рекомендации недоступны без сервера.';
+      state.recList = [];
+      return;
+    }
+    const r = await api('/api/mixes/recommend?' + q.toString());
+    if (!r.ok) {
+      state.recError = 'Сервер рекомендаций недоступен (' + r.status + ').';
+      state.recList = [];
+      return;
+    }
+    state.recList = await r.json();
+  }catch(e){
+    state.recError = 'Не удалось получить рекомендации.';
+    state.recList = [];
+  }
 }
 
 
@@ -885,7 +918,7 @@ function validateMixAgainstStopWords(mix){
       const canDelete = !!(state.user && (m.authorId && String(m.authorId)===String(state.user.id)));
       const delBtn = canDelete ? '<button data-del="'+escAttr(m.id)+'" class="tap ml-auto inline-flex items-center justify-center rounded-full h-7 px-3 text-[11px] border border-rose-700 text-rose-300 hover:bg-rose-900/40">Удалить</button>' : '';
       const likes = Array.isArray(m.likers) ? m.likers.length : 0;
-      const iLiked = Array.isArray(m.likers) && state.user && m.likers.includes(String(state.user.id));
+      const iLiked = Array.isArray(m.likers) && state.user && m.likers.map(String).includes(String(state.user.id));
       const likeBtn =
         '<button data-like="'+escAttr(m.id)+'" class="tap inline-flex items-center gap-1 rounded-full h-7 px-3 text-[11px] border '+(iLiked?'border-pink-500 text-pink-200 bg-pink-900/30':'border-slate-700 text-slate-200 hover:bg-white/10')+'">'+
         (iLiked?'❤':'♡')+' <span class="tabular-nums">'+likes+'</span></button>';
@@ -1264,7 +1297,7 @@ const themesBlock =
       btn.addEventListener('click', async ()=>{
         const id = btn.getAttribute('data-like');
         const mix = state.guestMixes.find(m=>m.id===id);
-        const liked = Array.isArray(mix?.likers) && state.user && mix.likers.includes(String(state.user.id));
+        const liked = Array.isArray(mix?.likers) && state.user && mix.likers.map(String).includes(String(state.user.id));
         try{
           if (liked) await unlikeMixOnServer(id);
           else        await likeMixOnServer(id);
