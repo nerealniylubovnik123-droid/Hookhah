@@ -1,32 +1,6 @@
 <!doctype html>
 <html lang="ru">
 <head>
-<script>
-(function(){
-  window.getAdminToken = window.getAdminToken || function(){
-    try{
-      if (window.state && state.adminToken) return String(state.adminToken||'');
-      var v = document.getElementById('admToken') && document.getElementById('admToken').value;
-      if (v) return String(v||'');
-      var ls = localStorage.getItem('admin_token'); if (ls) return String(ls||'');
-    }catch(_){}
-    return '';
-  };
-  var getAdminToken = window.getAdminToken;
-  document.addEventListener('click', function(e){
-    const btn = e.target && (e.target.closest ? e.target.closest('#admSaveToken') : null);
-    if (!btn) return;
-    try{
-      const v = String((document.getElementById('admToken')||{}).value || '');
-      if (v){
-        try{ localStorage.setItem('admin_token', v); }catch(_){}
-        if (window.state) state.adminToken = v;
-      }
-    }catch(_){}
-  }, true);
-})();
-</script>
-
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#0a0b0d" />
@@ -653,9 +627,7 @@ function validateMixAgainstStopWords(mix){
 }
 
   const normalizeBrand=b=>(b||'').trim();
-  
-  const brandKey = b => String((b||'').trim().toLowerCase().replace(/[^a-z0-9а-яё]+/gi,''));
-const getStrength10=f=>{ if(!f) return 5; if(typeof f.strength10==='number'&&Number.isFinite(f.strength10)) return Math.max(1,Math.min(10,f.strength10)); return BRAND_STRENGTH10_DEFAULTS[ brandKey(f.brand) ] ?? 5;};
+  const getStrength10=f=>{ if(!f) return 5; if(typeof f.strength10==='number'&&Number.isFinite(f.strength10)) return Math.max(1,Math.min(10,f.strength10)); return BRAND_STRENGTH10_DEFAULTS[ brandKey(f.brand) ] ?? 5;};
   const strengthColor=v=>{
     if(v==null) return {bg:'bg-slate-800',text:'text-slate-200',border:'border-slate-700'};
     if(v<4)  return {bg:'bg-emerald-950',text:'text-emerald-300',border:'border-emerald-800'};
@@ -734,7 +706,7 @@ const getStrength10=f=>{ if(!f) return 5; if(typeof f.strength10==='number'&&Num
   state.prevTab = 'builder';
   state.theme = getSavedTheme() || 'warm-dark';
   state.themePickerVisible = !getSavedTheme();
-  state.theme = getSavedTheme() || 'warm-dark';
+  
   const isAdmin =()=> (state?.user?.username==="Tutenhaman") || !!(state.adminToken && state.adminToken.length>=6);
 
   // ========================= AUTH / INIT =====================================
@@ -759,7 +731,7 @@ const getStrength10=f=>{ if(!f) return 5; if(typeof f.strength10==='number'&&Num
   // ========================= API CALLS =======================================
   async function loadFlavors(){
     try{
-      const r = await api('/api/flavors');
+      const res = await api('/api/flavors');
       if(!r.ok) throw new Error('flavors '+r.status);
       const data = await r.json();
       state.flavors = Array.isArray(data) ? data : [];
@@ -769,40 +741,32 @@ const getStrength10=f=>{ if(!f) return 5; if(typeof f.strength10==='number'&&Num
   }
   async function loadGuestMixes(){
     try{
-      const r = await api('/api/mixes');
+      const res = await api('/api/mixes');
       state.guestMixes = r.ok ? (await r.json()) : [];
       state.guestMixes.sort((a,b)=>(b?.createdAt||0)-(a?.createdAt||0));
     }catch(_){ state.guestMixes=[]; }
   }
- async function likeMixOnServer(id){
-  const uid = String(state.user?.id || 'anon');
-  const r = await api('/api/mixes/'+encodeURIComponent(id)+'/like', { method:'POST', headers:{ 'X-User-Id': uid } });
-  if (!r.ok) throw new Error('like '+r.status);
-  if (r.status === 204) return true;
-  let data = null;
-  async function unlikeMixOnServer(id){
-  const uid = String(state.user?.id || 'anon');
-  const r = await api('/api/mixes/'+encodeURIComponent(id)+'/like', { method:'DELETE', headers:{ 'X-User-Id': uid } });
-  if (!r.ok) throw new Error('unlike '+r.status);
-  if (r.status === 204) return true;
-  let data = null;
-  try { data = await r.json(); } catch(_) {}
-  return data || true;
-}
-
-    const r = await api('/api/mixes/'+encodeURIComponent(id), { method:'DELETE', headers });
+  async function saveMixOnServer(mix){
+    const res = await api('/api/mixes', { method:'POST', body: JSON.stringify(mix) });
+    if(!r.ok) throw new Error('save mix '+r.status+': '+await r.text().catch(()=>'')); 
+    return true;
+  }
+  async function deleteMixOnServer(id, user){
+    const uid = String(user && user.id || '');
+    const headers = { 'X-User-Id': uid, 'X-Author-Id': uid, 'Content-Type':'application/json; charset=UTF-8' };
+    const res = await api('/api/mixes/'+encodeURIComponent(id), { method:'DELETE', headers });
     if (r.ok || r.status===204) return true;
     throw new Error('Не удалось удалить микс: '+r.status+' — '+await r.text().catch(()=>'')); 
   }
   async function createFlavorOnServer(payload, token){
-    const r = await api('/api/flavors', { method:'POST', headers:{ 'X-Admin-Token': (String(token||getAdminToken()||'')) }, body: JSON.stringify(payload) });
+    const res = await api('/api/flavors', { method:'POST', headers:{ 'X-Admin-Token': token||'' }, body: JSON.stringify(payload) });
     if(!r.ok) throw new Error('Не удалось добавить вкус: '+r.status+' — '+await r.text().catch(()=>'')); 
     return true;
   }
   async function deleteFlavorOnServer(id, token){
     const r = await fetch(API_BASE + '/api/flavors/' + encodeURIComponent(id), {
       method: 'DELETE',
-      headers: { 'X-Admin-Token': (String(token||getAdminToken()||'')) }
+      headers: { 'X-Admin-Token': token || '' }
     }).catch(()=>null);
     const txt = r ? (await r.text().catch(()=>'')) : '';
     if (r && r.status===204) return true;
@@ -811,44 +775,31 @@ const getStrength10=f=>{ if(!f) return 5; if(typeof f.strength10==='number'&&Num
   }
   // Лайки
   async function likeMixOnServer(id){
-    const uid = String(state.user?.id || 'anon');
-    const r = await api('/api/mixes/'+encodeURIComponent(id)+'/like', { method:'POST', headers:{ 'X-User-Id': uid } });
-    if(!r.ok) throw new Error('like '+r.status);
-    return await r.json();
-  }
-  async function unlikeMixOnServer(id){
-    const uid = String(state.user?.id || 'anon');
-    const r = await api('/api/mixes/'+encodeURIComponent(id)+'/like', { method:'DELETE', headers:{ 'X-User-Id': uid } });
-    if(!r.ok) throw new Error('unlike '+r.status);
-    return await r.json();
-  }
-  // Рекомендатор
-  
-async function fetchRecommendations(){
-  const q = new URLSearchParams();
-  if (state.recTaste) q.set('taste', state.recTaste);
-  if (Number.isFinite(state.recStrength)) q.set('strength', String(state.recStrength));
-  q.set('limit','10');
-  state.recError = '';
-  try{
-    if (location.protocol === 'file:' || location.origin === 'null') {
-      // No backend in file:// mode
-      state.recError = 'Рекомендации недоступны без сервера.';
-      state.recList = [];
-      return;
-    }
-    const r = await api('/api/mixes/recommend?' + q.toString());
-    if (!r.ok) {
-      state.recError = 'Сервер рекомендаций недоступен (' + r.status + ').';
-      state.recList = [];
-      return;
-    }
-    state.recList = await r.json();
-  }catch(e){
-    state.recError = 'Не удалось получить рекомендации.';
-    state.recList = [];
-  }
+  const uid = String(state.user?.id ?? 'anon');
+  const res = await api('/api/mixes/' + encodeURIComponent(id) + '/like', {
+    method: 'POST',
+    headers: { 'X-User-Id': uid }
+  });
+  if (!res.ok) throw new Error('like ' + res.status);
+  if (res.status === 204) return true;
+  let data = null;
+  try { data = await res.json(); } catch (_) {}
+  return data || true;
 }
+
+async function unlikeMixOnServer(id){
+  const uid = String(state.user?.id ?? 'anon');
+  const res = await api('/api/mixes/' + encodeURIComponent(id) + '/like', {
+    method: 'DELETE',
+    headers: { 'X-User-Id': uid }
+  });
+  if (!res.ok) throw new Error('unlike ' + res.status);
+  if (res.status === 204) return true;
+  let data = null;
+  try { data = await res.json(); } catch (_) {}
+  return data || true;
+}
+
 
 
   function LogoSVG(cls){
@@ -906,7 +857,7 @@ async function fetchRecommendations(){
             '<div class="flex items-center gap-2">' +
               '<div class="w-6 h-6 rounded-full bg-slate-800 flex items-center justify-center text-[11px] opacity-80">'+escHTML((f.brand||'?').slice(0,1).toUpperCase())+'</div>' +
               '<div class="font-medium truncate" title="'+escAttr((f.brand||'')+' • '+(f.name||''))+'">'+escHTML(f.name)+' <span class="opacity-60">('+escHTML(f.brand)+')</span></div>' +
-              const iLiked = Array.isArray(m.likers) && state.user && m.likers.map(String).includes(String(state.user.id));
+              '<span class="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] border '+c.bg+' '+c.text+' '+c.border+'">'+s.toFixed(1)+'</span>' +
             '</div>' +
             desc +
           '</div>' +
@@ -942,7 +893,7 @@ async function fetchRecommendations(){
       const canDelete = !!(state.user && (m.authorId && String(m.authorId)===String(state.user.id)));
       const delBtn = canDelete ? '<button data-del="'+escAttr(m.id)+'" class="tap ml-auto inline-flex items-center justify-center rounded-full h-7 px-3 text-[11px] border border-rose-700 text-rose-300 hover:bg-rose-900/40">Удалить</button>' : '';
       const likes = Array.isArray(m.likers) ? m.likers.length : 0;
-      const iLiked = Array.isArray(m.likers) && state.user && m.likers.includes(String(state.user.id));
+      const iLiked = Array.isArray(m.likers) && state.user && m.likers.map(String).includes(String(state.user.id));
       const likeBtn =
         '<button data-like="'+escAttr(m.id)+'" class="tap inline-flex items-center gap-1 rounded-full h-7 px-3 text-[11px] border '+(iLiked?'border-pink-500 text-pink-200 bg-pink-900/30':'border-slate-700 text-slate-200 hover:bg-white/10')+'">'+
         (iLiked?'❤':'♡')+' <span class="tabular-nums">'+likes+'</span></button>';
@@ -1285,7 +1236,7 @@ const themesBlock =
         const mix={
           id: uuidv4(),
           title: String(state.title).trim(),
-          const liked = Array.isArray(mix?.likers) && state.user && mix.likers.map(String).includes(String(state.user.id));
+          parts: state.parts.slice(),
           notes: String(state.notes||'').trim(),
           author: state.user.name || 'Гость',
           authorId: state.user.id || null,
@@ -1318,24 +1269,18 @@ const themesBlock =
 
     // Лайки
     root.querySelectorAll('[data-like]').forEach(btn=>{
-  btn.addEventListener('click', async ()=>{
-    if (btn.dataset.busy==='1') return;
-    btn.dataset.busy='1';
-    const id = btn.getAttribute('data-like');
-    const mix = state.guestMixes.find(m=>m.id===id);
-    const liked = Array.isArray(mix?.likers) && state.user && mix.likers.includes(String(state.user.id));
-    try{
-      if (liked) await unlikeMixOnServer(id);
-      else        await likeMixOnServer(id);
-      await loadGuestMixes();
-      render();
-    }catch(e){
-      alert('Не удалось обновить лайк: ' + (e && (e.message || e) || ''));
-    }finally{
-      delete btn.dataset.busy;
-    }
-  });
-});
+      btn.addEventListener('click', async ()=>{
+        const id = btn.getAttribute('data-like');
+        const mix = state.guestMixes.find(m=>m.id===id);
+        const liked = Array.isArray(mix?.likers) && state.user && mix.likers.map(String).includes(String(state.user.id));
+        try{
+          if (liked) await unlikeMixOnServer(id);
+          else        await likeMixOnServer(id);
+          await loadGuestMixes();
+          render();
+        }catch(e){ alert('Не удалось обновить лайк'); }
+      });
+    });
 
     // Рекомендатор
     const rs = root.querySelector('#recStrength');
@@ -2032,100 +1977,6 @@ const themesBlock =
   load().then(guard);
   intercept();
   const obs = new MutationObserver(()=>guard()); obs.observe(document.body, { childList:true, subtree:true });
-})();
-</script>
-
-
-<script>
-(function(){
-  const LS_KEY = 'FORBIDDEN_MIX_WORDS';
-  function loadLocal(){ try{ const raw = localStorage.getItem(LS_KEY); const arr = raw ? JSON.parse(raw) : []; return Array.isArray(arr)?arr:[]; }catch(_){ return []; } }
-  function saveLocal(list){ const arr = (Array.isArray(list)?list:[]).map(s=>String(s||'').trim()).filter(Boolean); try{ localStorage.setItem(LS_KEY, JSON.stringify(arr)); }catch(_){ } return arr; }
-  function validateText(title, notes){
-    const words = loadLocal(); if(!words.length) return { ok:true };
-    const hay = [String(title||''), String(notes||'')].join('\\n').toLowerCase();
-    const bad = words.find(w => hay.includes(String(w||'').toLowerCase()));
-    return bad ? { ok:false, word: bad } : { ok:true };
-  }
-  async function saveForbiddenWords(list){
-    const words = (Array.isArray(list)?list:[]).map(s=>String(s||'').trim()).filter(Boolean);
-    const headers = { 'Content-Type':'application/json; charset=UTF-8', 'X-Admin-Token': (window.getAdminToken ? window.getAdminToken() : '') };
-    let r = await fetch('/api/stop-words', { method:'POST', headers, body: JSON.stringify({ words }) });
-    if (!r.ok) r = await fetch('/api/stop-words', { method:'PUT', headers, body: JSON.stringify({ words }) });
-    if (!r.ok){ let t=''; try{ t=await r.text(); }catch(_){ } throw new Error('Сохранение стоп-слов не удалось: ' + r.status + (t?(' — ' + t):'')); }
-    saveLocal(words);
-  }
-  async function adminDeleteMix(id){
-    try{
-      const r = await fetch('/api/mixes/'+encodeURIComponent(id), { method:'DELETE', headers: { 'X-Admin-Token': (window.getAdminToken?window.getAdminToken():'') } });
-      return r.ok || r.status===204;
-    }catch(_){ return false; }
-  }
-  document.addEventListener('click', function(e){
-    try{
-      const btn = e.target && (e.target.closest ? e.target.closest('#save') : null);
-      if (!btn) return;
-      const titleEl = document.getElementById('title');
-      const notesEl = document.getElementById('notes');
-      const v = validateText(titleEl ? titleEl.value : '', notesEl ? notesEl.value : '');
-      if (!v.ok){ e.preventDefault(); e.stopImmediatePropagation(); alert('Микс содержит запрещённое слово: ' + v.word); }
-    }catch(_){}
-  }, true);
-  function ensureCard(){
-    var list = document.getElementById('admFlavorList');
-    if (!list) return;
-    if (document.getElementById('admForbidden')) return;
-    var card = document.createElement('div');
-    card.className = 'ui-card';
-    card.innerHTML = [
-      '<div class="px-3 pt-3">',
-      '  <div class="text-[10px] tracking-wider uppercase text-slate-300/70">Модерация</div>',
-      '  <div class="text-base font-semibold">Запрещённые слова</div>',
-      '</div>',
-      '<div class="p-3 space-y-2 text-sm">',
-      '  <textarea id="admForbidden" class="min-h-[140px] rounded-xl border border-slate-700 bg-slate-900 px-3 py-2" placeholder="Одно слово на строку"></textarea>',
-      '  <div class="text-[11px] text-slate-400">Если слово встречается в названии или описании — микс нельзя сохранить. При добавлении новых слов нарушающие старые миксы удаляются автоматически.</div>',
-      '  <div class="flex gap-2">',
-      '    <button id="admStopWordsLoad" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-white/10">Загрузить с сервера</button>',
-      '    <button id="admStopWordsSave" class="tap btn-primary shimmer inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px]">Сохранить</button>',
-      '  </div>',
-      '</div>'
-    ].join('');
-    var hostCard = list.closest && list.closest('.ui-card');
-    if (hostCard && hostCard.parentNode){ hostCard.parentNode.insertBefore(card, hostCard.nextSibling); } else { list.parentNode.insertBefore(card, list.nextSibling); }
-    var area = card.querySelector('#admForbidden'); if (area){ try{ area.value = (loadLocal()||[]).join('\\n'); }catch(_){ area.value=''; } }
-    var btnLoad = card.querySelector('#admStopWordsLoad');
-    if (btnLoad) btnLoad.addEventListener('click', async ()=>{
-      try{
-        const r = await fetch('/api/stop-words');
-        if (r.ok){
-          const d = await r.json().catch(()=>({words:[]}));
-          saveLocal(Array.isArray(d && d.words)?d.words:[]);
-        }
-        var a = card.querySelector('#admForbidden'); if (a) a.value = (loadLocal()||[]).join('\\n');
-      }catch(_){}
-    });
-    var btnSave = card.querySelector('#admStopWordsSave');
-    if (btnSave) btnSave.addEventListener('click', async ()=>{
-      try{
-        var a = card.querySelector('#admForbidden');
-        var list = String(a ? a.value||'' : '').split(/\\r?\\n|,|;/).map(s=>s.trim()).filter(Boolean);
-        await saveForbiddenWords(list);
-        try{
-          if (typeof loadGuestMixes === 'function') await loadGuestMixes();
-          var mixes = (window.state && Array.isArray(state.guestMixes)) ? state.guestMixes.slice() : [];
-          var bad = mixes.filter(m => !validateText(m && m.title, m && m.notes).ok);
-          for (const m of bad){ await adminDeleteMix(m.id); }
-          if (bad.length && typeof loadGuestMixes === 'function') await loadGuestMixes();
-          if (typeof render === 'function') render();
-        }catch(_){}
-        alert('Сохранено и применено.');
-      }catch(e){ alert(e && (e.message || e) || 'Не удалось сохранить список'); }
-    });
-  }
-  var obs = new MutationObserver(ensureCard);
-  obs.observe(document.documentElement || document.body, { childList:true, subtree:true });
-  if (document.readyState === 'complete' || document.readyState === 'interactive'){ setTimeout(ensureCard, 300); } else { document.addEventListener('DOMContentLoaded', ()=> setTimeout(ensureCard, 300)); }
 })();
 </script>
 
