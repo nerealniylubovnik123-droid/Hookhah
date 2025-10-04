@@ -786,45 +786,6 @@ function validateMixAgainstStopWords(mix){
   try { data = await res.json(); } catch (_) {}
   return data || true;
 }
-  async function unlikeMixOnServer(id){
-  const uid = String(state.user?.id ?? 'anon');
-  const res = await api('/api/mixes/' + encodeURIComponent(id) + '/like', {
-    method: 'DELETE',
-    headers: { 'X-User-Id': uid }
-  });
-  if (!res.ok) throw new Error('unlike ' + res.status);
-  if (res.status === 204) return true;
-  let data = null;
-  try { data = await res.json(); } catch (_) {}
-  return data || true;
-}
-  // Рекомендатор
-  
-async function fetchRecommendations(){
-  const q = new URLSearchParams();
-  if (state.recTaste) q.set('taste', state.recTaste);
-  if (Number.isFinite(state.recStrength)) q.set('strength', String(state.recStrength));
-  q.set('limit','10');
-  state.recError = '';
-  try{
-    if (location.protocol === 'file:' || location.origin === 'null') {
-      // No backend in file:// mode
-      state.recError = 'Рекомендации недоступны без сервера.';
-      state.recList = [];
-      return;
-    }
-    const r = await api('/api/mixes/recommend?' + q.toString());
-    if (!r.ok) {
-      state.recError = 'Сервер рекомендаций недоступен (' + r.status + ').';
-      state.recList = [];
-      return;
-    }
-    state.recList = await r.json();
-  }catch(e){
-    state.recError = 'Не удалось получить рекомендации.';
-    state.recList = [];
-  }
-}
 
 
   function LogoSVG(cls){
@@ -1073,7 +1034,22 @@ async function fetchRecommendations(){
 
     
 // гарантируем наличие переменной
-let adminStopWordsBlock = '';
+let adminStopWordsBlock = (!isAdmin()? '' : (
+  '<div class="ui-card">' +
+  '  <div class="px-3 pt-3">' +
+  '    <div class="text-[10px] tracking-wider uppercase text-slate-300/70">Контент</div>' +
+  '    <div class="text-base font-semibold">Запрещённые слова</div>' +
+  '  </div>' +
+  '  <div class="p-3 space-y-2">' +
+  '    <textarea id="admStopText" class="bw3-text min-h-[220px] rounded-xl border border-slate-700 bg-white text-slate-900 px-3 py-2" placeholder="По одному слову на строку"></textarea>' +
+  '    <div class="text-[11px] text-slate-400">Список хранится локально в браузере и используется для проверки миксов.</div>' +
+  '    <div class="flex gap-2">' +
+  '      <button id="admStopLoad" class="tap inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px] border border-slate-700 hover:bg-white/10">Загрузить</button>' +
+  '      <button id="admStopSave" class="tap btn-primary shadow-sm inline-flex items-center justify-center rounded-xl h-9 px-3 text-[12px]">Сохранить</button>' +
+  '    </div>' +
+  '  </div>' +
+  '</div>'
+)) ;
 const adminLoginBlock = (!isAdmin() && state.adminPrompt) ? (
       '<div class="ui-card">' +
         '<div class="px-3 pt-3"><div class="text-[10px] tracking-wider uppercase text-slate-300/70">Админ-доступ</div><div class="text-base font-semibold">Введите токен</div></div>' +
@@ -1358,6 +1334,23 @@ const themesBlock =
     const tokCancel=root.querySelector('#admCancel'); if(tokCancel){ tokCancel.addEventListener('click', ()=>{ state.adminPrompt=false; render(); }); }
 
     if (isAdmin() && state.activeTab==='admin'){
+      // Stop-words admin wiring
+      const swText = root.querySelector('#admStopText');
+      const swLoad = root.querySelector('#admStopLoad');
+      const swSave = root.querySelector('#admStopSave');
+      if (swText) {
+        // Prefill from localStorage
+        try { const list = loadStopWords(); swText.value = (list||[]).join('\n'); } catch(_){}
+      }
+      if (swLoad && swText) swLoad.addEventListener('click', ()=>{
+        try { const list = loadStopWords(); swText.value = (list||[]).join('\n'); } catch(_){}
+      });
+      if (swSave && swText) swSave.addEventListener('click', ()=>{
+        const lines = String(swText.value||'').split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+        saveStopWords(lines);
+        alert('Сохранено');
+      });
+
       buildAdminFlavorList(root);
       const btnReload=root.querySelector('#admReload'); if(btnReload){ btnReload.addEventListener('click', async ()=>{ await loadFlavors(); render(); }); }
       const btnLogout=root.querySelector('#admClearToken'); if(btnLogout){ btnLogout.addEventListener('click', ()=>{ try{localStorage.removeItem('admin_token');}catch(_){ } state.adminToken=''; state.activeTab='builder'; render(); }); }
